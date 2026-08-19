@@ -23,7 +23,8 @@ public sealed class SeedIntegrationTests
             var dashboard = await service.GetDashboardAsync();
             var data = await service.GetFinanceDataAsync();
             var card = Assert.Single(data.CreditCards);
-            var firstStatement = new CreditCardProjectionCalculator().Project(card, 1)[0];
+            var firstStatement = new CreditCardProjectionCalculator().Project(
+                card, 1, useProjectionFallback: true)[0];
 
             Assert.Equal(11_000m, dashboard.DailyCoin.RemainingBudget);
             Assert.Equal(22, dashboard.DailyCoin.RemainingDays);
@@ -90,6 +91,92 @@ public sealed class SeedIntegrationTests
             Assert.DoesNotContain(after.Loans, x => x.Id == loan.Id);
             Assert.DoesNotContain(after.PaymentPlans, x => x.Id == planId);
             Assert.DoesNotContain(after.CreditCards, x => x.Id == card.Id);
+        });
+    }
+
+    [Fact]
+    public async Task CardStrategyFallbackAndDueDateOverride_RoundTripThroughSqlite()
+    {
+        await WithStore(seed: false, async store =>
+        {
+            var service = CreateService(store);
+            var cardId = Guid.NewGuid();
+            var planId = Guid.NewGuid();
+            await service.SaveCreditCardAsync(new CreditCard
+            {
+                Id = cardId,
+                Name = "Strateji kartı",
+                Limit = 200_000m,
+                CarriedBalance = 35_000m,
+                UnbilledSpending = 59_000m,
+                StatementClosingDay = 25,
+                PaymentDueDay = 5,
+                MinimumPaymentRate = 0.40m,
+                PaymentStrategy = CreditCardPaymentStrategy.FixedAmount,
+                FixedPaymentAmount = 45_000m,
+                ProjectionFallbackStrategy = ProjectionFallbackStrategy.FullStatement,
+                PaymentPlans =
+                [
+                    new CreditCardPaymentPlan
+                    {
+                        Id = planId,
+                        CreditCardId = cardId,
+                        DueDate = new DateOnly(2026, 9, 5),
+                        PaymentType = CreditCardPaymentType.FullStatement
+                    }
+                ]
+            });
+
+            var reloaded = Assert.Single((await service.GetFinanceDataAsync()).CreditCards);
+
+            Assert.Equal(CreditCardPaymentStrategy.FixedAmount, reloaded.PaymentStrategy);
+            Assert.Equal(45_000m, reloaded.FixedPaymentAmount);
+            Assert.Equal(ProjectionFallbackStrategy.FullStatement, reloaded.ProjectionFallbackStrategy);
+            var plan = Assert.Single(reloaded.PaymentPlans);
+            Assert.Equal(planId, plan.Id);
+            Assert.Equal(CreditCardPaymentType.FullStatement, plan.PaymentType);
+            Assert.Null(plan.Amount);
+        });
+    }
+
+    [Fact]
+    public async Task ProjectionFallback_CalculatesEstimateWithoutPersistingRealPaymentPlan()
+    {
+        await WithStore(seed: false, async store =>
+        {
+            var service = CreateService(store);
+            await service.SaveSalaryAsync(new SalaryScheduleEntry
+            {
+                NetAmount = 115_000m,
+                EffectiveFrom = new DateOnly(2026, 1, 1)
+            });
+            var card = new CreditCard
+            {
+                Name = "Sor kartı",
+                Limit = 200_000m,
+                CarriedBalance = 35_000m,
+                UnbilledSpending = 59_000m,
+                StatementClosingDay = 25,
+                PaymentDueDay = 5,
+                MinimumPaymentRate = 0.40m
+            };
+            await service.SaveCreditCardAsync(card);
+
+            var withoutFallback = Assert.Single(await service.GetFutureMonthsAsync(Today, 1));
+            Assert.True(withoutFallback.HasUndeterminedCardPayments);
+            Assert.Equal(0m, withoutFallback.CardPayments);
+
+            await service.SaveCreditCardAsync(card with
+            {
+                ProjectionFallbackStrategy = ProjectionFallbackStrategy.Minimum
+            });
+            var withFallback = Assert.Single(await service.GetFutureMonthsAsync(Today, 1));
+            var persistedCard = Assert.Single((await service.GetFinanceDataAsync()).CreditCards);
+
+            Assert.False(withFallback.HasUndeterminedCardPayments);
+            Assert.True(withFallback.UsesCardPaymentFallback);
+            Assert.Equal(37_600m, withFallback.CardPayments);
+            Assert.Empty(persistedCard.PaymentPlans);
         });
     }
 
@@ -213,7 +300,8 @@ public sealed class SeedIntegrationTests
                 BalanceAsOfDate = new DateOnly(2026, 9, 1),
                 StatementClosingDay = 25,
                 PaymentDueDay = 5,
-                MinimumPaymentRate = 0.40m
+                MinimumPaymentRate = 0.40m,
+                PaymentStrategy = CreditCardPaymentStrategy.Minimum
             });
 
             var row = Assert.Single(await service.GetFutureMonthsAsync(new DateOnly(2026, 9, 10), 1));
@@ -327,7 +415,7 @@ public sealed class SeedIntegrationTests
         await legacy.ExecuteAsync(
             "INSERT INTO credit_cards VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             id.ToString("D"), "Legacy", "Banka", 200_000m, 96_485.68m,
-            35_201.77m, 35_201.77m, 61_283.91m, 25, 5, 0.40m, 0, null);
+            35_201.77m, 35_201.77m, 61_283.91m, 25, 5, 0.40m, 1, 50_000m);
         await legacy.CloseAsync();
 
         var store = new SqliteCoinFlowStore(path, false, Today);
@@ -338,6 +426,12 @@ public sealed class SeedIntegrationTests
             Assert.Equal(35_201.77m, card.CarriedBalance);
             Assert.Equal(61_283.91m, card.UnbilledSpending);
             Assert.Equal(Today, card.BalanceAsOfDate);
+            Assert.Equal(CreditCardPaymentStrategy.AskEachStatement, card.PaymentStrategy);
+            Assert.Equal(ProjectionFallbackStrategy.None, card.ProjectionFallbackStrategy);
+            var migratedPlan = Assert.Single(card.PaymentPlans);
+            Assert.Equal(new DateOnly(2026, 9, 5), migratedPlan.DueDate);
+            Assert.Equal(CreditCardPaymentType.FixedAmount, migratedPlan.PaymentType);
+            Assert.Equal(50_000m, migratedPlan.Amount);
         }
         finally
         {

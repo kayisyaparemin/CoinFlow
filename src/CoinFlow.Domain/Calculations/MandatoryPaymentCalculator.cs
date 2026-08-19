@@ -9,7 +9,8 @@ public sealed record MandatoryPaymentSummary(
     decimal TemporaryPayments,
     decimal PlannedInstallments,
     decimal EmergencyFundContribution,
-    decimal Total);
+    decimal Total,
+    decimal ProjectedTotal);
 
 public sealed class MandatoryPaymentCalculator(LoanScheduleCalculator loanScheduleCalculator)
 {
@@ -64,7 +65,8 @@ public sealed class MandatoryPaymentCalculator(LoanScheduleCalculator loanSchedu
         var cardTotal = Sum(ObligationType.CreditCard);
         var temporaryTotal = Sum(ObligationType.TemporaryPayment);
         var plannedTotal = Sum(ObligationType.PlannedInstallment);
-        var total = ordered.Sum(x => x.Amount);
+        var total = ordered.Where(x => !x.IsEstimate).Sum(x => x.Amount);
+        var projectedTotal = ordered.Sum(x => x.Amount);
         return new MandatoryPaymentSummary(
             ordered,
             loansTotal,
@@ -72,6 +74,7 @@ public sealed class MandatoryPaymentCalculator(LoanScheduleCalculator loanSchedu
             temporaryTotal,
             plannedTotal,
             emergencyFundContribution,
-            total);
+            total,
+            projectedTotal);
     }
 }

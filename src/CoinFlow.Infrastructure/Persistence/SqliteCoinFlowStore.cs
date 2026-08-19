@@ -438,7 +438,11 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         CarriedBalance = value.CarriedBalance,
         UnbilledSpending = value.UnbilledSpending,
         BalanceAsOfDate = FormatDate(value.BalanceAsOfDate),
-        StatementModelVersion = 2
+        StatementModelVersion = 3,
+        PaymentStrategy = (int)value.PaymentStrategy,
+        FixedPaymentAmount = value.FixedPaymentAmount,
+        ProjectionFallbackStrategy = (int)value.ProjectionFallbackStrategy,
+        ProjectionFallbackFixedAmount = value.ProjectionFallbackFixedAmount
     };
 
     private static CreditCard FromRow(
@@ -457,6 +461,10 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         StatementClosingDay = row.StatementClosingDay,
         PaymentDueDay = row.PaymentDueDay,
         MinimumPaymentRate = row.MinimumPaymentRate,
+        PaymentStrategy = (CreditCardPaymentStrategy)row.PaymentStrategy,
+        FixedPaymentAmount = row.FixedPaymentAmount,
+        ProjectionFallbackStrategy = (ProjectionFallbackStrategy)row.ProjectionFallbackStrategy,
+        ProjectionFallbackFixedAmount = row.ProjectionFallbackFixedAmount,
         Charges = installments.Select(FromRow).OrderBy(x => x.PostingDate).ToArray(),
         PaymentPlans = paymentPlans.Select(FromRow).OrderBy(x => x.DueDate).ToArray()
     };
@@ -484,7 +492,9 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         Id = Key(value.Id),
         CreditCardId = Key(value.CreditCardId),
         DueDate = FormatDate(value.DueDate),
-        PlannedPaymentAmount = value.PlannedPaymentAmount
+        PlannedPaymentAmount = value.Amount ?? 0m,
+        PaymentType = (int)value.PaymentType,
+        Amount = value.Amount
     };
 
     private static CreditCardPaymentPlan FromRow(CreditCardPaymentPlanRow row) => new()
@@ -492,7 +502,8 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         Id = ParseKey(row.Id),
         CreditCardId = ParseKey(row.CreditCardId),
         DueDate = ParseDate(row.DueDate),
-        PlannedPaymentAmount = row.PlannedPaymentAmount
+        PaymentType = (CreditCardPaymentType)row.PaymentType,
+        Amount = row.Amount ?? (row.PlannedPaymentAmount > 0m ? row.PlannedPaymentAmount : null)
     };
 
     private static ExpenseRow ToRow(Expense value) => new()
@@ -584,29 +595,38 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
     private async Task MigrateLegacyCreditCardsAsync()
     {
         var cards = await _database.Table<CreditCardRow>().ToListAsync();
-        foreach (var row in cards.Where(x => x.StatementModelVersion < 2))
+        foreach (var row in cards.Where(x => x.StatementModelVersion < 3))
         {
-            row.CarriedBalance = row.LastStatementRemaining > 0m
-                ? row.LastStatementRemaining
-                : row.LastStatementDebt;
-            row.UnbilledSpending = row.CurrentCycleSpending;
-            row.BalanceAsOfDate = FormatDate(_migrationDate);
-            row.StatementModelVersion = 2;
-            await _database.UpdateAsync(row);
-
-            if (row.PaymentMode == (int)CreditCardPaymentMode.Manual && row.ManualPaymentAmount is > 0m)
+            if (row.StatementModelVersion < 2)
             {
-                var close = CreditCardProjectionCalculator.ResolveStatementCloseOnOrAfter(
-                    _migrationDate,
-                    row.StatementClosingDay);
-                var due = CreditCardProjectionCalculator.ResolvePaymentDueDate(close, row.PaymentDueDay);
-                await _database.InsertOrReplaceAsync(ToRow(new CreditCardPaymentPlan
+                row.CarriedBalance = row.LastStatementRemaining > 0m
+                    ? row.LastStatementRemaining
+                    : row.LastStatementDebt;
+                row.UnbilledSpending = row.CurrentCycleSpending;
+                row.BalanceAsOfDate = FormatDate(_migrationDate);
+
+                if (row.PaymentMode == (int)CreditCardPaymentMode.Manual && row.ManualPaymentAmount is > 0m)
                 {
-                    CreditCardId = ParseKey(row.Id),
-                    DueDate = due,
-                    PlannedPaymentAmount = row.ManualPaymentAmount.Value
-                }));
+                    var close = CreditCardProjectionCalculator.ResolveStatementCloseOnOrAfter(
+                        _migrationDate,
+                        row.StatementClosingDay);
+                    var due = CreditCardProjectionCalculator.ResolvePaymentDueDate(close, row.PaymentDueDay);
+                    await _database.InsertOrReplaceAsync(ToRow(new CreditCardPaymentPlan
+                    {
+                        CreditCardId = ParseKey(row.Id),
+                        DueDate = due,
+                        PaymentType = CreditCardPaymentType.FixedAmount,
+                        Amount = row.ManualPaymentAmount.Value
+                    }));
+                }
             }
+
+            row.PaymentStrategy = (int)CreditCardPaymentStrategy.AskEachStatement;
+            row.FixedPaymentAmount = null;
+            row.ProjectionFallbackStrategy = (int)ProjectionFallbackStrategy.None;
+            row.ProjectionFallbackFixedAmount = null;
+            row.StatementModelVersion = 3;
+            await _database.UpdateAsync(row);
         }
     }
 }

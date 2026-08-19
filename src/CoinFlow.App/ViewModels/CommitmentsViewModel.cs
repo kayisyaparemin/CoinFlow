@@ -15,9 +15,37 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
         new("Kredi kartı", "card"), new("Geçici ödeme planı", "plan")
     ];
 
+    public ObservableCollection<SelectionOption<CreditCardPaymentStrategy>> PaymentStrategies { get; } =
+    [
+        new("Her ekstrede bana sor", CreditCardPaymentStrategy.AskEachStatement),
+        new("Her zaman asgari ödeme", CreditCardPaymentStrategy.Minimum),
+        new("Her zaman ekstre tamamı", CreditCardPaymentStrategy.FullStatement),
+        new("Sabit tutar", CreditCardPaymentStrategy.FixedAmount)
+    ];
+
+    public ObservableCollection<SelectionOption<ProjectionFallbackStrategy>> ProjectionFallbackStrategies { get; } =
+    [
+        new("Tahmin yapma", ProjectionFallbackStrategy.None),
+        new("Asgari ödeme varsay", ProjectionFallbackStrategy.Minimum),
+        new("Tam ödeme varsay", ProjectionFallbackStrategy.FullStatement),
+        new("Sabit tutar varsay", ProjectionFallbackStrategy.FixedAmount)
+    ];
+
+    public ObservableCollection<SelectionOption<CreditCardPaymentType>> PaymentPlanTypes { get; } =
+    [
+        new("Asgari ödeme", CreditCardPaymentType.Minimum),
+        new("Ekstrenin tamamı", CreditCardPaymentType.FullStatement),
+        new("Özel tutar", CreditCardPaymentType.FixedAmount)
+    ];
+
     public ObservableCollection<CommitmentSummaryLine> Items { get; } = [];
     public ObservableCollection<DatedAmountLine> PlanInstallments { get; } = [];
     public ObservableCollection<DatedAmountLine> CardFuturePayments { get; } = [];
+    public ObservableCollection<CardPaymentPlanLine> CardPaymentPlans { get; } = [];
+
+    private Guid? _editingCardId;
+    private DateOnly? _editingCardBalanceAsOfDate;
+    private readonly Dictionary<Guid, string> _editingCardChargeDescriptions = [];
 
     [ObservableProperty] private SelectionOption<string>? selectedType;
     [ObservableProperty] private bool isSalary;
@@ -48,6 +76,18 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
     [ObservableProperty] private string minimumRate = "40";
     [ObservableProperty] private DateTime cardFuturePaymentDate = DateTime.Today;
     [ObservableProperty] private string cardFuturePaymentAmount = string.Empty;
+    [ObservableProperty] private SelectionOption<CreditCardPaymentStrategy>? selectedPaymentStrategy;
+    [ObservableProperty] private string fixedPaymentAmount = string.Empty;
+    [ObservableProperty] private bool isFixedPaymentStrategy;
+    [ObservableProperty] private SelectionOption<ProjectionFallbackStrategy>? selectedProjectionFallbackStrategy;
+    [ObservableProperty] private string projectionFallbackFixedAmount = string.Empty;
+    [ObservableProperty] private bool isFixedProjectionFallback;
+    [ObservableProperty] private DateTime cardPaymentPlanDate = DateTime.Today;
+    [ObservableProperty] private SelectionOption<CreditCardPaymentType>? selectedPaymentPlanType;
+    [ObservableProperty] private string cardPaymentPlanAmount = string.Empty;
+    [ObservableProperty] private bool isFixedPaymentPlan;
+    [ObservableProperty] private bool isEditingCard;
+    [ObservableProperty] private string saveButtonText = "Kaydet";
 
     public async Task LoadAsync()
     {
@@ -61,6 +101,9 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
         {
             SelectedType ??= Types[0];
         }
+        SelectedPaymentStrategy ??= PaymentStrategies[0];
+        SelectedProjectionFallbackStrategy ??= ProjectionFallbackStrategies[0];
+        SelectedPaymentPlanType ??= PaymentPlanTypes[0];
 
         Items.Clear();
         foreach (var salary in data.Salaries.OrderByDescending(x => x.EffectiveFrom))
@@ -91,7 +134,7 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
                 $"{card.Bank} {card.Name}".Trim(),
                 $"Kesim {card.StatementClosingDay} • Son ödeme {card.PaymentDueDay}",
                 Money(card.CurrentTotalDebt),
-                $"%{card.MinimumPaymentRate * 100:N0} asgari • faiz/vergiler hariç"));
+                StrategyLabel(card)));
         }
     }
 
@@ -102,6 +145,15 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
         IsPlan = value?.Value == "plan";
         IsCard = value?.Value == "card";
     }
+
+    partial void OnSelectedPaymentStrategyChanged(SelectionOption<CreditCardPaymentStrategy>? value) =>
+        IsFixedPaymentStrategy = value?.Value == CreditCardPaymentStrategy.FixedAmount;
+
+    partial void OnSelectedProjectionFallbackStrategyChanged(SelectionOption<ProjectionFallbackStrategy>? value) =>
+        IsFixedProjectionFallback = value?.Value == ProjectionFallbackStrategy.FixedAmount;
+
+    partial void OnSelectedPaymentPlanTypeChanged(SelectionOption<CreditCardPaymentType>? value) =>
+        IsFixedPaymentPlan = value?.Value == CreditCardPaymentType.FixedAmount;
 
     [RelayCommand]
     private void AddPlanInstallment()
@@ -139,9 +191,94 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
         }
     }
 
+    [RelayCommand]
+    private void AddCardPaymentPlan()
+    {
+        try
+        {
+            var paymentType = SelectedPaymentPlanType?.Value
+                ?? throw new InvalidOperationException("Özel ödeme şekli seçilmelidir.");
+            var amount = paymentType == CreditCardPaymentType.FixedAmount
+                ? RequirePositive(ParseMoney(CardPaymentPlanAmount, "Özel ödeme tutarı"), "Özel ödeme tutarı")
+                : (decimal?)null;
+            var dueDate = DateOnly.FromDateTime(CardPaymentPlanDate);
+            var existing = CardPaymentPlans.FirstOrDefault(x => x.DueDate == dueDate);
+            if (existing is not null)
+            {
+                CardPaymentPlans.Remove(existing);
+            }
+
+            CardPaymentPlans.Add(new CardPaymentPlanLine(
+                existing?.Id ?? Guid.NewGuid(), dueDate, paymentType, amount));
+            CardPaymentPlanAmount = string.Empty;
+            SetStatus(string.Empty);
+        }
+        catch (Exception exception)
+        {
+            SetStatus(exception.Message);
+        }
+    }
+
     public void RemovePlanInstallment(DatedAmountLine line) => PlanInstallments.Remove(line);
 
     public void RemoveCardFuturePayment(DatedAmountLine line) => CardFuturePayments.Remove(line);
+
+    public void RemoveCardPaymentPlan(CardPaymentPlanLine line) => CardPaymentPlans.Remove(line);
+
+    public async Task EditCardAsync(Guid cardId)
+    {
+        try
+        {
+            IsBusy = true;
+            SetStatus(string.Empty);
+            var card = (await service.GetFinanceDataAsync()).CreditCards.Single(x => x.Id == cardId);
+            _editingCardId = card.Id;
+            _editingCardBalanceAsOfDate = card.BalanceAsOfDate;
+            IsEditingCard = true;
+            SaveButtonText = "Kartı güncelle";
+            SelectedType = Types.First(x => x.Value == "card");
+            Name = card.Name;
+            Bank = card.Bank;
+            CardLimit = InputMoney(card.Limit);
+            StatementRemaining = InputMoney(card.CarriedBalance);
+            CycleSpending = InputMoney(card.UnbilledSpending);
+            ClosingDay = card.StatementClosingDay.ToString(TurkishCulture);
+            DueDay = card.PaymentDueDay.ToString(TurkishCulture);
+            MinimumRate = InputMoney(card.MinimumPaymentRate * 100m);
+            SelectedPaymentStrategy = PaymentStrategies.First(x => x.Value == card.PaymentStrategy);
+            FixedPaymentAmount = card.FixedPaymentAmount is null ? string.Empty : InputMoney(card.FixedPaymentAmount.Value);
+            SelectedProjectionFallbackStrategy = ProjectionFallbackStrategies
+                .First(x => x.Value == card.ProjectionFallbackStrategy);
+            ProjectionFallbackFixedAmount = card.ProjectionFallbackFixedAmount is null
+                ? string.Empty
+                : InputMoney(card.ProjectionFallbackFixedAmount.Value);
+
+            CardFuturePayments.Clear();
+            _editingCardChargeDescriptions.Clear();
+            foreach (var charge in card.Charges.OrderBy(x => x.PostingDate))
+            {
+                _editingCardChargeDescriptions[charge.Id] = charge.Description;
+                CardFuturePayments.Add(new DatedAmountLine(charge.Id, charge.PostingDate, charge.Amount));
+            }
+
+            CardPaymentPlans.Clear();
+            foreach (var plan in card.PaymentPlans.OrderBy(x => x.DueDate))
+            {
+                CardPaymentPlans.Add(new CardPaymentPlanLine(
+                    plan.Id, plan.DueDate, plan.PaymentType, plan.Amount));
+            }
+
+            SetStatus("Kart ayarları forma yüklendi. Değişiklikleri yaptıktan sonra güncelle.");
+        }
+        catch (Exception exception)
+        {
+            SetStatus($"Kart düzenlemeye açılamadı: {exception.Message}");
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
 
     public async Task DeleteAsync(CommitmentSummaryLine item)
     {
@@ -276,14 +413,38 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
 
     private Task SaveCardAsync()
     {
-        var cardId = Guid.NewGuid();
+        var cardId = _editingCardId ?? Guid.NewGuid();
         var future = CardFuturePayments
             .OrderBy(x => x.Date)
             .Select(x => new CardCharge
             {
+                Id = x.Id,
                 CreditCardId = cardId,
-                Description = "Gelecek dönem ödemesi",
+                Description = _editingCardChargeDescriptions.GetValueOrDefault(x.Id, "Gelecek dönem ödemesi"),
                 PostingDate = x.Date,
+                Amount = x.Amount
+            })
+            .ToArray();
+        var paymentStrategy = SelectedPaymentStrategy?.Value
+            ?? CreditCardPaymentStrategy.AskEachStatement;
+        var fixedAmount = paymentStrategy == CreditCardPaymentStrategy.FixedAmount
+            ? RequirePositive(ParseMoney(FixedPaymentAmount, "Sabit ödeme tutarı"), "Sabit ödeme tutarı")
+            : (decimal?)null;
+        var fallbackStrategy = SelectedProjectionFallbackStrategy?.Value
+            ?? ProjectionFallbackStrategy.None;
+        var fallbackFixedAmount = fallbackStrategy == ProjectionFallbackStrategy.FixedAmount
+            ? RequirePositive(
+                ParseMoney(ProjectionFallbackFixedAmount, "Sabit tahmin tutarı"),
+                "Sabit tahmin tutarı")
+            : (decimal?)null;
+        var paymentPlans = CardPaymentPlans
+            .OrderBy(x => x.DueDate)
+            .Select(x => new CreditCardPaymentPlan
+            {
+                Id = x.Id,
+                CreditCardId = cardId,
+                DueDate = x.DueDate,
+                PaymentType = x.PaymentType,
                 Amount = x.Amount
             })
             .ToArray();
@@ -309,11 +470,16 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
             CurrentTotalDebt = 0m,
             CarriedBalance = statementRemaining,
             UnbilledSpending = cycleSpending,
+            BalanceAsOfDate = _editingCardBalanceAsOfDate ?? default,
             StatementClosingDay = ParseDay(ClosingDay, "Kesim günü"),
             PaymentDueDay = ParseDay(DueDay, "Son ödeme günü"),
             MinimumPaymentRate = rate,
+            PaymentStrategy = paymentStrategy,
+            FixedPaymentAmount = fixedAmount,
+            ProjectionFallbackStrategy = fallbackStrategy,
+            ProjectionFallbackFixedAmount = fallbackFixedAmount,
             Charges = future,
-            PaymentPlans = []
+            PaymentPlans = paymentPlans
         });
     }
 
@@ -343,6 +509,19 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
         CardFuturePaymentDate = DateTime.Today;
         CardFuturePaymentAmount = string.Empty;
         CardFuturePayments.Clear();
+        SelectedPaymentStrategy = PaymentStrategies[0];
+        FixedPaymentAmount = string.Empty;
+        SelectedProjectionFallbackStrategy = ProjectionFallbackStrategies[0];
+        ProjectionFallbackFixedAmount = string.Empty;
+        CardPaymentPlanDate = DateTime.Today;
+        SelectedPaymentPlanType = PaymentPlanTypes[0];
+        CardPaymentPlanAmount = string.Empty;
+        CardPaymentPlans.Clear();
+        _editingCardId = null;
+        _editingCardBalanceAsOfDate = null;
+        _editingCardChargeDescriptions.Clear();
+        IsEditingCard = false;
+        SaveButtonText = "Kaydet";
     }
 
     private static int ParseDay(string value, string field)
@@ -365,4 +544,16 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
 
     private static decimal? OptionalMoney(string value) =>
         string.IsNullOrWhiteSpace(value) ? null : ParseMoney(value, "Opsiyonel tutar");
+
+    private static string InputMoney(decimal value) =>
+        value.ToString("0.##", TurkishCulture);
+
+    private static string StrategyLabel(CreditCard card) => card.PaymentStrategy switch
+    {
+        CreditCardPaymentStrategy.AskEachStatement => "Her ekstrede sor",
+        CreditCardPaymentStrategy.Minimum => "Sürekli asgari",
+        CreditCardPaymentStrategy.FullStatement => "Ekstre tamamı",
+        CreditCardPaymentStrategy.FixedAmount => $"Sabit {Money(card.FixedPaymentAmount.GetValueOrDefault())}",
+        _ => "Ödeme stratejisi"
+    };
 }

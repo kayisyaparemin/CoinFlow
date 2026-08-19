@@ -22,7 +22,8 @@ public sealed record ObligationItem(
     ObligationType Type,
     DateOnly DueDate,
     decimal Amount,
-    bool IsFinalPayment = false);
+    bool IsFinalPayment = false,
+    bool IsEstimate = false);
 
 public sealed record SalaryPeriodSummary(
     SalaryPeriod Period,

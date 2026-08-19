@@ -65,6 +65,10 @@ internal sealed class CreditCardRow
     public decimal UnbilledSpending { get; set; }
     public string BalanceAsOfDate { get; set; } = string.Empty;
     public int StatementModelVersion { get; set; }
+    public int PaymentStrategy { get; set; }
+    public decimal? FixedPaymentAmount { get; set; }
+    public int ProjectionFallbackStrategy { get; set; }
+    public decimal? ProjectionFallbackFixedAmount { get; set; }
 }
 
 [Table("card_installments")]
@@ -99,6 +103,8 @@ internal sealed class CreditCardPaymentPlanRow
     [Indexed] public string CreditCardId { get; set; } = string.Empty;
     [Indexed] public string DueDate { get; set; } = string.Empty;
     public decimal PlannedPaymentAmount { get; set; }
+    public int PaymentType { get; set; }
+    public decimal? Amount { get; set; }
 }
 
 [Table("spendable_balance_snapshots")]

@@ -49,6 +49,37 @@
                     </VerticalStackLayout>
                 </Border>
 
+                <Border IsVisible="{Binding HasUpcomingCardPayment}"
+                        BackgroundColor="{StaticResource SoftLavender}"
+                        StrokeThickness="0">
+                    <VerticalStackLayout Spacing="9">
+                        <Label Text="YAKLAŞAN KART ÖDEMESİ" Style="{StaticResource Eyebrow}" />
+                        <Label Text="{Binding UpcomingCardName}" Style="{StaticResource SectionTitle}" />
+                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="7">
+                            <Label Text="Ekstre" Style="{StaticResource MutedText}" />
+                            <Label Grid.Column="1" Text="{Binding UpcomingStatementAmount}" FontFamily="OpenSansSemibold" />
+                            <Label Grid.Row="1" Text="Asgari" Style="{StaticResource MutedText}" />
+                            <Label Grid.Row="1" Grid.Column="1" Text="{Binding UpcomingMinimumPayment}" FontFamily="OpenSansSemibold" />
+                            <Label Grid.Row="2" Text="Son ödeme" Style="{StaticResource MutedText}" />
+                            <Label Grid.Row="2" Grid.Column="1" Text="{Binding UpcomingDueDate}" FontFamily="OpenSansSemibold" />
+                            <Label Grid.Row="3" Text="Plan" Style="{StaticResource MutedText}" />
+                            <Label Grid.Row="3" Grid.Column="1" Text="{Binding UpcomingPlan}" FontFamily="OpenSansSemibold" />
+                        </Grid>
+                        <Label Text="Bu ekstre için ödeme planla" Style="{StaticResource FieldLabel}" Margin="0,4,0,0" />
+                        <Picker ItemsSource="{Binding UpcomingPaymentTypes}"
+                                SelectedItem="{Binding SelectedUpcomingPaymentType}" />
+                        <Entry Text="{Binding UpcomingCustomAmount}"
+                               IsVisible="{Binding IsUpcomingCustomPayment}"
+                               Placeholder="Özel tutar"
+                               Keyboard="Numeric" />
+                        <Button Text="Ödeme planını kaydet"
+                                Command="{Binding SaveUpcomingCardPaymentCommand}" />
+                        <Button Text="Daha sonra belirle"
+                                Command="{Binding DeferUpcomingCardPaymentCommand}"
+                                Style="{StaticResource SecondaryButton}" />
+                    </VerticalStackLayout>
+                </Border>
+
                 <Border BackgroundColor="{StaticResource SoftSky}" StrokeThickness="0">
                     <VerticalStackLayout Spacing="8">
                         <Label Text="Serbest bakiyeyi düzelt" Style="{StaticResource SectionTitle}" />

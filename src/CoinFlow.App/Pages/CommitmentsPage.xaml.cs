@@ -35,6 +35,25 @@ public partial class CommitmentsPage : ContentPage
         }
     }
 
+    private void OnRemoveCardPaymentPlanClicked(object? sender, EventArgs eventArgs)
+    {
+        if (sender is Button { CommandParameter: CardPaymentPlanLine line })
+        {
+            _viewModel.RemoveCardPaymentPlan(line);
+        }
+    }
+
+    private async void OnEditCardClicked(object? sender, EventArgs eventArgs)
+    {
+        if (sender is not Button { CommandParameter: CommitmentSummaryLine item } || !item.CanEdit)
+        {
+            return;
+        }
+
+        await _viewModel.EditCardAsync(item.Id);
+        await PageScroll.ScrollToAsync(0, 0, true);
+    }
+
     private async void OnDeleteClicked(object? sender, EventArgs eventArgs)
     {
         if (sender is not Button { CommandParameter: CommitmentSummaryLine item })

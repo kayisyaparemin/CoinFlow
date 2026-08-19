@@ -186,6 +186,7 @@ public sealed class CoinFlowService(
 
     public Task SaveCreditCardAsync(CreditCard card, CancellationToken cancellationToken = default)
     {
+        ValidateCreditCardPaymentSettings(card);
         var withAnchor = card with
         {
             BalanceAsOfDate = card.BalanceAsOfDate == default ? clock.Today : card.BalanceAsOfDate
@@ -199,6 +200,55 @@ public sealed class CoinFlowService(
 
     public Task DeleteCreditCardAsync(Guid id, CancellationToken cancellationToken = default) =>
         store.DeleteCreditCardAsync(id, cancellationToken);
+
+    public async Task SaveCreditCardPaymentPlanAsync(
+        Guid creditCardId,
+        DateOnly dueDate,
+        CreditCardPaymentType paymentType,
+        decimal? amount = null,
+        CancellationToken cancellationToken = default)
+    {
+        var card = (await store.GetCreditCardsAsync(cancellationToken))
+            .SingleOrDefault(x => x.Id == creditCardId)
+            ?? throw new InvalidOperationException("Kredi kartı bulunamadı.");
+        if (paymentType == CreditCardPaymentType.FixedAmount && amount is null or <= 0m)
+        {
+            throw new InvalidOperationException("Özel ödeme tutarı sıfırdan büyük olmalıdır.");
+        }
+
+        var existing = card.PaymentPlans.FirstOrDefault(x => x.DueDate == dueDate);
+        var paymentPlan = new CreditCardPaymentPlan
+        {
+            Id = existing?.Id ?? Guid.NewGuid(),
+            CreditCardId = creditCardId,
+            DueDate = dueDate,
+            PaymentType = paymentType,
+            Amount = paymentType == CreditCardPaymentType.FixedAmount ? amount : null
+        };
+        var updated = card with
+        {
+            PaymentPlans = card.PaymentPlans
+                .Where(x => x.DueDate != dueDate)
+                .Append(paymentPlan)
+                .OrderBy(x => x.DueDate)
+                .ToArray()
+        };
+        await SaveCreditCardAsync(updated, cancellationToken);
+    }
+
+    public async Task RemoveCreditCardPaymentPlanAsync(
+        Guid creditCardId,
+        DateOnly dueDate,
+        CancellationToken cancellationToken = default)
+    {
+        var card = (await store.GetCreditCardsAsync(cancellationToken))
+            .SingleOrDefault(x => x.Id == creditCardId)
+            ?? throw new InvalidOperationException("Kredi kartı bulunamadı.");
+        await SaveCreditCardAsync(card with
+        {
+            PaymentPlans = card.PaymentPlans.Where(x => x.DueDate != dueDate).ToArray()
+        }, cancellationToken);
+    }
 
     public Task SaveSettingsAsync(UserSettings settings, CancellationToken cancellationToken = default) =>
         store.SaveSettingsAsync(
@@ -303,5 +353,26 @@ public sealed class CoinFlowService(
             Kind = PaymentPlanKind.PlannedInstallment,
             Installments = installments
         }, cancellationToken);
+    }
+
+    private static void ValidateCreditCardPaymentSettings(CreditCard card)
+    {
+        if (card.PaymentStrategy == CreditCardPaymentStrategy.FixedAmount &&
+            card.FixedPaymentAmount is null or <= 0m)
+        {
+            throw new InvalidOperationException("Sabit ödeme stratejisi için pozitif tutar gereklidir.");
+        }
+
+        if (card.ProjectionFallbackStrategy == ProjectionFallbackStrategy.FixedAmount &&
+            card.ProjectionFallbackFixedAmount is null or <= 0m)
+        {
+            throw new InvalidOperationException("Sabit projeksiyon varsayımı için pozitif tutar gereklidir.");
+        }
+
+        if (card.PaymentPlans.Any(x =>
+                x.PaymentType == CreditCardPaymentType.FixedAmount && x.Amount is null or <= 0m))
+        {
+            throw new InvalidOperationException("Özel kart ödeme tutarı sıfırdan büyük olmalıdır.");
+        }
     }
 }

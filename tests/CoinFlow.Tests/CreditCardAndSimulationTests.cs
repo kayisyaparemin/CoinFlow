@@ -14,7 +14,8 @@ public sealed class CreditCardAndSimulationTests
         var card = CreateCard() with
         {
             CarriedBalance = 35_000m,
-            UnbilledSpending = 59_000m
+            UnbilledSpending = 59_000m,
+            PaymentStrategy = CreditCardPaymentStrategy.Minimum
         };
 
         var statement = Assert.Single(_cardCalculator.Project(card, 1));
@@ -86,12 +87,14 @@ public sealed class CreditCardAndSimulationTests
         var card = CreateCard() with
         {
             CarriedBalance = 100_000m,
+            PaymentStrategy = CreditCardPaymentStrategy.Minimum,
             PaymentPlans =
             [
                 new CreditCardPaymentPlan
                 {
                     DueDate = new DateOnly(2026, 11, 5),
-                    PlannedPaymentAmount = 50_000m
+                    PaymentType = CreditCardPaymentType.FixedAmount,
+                    Amount = 50_000m
                 }
             ]
         };
@@ -185,7 +188,12 @@ public sealed class CreditCardAndSimulationTests
     [Fact]
     public void CreditCardSimulation_UsesExactPostingDatesAndSharedStatementEngine()
     {
-        var card = CreateCard() with { Limit = 200_000m, CurrentTotalDebt = 0m };
+        var card = CreateCard() with
+        {
+            Limit = 200_000m,
+            CurrentTotalDebt = 0m,
+            ProjectionFallbackStrategy = ProjectionFallbackStrategy.Minimum
+        };
         var calculator = new PurchaseSimulationCalculator(_cardCalculator, _installments);
         var baseline = CreateBaseline(new DateOnly(2026, 8, 10), 12, firstActual: 11_000m);
 
@@ -217,6 +225,7 @@ public sealed class CreditCardAndSimulationTests
             80_000m,
             index == 0 ? firstActual : null,
             2_666.67m,
+            [],
             []))
         .ToArray();
 

@@ -1,12 +1,27 @@
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CoinFlow.App.Models;
 using CoinFlow.App.Services;
 using CoinFlow.Application.Services;
+using CoinFlow.Domain.Calculations;
+using CoinFlow.Domain.Models;
 
 namespace CoinFlow.App.ViewModels;
 
 public partial class DashboardViewModel(CoinFlowService service) : ViewModelBase
 {
+    public ObservableCollection<SelectionOption<CreditCardPaymentType>> UpcomingPaymentTypes { get; } =
+    [
+        new("Asgariyi öde", CreditCardPaymentType.Minimum),
+        new("Ekstrenin tamamını öde", CreditCardPaymentType.FullStatement),
+        new("Özel tutar gir", CreditCardPaymentType.FixedAmount)
+    ];
+
+    private Guid? _upcomingCardId;
+    private DateOnly? _upcomingDueDate;
+    private decimal? _upcomingMinimumAmount;
+
     [ObservableProperty] private string currentPeriodText = "—";
     [ObservableProperty] private string currentAvailable = "—";
     [ObservableProperty] private string daysRemaining = "—";
@@ -24,6 +39,16 @@ public partial class DashboardViewModel(CoinFlowService service) : ViewModelBase
     [ObservableProperty] private string nextObligations = "—";
     [ObservableProperty] private string nextBudget = "—";
     [ObservableProperty] private string nextDailyCoin = "—";
+
+    [ObservableProperty] private bool hasUpcomingCardPayment;
+    [ObservableProperty] private string upcomingCardName = "—";
+    [ObservableProperty] private string upcomingStatementAmount = "—";
+    [ObservableProperty] private string upcomingMinimumPayment = "—";
+    [ObservableProperty] private string upcomingDueDate = "—";
+    [ObservableProperty] private string upcomingPlan = "Henüz seçilmedi";
+    [ObservableProperty] private SelectionOption<CreditCardPaymentType>? selectedUpcomingPaymentType;
+    [ObservableProperty] private string upcomingCustomAmount = string.Empty;
+    [ObservableProperty] private bool isUpcomingCustomPayment;
 
     [ObservableProperty] private string correctionAmount = string.Empty;
     [ObservableProperty] private DateTime correctionDate = DateTime.Today;
@@ -62,9 +87,33 @@ public partial class DashboardViewModel(CoinFlowService service) : ViewModelBase
             var next = snapshot.NextSalaryPeriod;
             NextPeriodText = PeriodText(next.Period.Start, next.Period.End);
             NextSalary = Money(next.Salary);
-            NextObligations = Money(next.TotalObligations, 2);
-            NextBudget = Money(next.ProjectedSpendable, 2);
-            NextDailyCoin = Money(next.ProjectedDailyCoin, 2);
+            NextObligations = next.HasUndeterminedCardPayments ? "Kesin değil" : Money(next.TotalObligations, 2);
+            NextBudget = next.HasUndeterminedCardPayments ? "Kesin değil" : Money(next.ProjectedSpendable, 2);
+            NextDailyCoin = next.HasUndeterminedCardPayments ? "Kesin değil" : Money(next.ProjectedDailyCoin, 2);
+
+            var upcoming = snapshot.UpcomingCardPayment;
+            HasUpcomingCardPayment = upcoming is not null;
+            if (upcoming is not null)
+            {
+                _upcomingCardId = upcoming.CardId;
+                _upcomingDueDate = upcoming.PaymentDueDate;
+                _upcomingMinimumAmount = upcoming.MinimumPayment;
+                UpcomingCardName = upcoming.CardName;
+                UpcomingStatementAmount = MoneyOrDash(upcoming.StatementBalance);
+                UpcomingMinimumPayment = MoneyOrDash(upcoming.MinimumPayment);
+                UpcomingDueDate = upcoming.PaymentDueDate.ToString("dd MMMM yyyy", TurkishCulture);
+                UpcomingPlan = PaymentPlanText(upcoming.Resolution, upcoming.PaymentType, upcoming.PlannedPayment);
+                SelectedUpcomingPaymentType = upcoming.PaymentType is null ||
+                                              upcoming.Resolution == CreditCardPaymentResolution.ProjectionFallback
+                    ? UpcomingPaymentTypes[0]
+                    : UpcomingPaymentTypes.First(x => x.Value == upcoming.PaymentType.Value);
+            }
+            else
+            {
+                _upcomingCardId = null;
+                _upcomingDueDate = null;
+                _upcomingMinimumAmount = null;
+            }
 
             var details = snapshot.Details;
             CalculationDetails =
@@ -76,7 +125,8 @@ public partial class DashboardViewModel(CoinFlowService service) : ViewModelBase
                 $"Remaining days: {details.RemainingDays} • Sustainable: {Money(details.SustainableDaily, 2)}\n" +
                 $"Next card: {(details.NextCardStatementClose is null ? "—" : details.NextCardStatementClose.Value.ToString("dd.MM.yyyy"))} close → " +
                 $"{(details.NextCardPaymentDue is null ? "—" : details.NextCardPaymentDue.Value.ToString("dd.MM.yyyy"))} due\n" +
-                $"Statement: {Money(details.NextCardStatementBalance, 2)} • Payment: {Money(details.NextCardPayment, 2)}";
+                $"Statement: {MoneyOrDash(details.NextCardStatementBalance)} • Minimum: {MoneyOrDash(details.NextCardMinimumPayment)} • " +
+                $"Payment: {MoneyOrDash(details.NextCardPayment)} • Resolution: {details.NextCardPaymentResolution?.ToString() ?? "—"}";
         }
         catch (Exception exception)
         {
@@ -86,6 +136,88 @@ public partial class DashboardViewModel(CoinFlowService service) : ViewModelBase
         {
             IsBusy = false;
         }
+    }
+
+    partial void OnSelectedUpcomingPaymentTypeChanged(SelectionOption<CreditCardPaymentType>? value) =>
+        IsUpcomingCustomPayment = value?.Value == CreditCardPaymentType.FixedAmount;
+
+    [RelayCommand]
+    private async Task SaveUpcomingCardPaymentAsync()
+    {
+        if (_upcomingCardId is null || _upcomingDueDate is null)
+        {
+            SetStatus("Planlanacak yaklaşan kart ödemesi bulunmuyor.");
+            return;
+        }
+
+        var warning = string.Empty;
+        try
+        {
+            IsBusy = true;
+            SetStatus(string.Empty);
+            var paymentType = SelectedUpcomingPaymentType?.Value
+                ?? throw new InvalidOperationException("Ödeme şekli seçilmelidir.");
+            decimal? amount = null;
+            if (paymentType == CreditCardPaymentType.FixedAmount)
+            {
+                amount = ParseMoney(UpcomingCustomAmount, "Özel ödeme tutarı");
+                if (amount <= 0m)
+                {
+                    throw new InvalidOperationException("Özel ödeme tutarı sıfırdan büyük olmalıdır.");
+                }
+
+                if (_upcomingMinimumAmount is decimal minimum && amount < minimum)
+                {
+                    warning = $"Girdiğin {Money(amount.Value, 2)} bu ekstredeki {Money(minimum, 2)} asgari ödemenin altında. Projeksiyonda en az asgari tutar kullanıldı.";
+                }
+            }
+
+            await service.SaveCreditCardPaymentPlanAsync(
+                _upcomingCardId.Value,
+                _upcomingDueDate.Value,
+                paymentType,
+                amount);
+            UpcomingCustomAmount = string.Empty;
+        }
+        catch (Exception exception)
+        {
+            SetStatus(exception.Message);
+            return;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+
+        await LoadAsync();
+        SetStatus(string.IsNullOrWhiteSpace(warning) ? "Bu ekstreye özel ödeme planı kaydedildi." : warning);
+    }
+
+    [RelayCommand]
+    private async Task DeferUpcomingCardPaymentAsync()
+    {
+        if (_upcomingCardId is null || _upcomingDueDate is null)
+        {
+            return;
+        }
+
+        try
+        {
+            IsBusy = true;
+            await service.RemoveCreditCardPaymentPlanAsync(_upcomingCardId.Value, _upcomingDueDate.Value);
+        }
+        catch (Exception exception)
+        {
+            SetStatus(exception.Message);
+            return;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+
+        await LoadAsync();
+        SetStatus("Bu ekstreye özel karar kaldırıldı; kartın genel stratejisi geçerli.");
     }
 
     [RelayCommand]
@@ -122,4 +254,28 @@ public partial class DashboardViewModel(CoinFlowService service) : ViewModelBase
 
     private static string PeriodText(DateOnly start, DateOnly end) =>
         $"{start:dd MMM yyyy} → {end:dd MMM yyyy}".ToUpper(TurkishCulture);
+
+    private static string MoneyOrDash(decimal? value) =>
+        value is null ? "Henüz hesaplanamadı" : Money(value.Value, 2);
+
+    private static string PaymentPlanText(
+        CreditCardPaymentResolution resolution,
+        CreditCardPaymentType? paymentType,
+        decimal? effectivePayment)
+    {
+        if (resolution is CreditCardPaymentResolution.Undetermined or
+            CreditCardPaymentResolution.ProjectionFallback)
+        {
+            return "Henüz seçilmedi";
+        }
+
+        var label = paymentType switch
+        {
+            CreditCardPaymentType.Minimum => "Asgari ödeme",
+            CreditCardPaymentType.FullStatement => "Ekstrenin tamamı",
+            CreditCardPaymentType.FixedAmount => "Özel tutar",
+            _ => "Ödeme"
+        };
+        return effectivePayment is null ? label : $"{label} • {Money(effectivePayment.Value, 2)}";
+    }
 }

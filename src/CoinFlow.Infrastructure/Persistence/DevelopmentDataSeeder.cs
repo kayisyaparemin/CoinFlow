@@ -56,7 +56,9 @@ internal static class DevelopmentDataSeeder
             BalanceAsOfDate = new DateOnly(2026, 8, 19),
             StatementClosingDay = 25,
             PaymentDueDay = 5,
-            MinimumPaymentRate = 0.40m
+            MinimumPaymentRate = 0.40m,
+            PaymentStrategy = CreditCardPaymentStrategy.AskEachStatement,
+            ProjectionFallbackStrategy = ProjectionFallbackStrategy.Minimum
         };
         await database.InsertAsync(SqliteCoinFlowStore.ToRow(card));
         foreach (var (date, amount) in cardCharges)

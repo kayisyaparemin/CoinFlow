@@ -10,7 +10,8 @@ Uygulama klasik “günlük limit aşıldı” yaklaşımını kullanmaz. Harcan
 - Bitiş tarihi veya taksit sayısı olan düzenli krediler
 - Tek plan altında farklı tarih ve tutarlara sahip geçici ödemeler
 - Exact posting/kesim/son ödeme tarihleriyle kredi kartı ekstre projeksiyonu
-- Belirli son ödeme tarihine bağlı manuel kart ödeme planları
+- Kart başına “her ekstrede sor”, sürekli asgari, ekstre tamamı veya sabit tutar ödeme stratejisi
+- Gerçek plandan ayrı gelecek ay tahmin fallback'i ve exact son ödeme tarihine bağlı özel ödeme kararları
 - Nakit, kart, yeni taksit ve diğer ödeme tipleriyle hızlı harcama
 - Serbest bakiye snapshot'ıyla gerçek Current Actual ve düzeltme geçmişi
 - Ayrı Daily Reward, sürdürülebilir Daily Coin ve Coin havuzu
@@ -45,17 +46,21 @@ Ayrıntılı kararlar için [mimari belgesine](docs/ARCHITECTURE.md), teslim kap
 - Daily Reward snapshot tutarının snapshot tarihinden sonraki maaşa kalan günlere bölünmüş sabit referansıdır. Sürdürülebilir Coin, gerçek kalan bakiyenin bugünden sonraki maaşa kalan günlere yeniden bölünmüş halidir.
 - Kart harcaması nakit havuzunu anında azaltmaz; kart borcunu ve gelecek ödemeyi artırır.
 - Kart işlemleri exact posting tarihinde ilk uygun statement close'a girer; ödeme tarihi close sonrasındaki ilk uygun due day'dir. Kart faizi ve vergiler MVP'de hesaplanmaz.
+- Kart ödemesinde exact due-date override genel stratejiden önce gelir. “Her ekstrede sor” seçiliyken karar yoksa gerçek ödeme otomatik asgariye çevrilmez.
+- Projeksiyon fallback'i yalnız tahmin içindir ve ödeme planı kaydı oluşturmaz. Fallback yoksa ilgili dönem bütçesi `Kesin değil`; varsa kullanılan asgari/tam/sabit varsayım ekranda etiketlenir.
+- Sabit kart ödemesi `min(StatementBalance, max(FixedAmount, MinimumPayment))` ile uygulanır.
 - Planlanan tampon katkısı hedefte kalan tutarla sınırlanır. Manuel aktarımın rezerve katkıya kadar olan bölümü Current Actual'dan ikinci kez düşülmez.
 - Simülasyon hiçbir kayıt oluşturmaz; mevcut dönemde Current Actual, gelecek dönemlerde Projected Free Budget kullanır ve kart senaryosu aynı statement motorunu yeniden çalıştırır.
 
 ## Mevcut veritabanı migration'ı
 
-Uygulama veritabanını silip yeniden oluşturmaz. Açılışta yeni snapshot, kart ödeme planı ve tampon transfer tabloları idempotent biçimde eklenir. Eski kart alanları şu varsayımla korunur:
+Uygulama veritabanını silip yeniden oluşturmaz. Açılışta yeni snapshot, kart ödeme planı ve tampon transfer tabloları ile kart stratejisi kolonları idempotent biçimde eklenir. Eski kart alanları şu varsayımla korunur:
 
 - `LastStatementRemaining` → açılış `CarriedBalance`
 - `CurrentCycleSpending` → açılış `UnbilledSpending`
 - Eski `card_installments` kayıtları → aynı exact tarihte `CardCharge`
 - Eski tek manuel ödeme → migration gününden sonraki ilk uygun due date'e bağlı ödeme planı
+- Eski global asgari varsayımı → `Her ekstrede sor`; kullanıcı kararı olmadan gerçek asgari plan üretilmez
 
 Migration günü kart açılış bakiyesinin referans tarihi olur; veri sessizce silinmez.
 

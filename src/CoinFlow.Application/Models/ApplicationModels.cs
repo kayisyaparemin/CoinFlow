@@ -10,7 +10,19 @@ public sealed record DashboardSnapshot(
     EmergencyFund EmergencyFund,
     bool GamificationEnabled,
     string Encouragement,
-    CalculationDetails Details);
+    CalculationDetails Details,
+    UpcomingCardPayment? UpcomingCardPayment);
+
+public sealed record UpcomingCardPayment(
+    Guid CardId,
+    string CardName,
+    DateOnly StatementCloseDate,
+    DateOnly PaymentDueDate,
+    decimal? StatementBalance,
+    decimal? MinimumPayment,
+    decimal? PlannedPayment,
+    CreditCardPaymentResolution Resolution,
+    CreditCardPaymentType? PaymentType);
 
 public sealed record CalculationDetails(
     SalaryPeriod CurrentPeriod,
@@ -23,8 +35,10 @@ public sealed record CalculationDetails(
     decimal SustainableDaily,
     DateOnly? NextCardStatementClose,
     DateOnly? NextCardPaymentDue,
-    decimal NextCardStatementBalance,
-    decimal NextCardPayment);
+    decimal? NextCardStatementBalance,
+    decimal? NextCardMinimumPayment,
+    decimal? NextCardPayment,
+    CreditCardPaymentResolution? NextCardPaymentResolution);
 
 public sealed record ExpenseDraft(
     decimal Amount,

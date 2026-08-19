@@ -61,25 +61,38 @@ Kart açılış durumu:
 - `UnbilledSpending`: Referans tarihinde henüz ekstreleşmemiş toplam.
 - `BalanceAsOfDate`: Bu iki açılış değerinin referans tarihi.
 - `Charges`: Exact posting tarihli gelecek veya uygulamada eklenmiş işlemler.
-- `PaymentPlans`: Exact due date'e bağlı manuel ödeme tutarları.
+- `PaymentStrategy`: Kartın gerçek genel ödeme davranışı (`AskEachStatement`, `Minimum`, `FullStatement`, `FixedAmount`).
+- `ProjectionFallbackStrategy`: Yalnız gelecekteki belirsiz dönem tahmininde kullanılan ve gerçek plan oluşturmayan fallback.
+- `PaymentPlans`: Exact due date'e bağlı `Minimum`, `FullStatement` veya `FixedAmount` override'ları.
 
 Posting tarihi close gününde veya öncesindeyse o close'a, sonrasındaysa sonraki close'a girer. Statement:
 
 `StatementBalance = OpeningCarried + AssignedCharges`
 
-`Payment = ManualForExactDueDate ?? Round(StatementBalance × MinimumRate, 2)`
+Ödeme kararı önceliği:
+
+1. Exact due-date override
+2. Kartın gerçek `PaymentStrategy` ayarı
+3. Yalnız projection çağrısında `ProjectionFallbackStrategy`
+4. Hiçbiri belirli değilse `Payment = null`
+
+Minimum ve tam ödeme doğrudan hesaplanır. Sabit ödeme:
+
+`Payment = min(StatementBalance, max(FixedAmount, MinimumPayment))`
 
 `CarriedAfterPayment = max(0, StatementBalance - Payment)`
 
-Due date, statement close tarihinden sonraki ilk uygun `PaymentDueDay` tarihidir. Ödeme maaş dönemine close tarihiyle değil exact due date ile atanır. Faiz ve vergiler MVP kapsamı dışındadır.
+Ödeme belirsizse carried balance da sonraki statement için belirsiz kalır. Due date, statement close tarihinden sonraki ilk uygun `PaymentDueDay` tarihidir. Ödeme maaş dönemine close tarihiyle değil exact due date ile atanır. Faiz ve vergiler MVP kapsamı dışındadır.
 
 ## Zorunlu ödeme ve gelecek dönem
 
-`Mandatory = Loans + CardPaymentsByDueDate + Temporary + PlannedInstallments + CappedEmergencyContribution`
+`ConfirmedMandatory = Loans + ConfirmedCardPaymentsByDueDate + Temporary + PlannedInstallments + CappedEmergencyContribution`
 
-`ProjectedFreeBudget = Salary - Mandatory`
+`ProjectedObligations = ConfirmedMandatory + CardFallbackEstimates`
 
-Gelecek ekranı takvim ayı yerine açıkça `10 Eyl → 10 Eki` gibi maaş dönemi gösterir. İlk satırda hem teorik başlangıç bütçesi hem mevcutsa Current Actual bulunur.
+`ProjectedFreeBudget = Salary - ProjectedObligations`
+
+Gelecek ekranı takvim ayı yerine açıkça `10 Eyl → 10 Eki` gibi maaş dönemi gösterir. İlk satırda hem teorik başlangıç bütçesi hem mevcutsa Current Actual bulunur. AskEachStatement için karar ve fallback yoksa kart tutarı mandatory toplamına sessizce eklenmez ve dönem `Kesin değil` gösterilir. Fallback kullanılırsa hesaplanan tutar tahmine katılır ama `ObligationItem.IsEstimate=true` kalır; confirmed mandatory toplama girmez ve kaynak açıkça “varsayım” olarak etiketlenir.
 
 ## Acil durum tamponu
 
@@ -93,7 +106,7 @@ Yeni tablolar:
 - `credit_card_payment_plans`
 - `emergency_fund_transfers`
 
-Eski kart kolonları migration uyumluluğu için korunur. `StatementModelVersion < 2` kayıtları açılışta carried/unbilled modele taşınır; `card_installments` tablosundaki exact tarihler charge posting tarihi olarak korunur. Drop/recreate yapılmaz.
+Eski kart kolonları migration uyumluluğu için korunur. `StatementModelVersion < 2` kayıtları açılışta carried/unbilled modele taşınır; `StatementModelVersion < 3` kartlara varsayılan `AskEachStatement` ve fallback `None` atanır. Eski tek manuel ödeme exact due-date `FixedAmount` override'ına çevrilir. `card_installments` tablosundaki exact tarihler charge posting tarihi olarak korunur. Drop/recreate yapılmaz.
 
 ## CI/CD
 

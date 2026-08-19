@@ -2,6 +2,17 @@ using CoinFlow.Domain.Models;
 
 namespace CoinFlow.Domain.Calculations;
 
+public sealed record CreditCardPaymentProjectionStatus(
+    Guid CardId,
+    string CardName,
+    DateOnly StatementCloseDate,
+    DateOnly PaymentDueDate,
+    decimal? StatementBalance,
+    decimal? MinimumPayment,
+    decimal? Payment,
+    CreditCardPaymentResolution Resolution,
+    CreditCardPaymentType? PaymentType);
+
 public sealed record FutureMonthProjection(
     SalaryPeriod Period,
     decimal Salary,
@@ -14,10 +25,15 @@ public sealed record FutureMonthProjection(
     decimal ProjectedSpendable,
     decimal? ActualRemaining,
     decimal ProjectedDailyCoin,
-    IReadOnlyList<string> Highlights)
+    IReadOnlyList<string> Highlights,
+    IReadOnlyList<CreditCardPaymentProjectionStatus> CardPaymentStatuses)
 {
     public decimal Spendable => ActualRemaining ?? ProjectedSpendable;
     public bool IsCurrentActual => ActualRemaining is not null;
+    public bool HasUndeterminedCardPayments =>
+        CardPaymentStatuses.Any(x => x.Resolution == CreditCardPaymentResolution.Undetermined);
+    public bool UsesCardPaymentFallback =>
+        CardPaymentStatuses.Any(x => x.Resolution == CreditCardPaymentResolution.ProjectionFallback);
 }
 
 public enum PurchaseFundingMethod
@@ -186,13 +202,20 @@ public sealed class PurchaseSimulationCalculator(
         };
 
         var statementCount = Math.Max(24, baseline.Count + request.InstallmentCount + 4);
-        var currentProjection = cardCalculator.Project(card, statementCount);
-        var scenarioProjection = cardCalculator.Project(scenarioCard, statementCount);
+        var currentProjection = cardCalculator.Project(card, statementCount, useProjectionFallback: true);
+        var scenarioProjection = cardCalculator.Project(scenarioCard, statementCount, useProjectionFallback: true);
+        if (currentProjection.Zip(scenarioProjection).Any(x =>
+                x.First.Payment is null || x.Second.Payment is null))
+        {
+            throw new InvalidOperationException(
+                "Kart simülasyonu için belirlenmemiş ödemelerde bir gelecek ay tahmin varsayımı seçilmelidir.");
+        }
+
         var paymentDeltas = scenarioProjection
             .Zip(currentProjection, (scenario, current) => new
             {
                 scenario.PaymentDueDate,
-                Amount = Math.Max(0m, scenario.Payment - current.Payment)
+                Amount = Math.Max(0m, scenario.Payment!.Value - current.Payment!.Value)
             })
             .ToArray();
 

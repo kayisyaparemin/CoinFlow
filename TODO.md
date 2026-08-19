@@ -18,6 +18,9 @@
 - [x] Daily Reward ile sürdürülebilir Daily Coin'i ayır
 - [x] Exact posting/statement close/payment due kart motoruna geçir
 - [x] Due-date bazlı manuel kart ödeme planlarını ekle
+- [x] Kart başına gerçek ödeme stratejisi ve ayrı projection fallback modeli ekle
+- [x] Belirsiz kart ödemelerini `Kesin değil` olarak geleceğe taşı
+- [x] Dashboard exact ekstre ödeme planlama ve kart stratejisi düzenleme akışını ekle
 - [x] Kart aggregate'ları için veri kaybetmeyen SQLite migration ekle
 - [x] Tampon hedef sınırı ve çift düşmeyi önleyen transfer kaydı ekle
 - [x] Simülasyonu ortak current/future projection çekirdeğine geçir

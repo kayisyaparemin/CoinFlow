@@ -6,6 +6,29 @@ public enum CreditCardPaymentMode
     Manual = 1
 }
 
+public enum CreditCardPaymentStrategy
+{
+    AskEachStatement = 0,
+    Minimum = 1,
+    FullStatement = 2,
+    FixedAmount = 3
+}
+
+public enum ProjectionFallbackStrategy
+{
+    None = 0,
+    Minimum = 1,
+    FullStatement = 2,
+    FixedAmount = 3
+}
+
+public enum CreditCardPaymentType
+{
+    FixedAmount = 0,
+    Minimum = 1,
+    FullStatement = 2
+}
+
 public enum ExpensePaymentType
 {
     Cash = 0,
@@ -86,6 +109,10 @@ public sealed record CreditCard
     public int StatementClosingDay { get; init; }
     public int PaymentDueDay { get; init; }
     public decimal MinimumPaymentRate { get; init; }
+    public CreditCardPaymentStrategy PaymentStrategy { get; init; } = CreditCardPaymentStrategy.AskEachStatement;
+    public decimal? FixedPaymentAmount { get; init; }
+    public ProjectionFallbackStrategy ProjectionFallbackStrategy { get; init; } = ProjectionFallbackStrategy.None;
+    public decimal? ProjectionFallbackFixedAmount { get; init; }
     public IReadOnlyList<CardCharge> Charges { get; init; } = [];
     public IReadOnlyList<CreditCardPaymentPlan> PaymentPlans { get; init; } = [];
 }
@@ -104,7 +131,8 @@ public sealed record CreditCardPaymentPlan
     public Guid Id { get; init; } = Guid.NewGuid();
     public Guid CreditCardId { get; init; }
     public DateOnly DueDate { get; init; }
-    public decimal PlannedPaymentAmount { get; init; }
+    public CreditCardPaymentType PaymentType { get; init; }
+    public decimal? Amount { get; init; }
 }
 
 public sealed record Expense
