@@ -62,6 +62,17 @@
                     <Label Text="Tamamen çevrimdışı. Veriler yalnızca bu cihazda saklanır." Style="{StaticResource MutedText}" Margin="0,8,0,0" />
                 </VerticalStackLayout>
             </Border>
+
+            <Border BackgroundColor="{StaticResource SoftPink}" Stroke="{StaticResource Error}">
+                <VerticalStackLayout Spacing="9">
+                    <Label Text="Verileri sıfırla" Style="{StaticResource SectionTitle}" />
+                    <Label Text="Maaşlar, krediler, kartlar, planlar, harcamalar, tampon ve uygulama ayarları kalıcı olarak silinir." Style="{StaticResource MutedText}" />
+                    <Button Text="Tüm verileri sıfırla"
+                            Clicked="OnResetAllDataClicked"
+                            BackgroundColor="{StaticResource SoftPeach}"
+                            TextColor="{StaticResource Error}" />
+                </VerticalStackLayout>
+            </Border>
         </VerticalStackLayout>
     </ScrollView>
 </ContentPage>

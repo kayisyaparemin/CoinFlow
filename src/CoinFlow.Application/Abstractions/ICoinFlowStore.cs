@@ -5,6 +5,7 @@ namespace CoinFlow.Application.Abstractions;
 public interface ICoinFlowStore
 {
     Task InitializeAsync(CancellationToken cancellationToken = default);
+    Task ResetAllDataAsync(CancellationToken cancellationToken = default);
 
     Task<UserSettings> GetSettingsAsync(CancellationToken cancellationToken = default);
     Task SaveSettingsAsync(UserSettings settings, CancellationToken cancellationToken = default);

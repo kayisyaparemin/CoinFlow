@@ -82,6 +82,33 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         }
     }
 
+    public async Task ResetAllDataAsync(CancellationToken cancellationToken = default)
+    {
+        await InitializeAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        await _database.RunInTransactionAsync(connection =>
+        {
+            connection.DeleteAll<PaymentInstallmentRow>();
+            connection.DeleteAll<PaymentPlanRow>();
+            connection.DeleteAll<CardInstallmentRow>();
+            connection.DeleteAll<CreditCardRow>();
+            connection.DeleteAll<ExpenseRow>();
+            connection.DeleteAll<SalaryRow>();
+            connection.DeleteAll<LoanRow>();
+            connection.DeleteAll<EmergencyFundRow>();
+            connection.DeleteAll<SettingsRow>();
+
+            connection.Insert(new SettingsRow
+            {
+                SalaryDay = 10,
+                GamificationEnabled = true,
+                DevelopmentSeedEnabled = false
+            });
+            connection.Insert(ToRow(new EmergencyFund()));
+        });
+    }
+
     public async Task<UserSettings> GetSettingsAsync(CancellationToken cancellationToken = default)
     {
         await InitializeAsync(cancellationToken);

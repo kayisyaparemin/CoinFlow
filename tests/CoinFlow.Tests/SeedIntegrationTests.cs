@@ -66,6 +66,59 @@ public sealed class SeedIntegrationTests
     }
 
     [Fact]
+    public async Task ResetAllData_RemovesEverythingAndDoesNotReseedAfterRestart()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"coinflow-{Guid.NewGuid():N}.db");
+        SqliteCoinFlowStore? store = null;
+        try
+        {
+            store = new SqliteCoinFlowStore(path, seedDevelopmentData: true);
+            var service = CreateService(store, new DateOnly(2026, 8, 19));
+            var seeded = await service.GetFinanceDataAsync();
+            Assert.NotEmpty(seeded.Salaries);
+            Assert.NotEmpty(seeded.Loans);
+            Assert.NotEmpty(seeded.CreditCards);
+            Assert.NotEmpty(seeded.Expenses);
+
+            await service.ResetAllDataAsync();
+
+            var reset = await service.GetFinanceDataAsync();
+            Assert.Empty(reset.Salaries);
+            Assert.Empty(reset.Loans);
+            Assert.Empty(reset.PaymentPlans);
+            Assert.Empty(reset.CreditCards);
+            Assert.Empty(reset.Expenses);
+            Assert.Equal(10, reset.Settings.SalaryDay);
+            Assert.True(reset.Settings.GamificationEnabled);
+            Assert.False(reset.Settings.DevelopmentSeedEnabled);
+            Assert.Equal(0m, reset.EmergencyFund.TargetAmount);
+            Assert.Equal(0m, reset.EmergencyFund.CurrentAmount);
+            Assert.Equal(0m, reset.EmergencyFund.PlannedPeriodContribution);
+
+            await store.DisposeAsync();
+            store = new SqliteCoinFlowStore(path, seedDevelopmentData: true);
+            var reopened = await CreateService(store, new DateOnly(2026, 8, 19)).GetFinanceDataAsync();
+
+            Assert.Empty(reopened.Salaries);
+            Assert.Empty(reopened.Loans);
+            Assert.Empty(reopened.PaymentPlans);
+            Assert.Empty(reopened.CreditCards);
+            Assert.Empty(reopened.Expenses);
+            Assert.False(reopened.Settings.DevelopmentSeedEnabled);
+        }
+        finally
+        {
+            if (store is not null)
+            {
+                await store.DisposeAsync();
+            }
+            TryDelete(path);
+            TryDelete(path + "-shm");
+            TryDelete(path + "-wal");
+        }
+    }
+
+    [Fact]
     public async Task CardExpense_ChangesCardDebtButNotCurrentCashBudget()
     {
         var path = Path.Combine(Path.GetTempPath(), $"coinflow-{Guid.NewGuid():N}.db");

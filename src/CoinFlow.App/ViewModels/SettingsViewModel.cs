@@ -86,4 +86,31 @@ public partial class SettingsViewModel(CoinFlowService service) : ViewModelBase
             SetStatus(exception.Message);
         }
     }
+
+    public async Task<bool> ResetAllDataAsync()
+    {
+        if (IsBusy)
+        {
+            return false;
+        }
+
+        try
+        {
+            IsBusy = true;
+            await service.ResetAllDataAsync();
+            TransferAmount = string.Empty;
+            await LoadAsync();
+            SetStatus("Tüm veriler sıfırlandı.");
+            return true;
+        }
+        catch (Exception exception)
+        {
+            SetStatus(exception.Message);
+            return false;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
 }

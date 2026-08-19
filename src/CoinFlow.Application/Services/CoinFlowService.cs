@@ -33,6 +33,9 @@ public sealed class CoinFlowService
     public Task InitializeAsync(CancellationToken cancellationToken = default) =>
         _store.InitializeAsync(cancellationToken);
 
+    public Task ResetAllDataAsync(CancellationToken cancellationToken = default) =>
+        _store.ResetAllDataAsync(cancellationToken);
+
     public async Task<FinanceData> GetFinanceDataAsync(CancellationToken cancellationToken = default)
     {
         await InitializeAsync(cancellationToken);
