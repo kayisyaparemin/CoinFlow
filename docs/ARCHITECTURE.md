@@ -44,6 +44,17 @@ Bağımlılık yönü: `App -> Application -> Domain`; `Infrastructure -> Applic
 
 MVP faiz hesaplamaz. İlk projeksiyon ayında kullanıcı seçimine göre manuel veya asgari ödeme uygulanır; sonraki aylarda asgari ödeme devam eder. Dönem içi harcama ve gelecek taksitler devreden bakiyeye eklenir. Hesaplama motoru ileride faiz stratejisi eklenebilecek ayrı bir sınıftadır.
 
+## Alışveriş simülasyonu
+
+Simülasyon kayıt oluşturmaz ve 12 maaş dönemini aynı finans verisi anlık görüntüsü üzerinden hesaplar. Temel satırlarda mevcut kredi, kart, geçici plan, taksit ve tampon yükleri korunur.
+
+- Nakit: tutar alışveriş tarihini içeren maaş döneminin serbest parasından tek seferde düşer.
+- Nakit borç: alışveriş anında nakit azalmaz; faizsizse alışveriş tutarı, masraflıysa girilen toplam geri ödeme vadeye bölünür.
+- Banka kredisi: faiz ve masraflar dahil toplam geri ödeme vadeye bölünerek mevcut kredilerin üzerine eklenir.
+- Kredi kartı: seçilen kartın mevcut borç projeksiyonu ile alışveriş eklenmiş projeksiyonu karşılaştırılır. Kullanılabilir limit, mevcut ekstre bakiyesi, gelecek taksitler ve asgari/manüel ödeme davranışı hesaba katılır. Kart faizi henüz modellenmez.
+
+Her sonuç satırı mevcut ve simülasyon sonrası zorunlu ödeme/serbest para değerleriyle yeni borcun kalanını birlikte taşır.
+
 ## SQLite veri modeli
 
 - `salary_schedule`

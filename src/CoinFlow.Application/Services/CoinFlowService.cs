@@ -101,6 +101,14 @@ public sealed class CoinFlowService
 
         var date = asOf ?? _clock.Today;
         var data = await GetFinanceDataAsync(cancellationToken);
+        return BuildFutureMonths(date, monthCount, data);
+    }
+
+    private IReadOnlyList<FutureMonthProjection> BuildFutureMonths(
+        DateOnly date,
+        int monthCount,
+        FinanceData data)
+    {
         var firstPeriod = _salaryCalculator.GetPeriod(date, data.Settings.SalaryDay);
         var horizonEnd = firstPeriod.End.AddMonths(monthCount + 1);
         var cardPayments = BuildCardPayments(data.CreditCards, firstPeriod.Start, monthCount + 2);
@@ -153,13 +161,15 @@ public sealed class CoinFlowService
         return rows;
     }
 
-    public async Task<IReadOnlyList<PurchaseSimulationRow>> SimulatePurchaseAsync(
+    public async Task<PurchaseSimulationResult> SimulatePurchaseAsync(
         PurchaseSimulationRequest request,
         DateOnly? asOf = null,
         CancellationToken cancellationToken = default)
     {
-        var baseline = await GetFutureMonthsAsync(asOf, 12, cancellationToken);
-        return _simulationCalculator.Calculate(request, baseline);
+        var date = asOf ?? _clock.Today;
+        var data = await GetFinanceDataAsync(cancellationToken);
+        var baseline = BuildFutureMonths(date, 12, data);
+        return _simulationCalculator.Calculate(request, baseline, data.CreditCards);
     }
 
     public async Task AddExpenseAsync(ExpenseDraft draft, CancellationToken cancellationToken = default)

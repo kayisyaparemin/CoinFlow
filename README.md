@@ -14,7 +14,7 @@ Uygulama klasik “günlük limit aşıldı” yaklaşımını kullanmaz. Harcan
 - Nakit, kart, yeni taksit ve diğer ödeme tipleriyle hızlı harcama
 - Gerçek takvim günleriyle maaş dönemi ve Daily Coin havuzu
 - Önümüzdeki 12 maaş döneminin görünümü
-- Kaydetmeden yeni alışveriş/taksit simülasyonu
+- Mevcut borçları temel alan kredi kartı, nakit borç, banka kredisi ve nakit alışveriş simülasyonu
 - Günlük bütçeden ayrı acil durum tamponu
 - Açılıp kapatılabilen oyunlaştırma dili
 - SQLite ile cihazda kalıcı, hesapsız ve internetsiz kullanım
@@ -42,6 +42,7 @@ Ayrıntılı kararlar için [mimari belgesine](docs/ARCHITECTURE.md), teslim kap
 - Bütün para hesapları `decimal` kullanır; taksit kuruş farkı son taksite yazılır.
 - Kart harcaması nakit havuzunu anında azaltmaz; kart borcunu ve gelecek ödemeyi artırır.
 - Kart faizi MVP'de hesaplanmaz. Bu hesap ayrı bir motor olduğundan faiz stratejisi sonradan eklenebilir.
+- Simülasyon hiçbir kayıt oluşturmaz. Nakit alışveriş ilgili maaş döneminden tek seferde düşer; nakit borç ve banka kredisi girilen toplam geri ödemeye göre vadelenir; kredi kartı seçilen kartın mevcut borç ve ödeme projeksiyonuyla karşılaştırılır.
 
 ## Gereksinimler
 

@@ -52,19 +52,113 @@ public sealed class CreditCardAndSimulationTests
     [Fact]
     public void Simulation_PreservesTotalUsingLastInstallmentRemainder()
     {
-        var baseline = Enumerable.Range(0, 3)
-            .Select(i => new FutureMonthProjection(
-                new SalaryPeriod(new DateOnly(2026, 12, 10).AddMonths(i), new DateOnly(2027, 1, 10).AddMonths(i)),
-                100_000m, 0m, 0m, 0m, 0m, 0m, 0m, 100_000m, []))
-            .ToArray();
-        var calculator = new PurchaseSimulationCalculator();
+        var baseline = CreateBaseline(new DateOnly(2026, 12, 10), 3);
+        var calculator = new PurchaseSimulationCalculator(_cardCalculator);
 
-        var rows = calculator.Calculate(
-            new PurchaseSimulationRequest("Test", 100m, 3, new DateOnly(2026, 12, 1)), baseline);
+        var result = calculator.Calculate(
+            new PurchaseSimulationRequest(
+                "Test", 100m, PurchaseFundingMethod.CashDebt,
+                new DateOnly(2026, 12, 1), 3, new DateOnly(2026, 12, 15)),
+            baseline,
+            []);
 
-        Assert.Equal(100m, rows.Sum(x => x.NewInstallment));
-        Assert.Equal(33.34m, rows[^1].NewInstallment);
+        Assert.Equal(100m, result.Rows.Sum(x => x.NewPayment));
+        Assert.Equal(33.34m, result.Rows[^1].NewPayment);
+        Assert.Equal(0m, result.RemainingNewDebtAfterHorizon);
     }
+
+    [Fact]
+    public void CashSimulation_ReducesOnlyPurchaseSalaryPeriod()
+    {
+        var baseline = CreateBaseline(new DateOnly(2026, 12, 10), 2);
+        var calculator = new PurchaseSimulationCalculator(_cardCalculator);
+
+        var result = calculator.Calculate(
+            new PurchaseSimulationRequest(
+                "Telefon", 30_000m, PurchaseFundingMethod.Cash,
+                new DateOnly(2026, 12, 20), 1, new DateOnly(2026, 12, 20)),
+            baseline,
+            []);
+
+        Assert.Equal(30_000m, result.Rows[0].NewPayment);
+        Assert.Equal(50_000m, result.Rows[0].ResultingSpendable);
+        Assert.Equal(0m, result.Rows[1].NewPayment);
+        Assert.Equal(20_000m, result.Rows[0].BaselineObligations);
+    }
+
+    [Theory]
+    [InlineData(PurchaseFundingMethod.CashDebt)]
+    [InlineData(PurchaseFundingMethod.BankLoan)]
+    public void FinancedSimulation_UsesTotalRepaymentIncludingFinancingCost(PurchaseFundingMethod method)
+    {
+        var baseline = CreateBaseline(new DateOnly(2026, 12, 10), 3);
+        var calculator = new PurchaseSimulationCalculator(_cardCalculator);
+
+        var result = calculator.Calculate(
+            new PurchaseSimulationRequest(
+                "Araç", 100_000m, method,
+                new DateOnly(2026, 12, 1), 3, new DateOnly(2026, 12, 15),
+                TotalRepaymentAmount: 120_000m),
+            baseline,
+            []);
+
+        Assert.All(result.Rows, row => Assert.Equal(40_000m, row.NewPayment));
+        Assert.Equal(120_000m, result.TotalRepaymentAmount);
+        Assert.Equal(120_000m, result.NewPaymentsInHorizon);
+    }
+
+    [Fact]
+    public void CreditCardSimulation_UsesExistingBalanceAndMinimumPaymentProjection()
+    {
+        var card = CreateCard() with
+        {
+            Limit = 200_000m,
+            CurrentTotalDebt = 100_000m,
+            LastStatementDebt = 100_000m,
+            LastStatementRemaining = 100_000m,
+            FutureInstallments = []
+        };
+        var cardProjection = _cardCalculator.Project(card, new DateOnly(2026, 9, 5), 3);
+        var baseline = cardProjection.Select((month, index) => new FutureMonthProjection(
+            new SalaryPeriod(new DateOnly(2026, 9, 1).AddMonths(index), new DateOnly(2026, 10, 1).AddMonths(index)),
+            100_000m,
+            10_000m,
+            month.Payment,
+            0m,
+            0m,
+            0m,
+            10_000m + month.Payment,
+            90_000m - month.Payment,
+            [])).ToArray();
+        var calculator = new PurchaseSimulationCalculator(_cardCalculator);
+
+        var result = calculator.Calculate(
+            new PurchaseSimulationRequest(
+                "Bilgisayar", 30_000m, PurchaseFundingMethod.CreditCard,
+                new DateOnly(2026, 9, 10), 1, new DateOnly(2026, 10, 5), card.Id),
+            baseline,
+            [card]);
+
+        Assert.Equal(0m, result.Rows[0].NewPayment);
+        Assert.Equal(12_000m, result.Rows[1].NewPayment);
+        Assert.Equal(result.Rows[1].BaselineObligations + 12_000m, result.Rows[1].ResultingObligations);
+        Assert.True(result.RemainingNewDebtAfterHorizon > 0m);
+    }
+
+    private static FutureMonthProjection[] CreateBaseline(DateOnly periodStart, int count) =>
+        Enumerable.Range(0, count)
+            .Select(index => new FutureMonthProjection(
+                new SalaryPeriod(periodStart.AddMonths(index), periodStart.AddMonths(index + 1)),
+                100_000m,
+                20_000m,
+                0m,
+                0m,
+                0m,
+                0m,
+                20_000m,
+                80_000m,
+                []))
+            .ToArray();
 
     private static CreditCard CreateCard() => new()
     {

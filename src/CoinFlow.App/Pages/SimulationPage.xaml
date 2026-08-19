@@ -9,42 +9,85 @@
     <ScrollView>
         <VerticalStackLayout Padding="20,28,20,40" Spacing="14">
             <Label Text="ÖNCE DENE" Style="{StaticResource Eyebrow}" />
-            <Label Text="Yeni borç simülasyonu" Style="{StaticResource PageTitle}" />
-            <Label Text="Bu hesap gerçek borç oluşturmaz; 12 aylık serbest para etkisini gösterir." Style="{StaticResource MutedText}" />
+            <Label Text="Alışveriş simülasyonu" Style="{StaticResource PageTitle}" />
+            <Label Text="Mevcut krediler, kart borçları, planlar ve düzenli ödemeler temel senaryoya dahildir. Simülasyon hiçbir kayıt oluşturmaz." Style="{StaticResource MutedText}" />
             <Border>
                 <VerticalStackLayout Spacing="8">
                     <Label Text="Alışveriş adı" Style="{StaticResource FieldLabel}" />
                     <Entry Text="{Binding Name}" />
                     <Label Text="Toplam tutar" Style="{StaticResource FieldLabel}" />
                     <Entry Text="{Binding TotalAmount}" Keyboard="Numeric" />
-                    <Label Text="Taksit sayısı" Style="{StaticResource FieldLabel}" />
-                    <Entry Text="{Binding InstallmentCount}" Keyboard="Numeric" />
-                    <Label Text="İlk ödeme ayı" Style="{StaticResource FieldLabel}" />
-                    <DatePicker Date="{Binding FirstPaymentDate}" Format="MMMM yyyy" />
+                    <Label Text="Nasıl alınacak?" Style="{StaticResource FieldLabel}" />
+                    <Picker ItemsSource="{Binding FundingMethods}" SelectedItem="{Binding SelectedFundingMethod}" />
+
+                    <Border BackgroundColor="{StaticResource SoftSky}" StrokeThickness="0" Padding="12">
+                        <Label Text="{Binding MethodDescription}" Style="{StaticResource MutedText}" />
+                    </Border>
+
+                    <Label Text="Alışveriş tarihi" Style="{StaticResource FieldLabel}" />
+                    <DatePicker Date="{Binding PurchaseDate}" Format="dd.MM.yyyy" />
+
+                    <VerticalStackLayout IsVisible="{Binding IsCreditCard}" Spacing="8">
+                        <Label Text="Kredi kartı" Style="{StaticResource FieldLabel}" />
+                        <Picker ItemsSource="{Binding CreditCards}"
+                                SelectedItem="{Binding SelectedCreditCard}"
+                                Title="Kart seç" />
+                    </VerticalStackLayout>
+
+                    <VerticalStackLayout IsVisible="{Binding IsFinanced}" Spacing="8">
+                        <Label Text="Taksit / vade sayısı" Style="{StaticResource FieldLabel}" />
+                        <Entry Text="{Binding InstallmentCount}" Keyboard="Numeric" />
+                        <Label Text="İlk ödeme tarihi" Style="{StaticResource FieldLabel}" />
+                        <DatePicker Date="{Binding FirstPaymentDate}" Format="dd.MM.yyyy" />
+                    </VerticalStackLayout>
+
+                    <VerticalStackLayout IsVisible="{Binding IsDebtOrLoan}" Spacing="8">
+                        <Label Text="Toplam geri ödeme" Style="{StaticResource FieldLabel}" />
+                        <Entry Text="{Binding TotalRepaymentAmount}"
+                               Keyboard="Numeric"
+                               Placeholder="Boşsa alışveriş tutarı kullanılır" />
+                        <Label Text="Kredi faizini veya borç masrafını dahil ederek yazabilirsiniz." Style="{StaticResource MutedText}" />
+                    </VerticalStackLayout>
+
                     <Button Text="12 aylık etkiyi hesapla" Command="{Binding CalculateCommand}" Style="{StaticResource SecondaryButton}" />
                 </VerticalStackLayout>
             </Border>
             <Label Text="{Binding StatusMessage}" IsVisible="{Binding HasStatus}" TextColor="{StaticResource Error}" />
             <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" />
-            <CollectionView ItemsSource="{Binding Results}" SelectionMode="None" HeightRequest="720">
-                <CollectionView.ItemTemplate>
+
+            <Border IsVisible="{Binding HasResults}" BackgroundColor="{StaticResource SoftLavender}" StrokeThickness="0">
+                <VerticalStackLayout Spacing="7">
+                    <Label Text="12 aylık sonuç" Style="{StaticResource SectionTitle}" />
+                    <Label Text="{Binding SummaryText}" />
+                    <Label Text="{Binding Explanation}" Style="{StaticResource MutedText}" />
+                </VerticalStackLayout>
+            </Border>
+
+            <VerticalStackLayout BindableLayout.ItemsSource="{Binding Results}">
+                <BindableLayout.ItemTemplate>
                     <DataTemplate x:DataType="models:SimulationLine">
                         <Border Margin="0,0,0,10" Padding="14">
                             <VerticalStackLayout Spacing="6">
                                 <Label Text="{Binding Month}" FontFamily="OpenSansSemibold" FontSize="17" />
-                                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
-                                    <Label Text="Mevcut serbest para" Style="{StaticResource MutedText}" />
-                                    <Label Grid.Column="1" Text="{Binding Baseline}" />
-                                    <Label Grid.Row="1" Text="Yeni taksit" Style="{StaticResource MutedText}" />
-                                    <Label Grid.Row="1" Grid.Column="1" Text="{Binding Installment}" />
-                                    <Label Grid.Row="2" Text="Simülasyon sonrası" FontFamily="OpenSansSemibold" />
-                                    <Label Grid.Row="2" Grid.Column="1" Text="{Binding Result}" FontFamily="OpenSansSemibold" TextColor="{StaticResource MintStrong}" />
+                                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="5">
+                                    <Label Text="Mevcut zorunlu ödemeler" Style="{StaticResource MutedText}" />
+                                    <Label Grid.Column="1" Text="{Binding CurrentObligations}" />
+                                    <Label Grid.Row="1" Text="Mevcut serbest para" Style="{StaticResource MutedText}" />
+                                    <Label Grid.Row="1" Grid.Column="1" Text="{Binding CurrentSpendable}" />
+                                    <Label Grid.Row="2" Text="Bu seçimden yeni ödeme" Style="{StaticResource MutedText}" />
+                                    <Label Grid.Row="2" Grid.Column="1" Text="{Binding NewPayment}" />
+                                    <Label Grid.Row="3" Text="Yeni toplam zorunlu" Style="{StaticResource MutedText}" />
+                                    <Label Grid.Row="3" Grid.Column="1" Text="{Binding ResultingObligations}" />
+                                    <Label Grid.Row="4" Text="Simülasyon sonrası serbest" FontFamily="OpenSansSemibold" />
+                                    <Label Grid.Row="4" Grid.Column="1" Text="{Binding ResultingSpendable}" FontFamily="OpenSansSemibold" TextColor="{StaticResource MintStrong}" />
+                                    <Label Grid.Row="5" Text="Kalan yeni borç" Style="{StaticResource MutedText}" />
+                                    <Label Grid.Row="5" Grid.Column="1" Text="{Binding RemainingDebt}" Style="{StaticResource MutedText}" />
                                 </Grid>
                             </VerticalStackLayout>
                         </Border>
                     </DataTemplate>
-                </CollectionView.ItemTemplate>
-            </CollectionView>
+                </BindableLayout.ItemTemplate>
+            </VerticalStackLayout>
         </VerticalStackLayout>
     </ScrollView>
 </ContentPage>

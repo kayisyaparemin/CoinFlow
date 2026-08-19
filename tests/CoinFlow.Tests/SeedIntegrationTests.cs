@@ -174,13 +174,54 @@ public sealed class SeedIntegrationTests
         }
     }
 
+    [Fact]
+    public async Task SeededCardSimulation_IncludesCurrentDebtsAndFutureInstallments()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"coinflow-{Guid.NewGuid():N}.db");
+        SqliteCoinFlowStore? store = null;
+        try
+        {
+            store = new SqliteCoinFlowStore(path, seedDevelopmentData: true);
+            var service = CreateService(store, new DateOnly(2026, 8, 19));
+            var data = await service.GetFinanceDataAsync();
+            var card = Assert.Single(data.CreditCards);
+
+            var result = await service.SimulatePurchaseAsync(
+                new PurchaseSimulationRequest(
+                    "Test alışverişi",
+                    30_000m,
+                    PurchaseFundingMethod.CreditCard,
+                    new DateOnly(2026, 8, 20),
+                    3,
+                    new DateOnly(2026, 10, 5),
+                    card.Id));
+
+            Assert.Equal(12, result.Rows.Count);
+            Assert.Equal(87_767m, result.Rows[0].BaselineObligations);
+            Assert.True(result.ExistingObligationsInHorizon > result.Rows[0].BaselineObligations);
+            Assert.Contains(result.Rows, row => row.NewPayment > 0m);
+            Assert.True(result.NewPaymentsInHorizon > 0m);
+            Assert.True(result.RemainingNewDebtAfterHorizon >= 0m);
+        }
+        finally
+        {
+            if (store is not null)
+            {
+                await store.DisposeAsync();
+            }
+            TryDelete(path);
+            TryDelete(path + "-shm");
+            TryDelete(path + "-wal");
+        }
+    }
+
     private static CoinFlowService CreateService(ICoinFlowStore store, DateOnly today) => new(
         store,
         new FixedClock(today),
         new SalaryPeriodCalculator(),
         new DailyCoinCalculator(),
         new CreditCardProjectionCalculator(),
-        new PurchaseSimulationCalculator());
+        new PurchaseSimulationCalculator(new CreditCardProjectionCalculator()));
 
     private static void TryDelete(string path)
     {

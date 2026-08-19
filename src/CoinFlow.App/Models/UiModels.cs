@@ -15,4 +15,11 @@ public sealed record ProjectionLine(
     string Breakdown,
     string Highlight);
 
-public sealed record SimulationLine(string Month, string Baseline, string Installment, string Result);
+public sealed record SimulationLine(
+    string Month,
+    string CurrentObligations,
+    string CurrentSpendable,
+    string NewPayment,
+    string ResultingObligations,
+    string ResultingSpendable,
+    string RemainingDebt);
