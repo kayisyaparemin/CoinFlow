@@ -169,11 +169,20 @@ public sealed class CoinFlowService(
     public Task SaveSalaryAsync(SalaryScheduleEntry entry, CancellationToken cancellationToken = default) =>
         store.UpsertSalaryAsync(entry, cancellationToken);
 
+    public Task DeleteSalaryAsync(Guid id, CancellationToken cancellationToken = default) =>
+        store.DeleteSalaryAsync(id, cancellationToken);
+
     public Task SaveLoanAsync(Loan loan, CancellationToken cancellationToken = default) =>
         store.UpsertLoanAsync(loan, cancellationToken);
 
+    public Task DeleteLoanAsync(Guid id, CancellationToken cancellationToken = default) =>
+        store.DeleteLoanAsync(id, cancellationToken);
+
     public Task SavePaymentPlanAsync(TemporaryPaymentPlan plan, CancellationToken cancellationToken = default) =>
         store.UpsertPaymentPlanAsync(plan, cancellationToken);
+
+    public Task DeletePaymentPlanAsync(Guid id, CancellationToken cancellationToken = default) =>
+        store.DeletePaymentPlanAsync(id, cancellationToken);
 
     public Task SaveCreditCardAsync(CreditCard card, CancellationToken cancellationToken = default)
     {
@@ -187,6 +196,9 @@ public sealed class CoinFlowService(
         };
         return store.UpsertCreditCardAsync(normalized, cancellationToken);
     }
+
+    public Task DeleteCreditCardAsync(Guid id, CancellationToken cancellationToken = default) =>
+        store.DeleteCreditCardAsync(id, cancellationToken);
 
     public Task SaveSettingsAsync(UserSettings settings, CancellationToken cancellationToken = default) =>
         store.SaveSettingsAsync(

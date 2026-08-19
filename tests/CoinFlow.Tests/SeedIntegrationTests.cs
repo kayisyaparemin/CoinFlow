@@ -41,6 +41,59 @@ public sealed class SeedIntegrationTests
     }
 
     [Fact]
+    public async Task DashboardRemainingDays_UsesTheClockDateOnEveryLoad()
+    {
+        await WithStore(seed: true, async store =>
+        {
+            var augustNineteenth = await CreateService(store, new DateOnly(2026, 8, 19)).GetDashboardAsync();
+            var augustTwentieth = await CreateService(store, new DateOnly(2026, 8, 20)).GetDashboardAsync();
+
+            Assert.Equal(22, augustNineteenth.DailyCoin.RemainingDays);
+            Assert.Equal(21, augustTwentieth.DailyCoin.RemainingDays);
+        });
+    }
+
+    [Fact]
+    public async Task IncomeAndPaymentRecords_CanBeDeletedIndividually()
+    {
+        await WithStore(seed: true, async store =>
+        {
+            var service = CreateService(store);
+            var before = await service.GetFinanceDataAsync();
+            var salary = before.Salaries[0];
+            var loan = before.Loans[0];
+            var card = before.CreditCards[0];
+            var planId = Guid.NewGuid();
+            await service.SavePaymentPlanAsync(new TemporaryPaymentPlan
+            {
+                Id = planId,
+                Name = "Silinecek plan",
+                Kind = PaymentPlanKind.Temporary,
+                Installments =
+                [
+                    new TemporaryPaymentInstallment
+                    {
+                        PlanId = planId,
+                        DueDate = Today.AddDays(3),
+                        Amount = 1_000m
+                    }
+                ]
+            });
+
+            await service.DeleteSalaryAsync(salary.Id);
+            await service.DeleteLoanAsync(loan.Id);
+            await service.DeletePaymentPlanAsync(planId);
+            await service.DeleteCreditCardAsync(card.Id);
+
+            var after = await service.GetFinanceDataAsync();
+            Assert.DoesNotContain(after.Salaries, x => x.Id == salary.Id);
+            Assert.DoesNotContain(after.Loans, x => x.Id == loan.Id);
+            Assert.DoesNotContain(after.PaymentPlans, x => x.Id == planId);
+            Assert.DoesNotContain(after.CreditCards, x => x.Id == card.Id);
+        });
+    }
+
+    [Fact]
     public async Task FuturePeriods_FirstRowUsesActualAndFutureRowsUseProjection()
     {
         await WithStore(seed: true, async store =>

@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CoinFlow.App.Models;
@@ -16,7 +15,9 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
         new("Kredi kartı", "card"), new("Geçici ödeme planı", "plan")
     ];
 
-    public ObservableCollection<SummaryLine> Items { get; } = [];
+    public ObservableCollection<CommitmentSummaryLine> Items { get; } = [];
+    public ObservableCollection<DatedAmountLine> PlanInstallments { get; } = [];
+    public ObservableCollection<DatedAmountLine> CardFuturePayments { get; } = [];
 
     [ObservableProperty] private SelectionOption<string>? selectedType;
     [ObservableProperty] private bool isSalary;
@@ -36,7 +37,8 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
     [ObservableProperty] private string remainingDebt = string.Empty;
     [ObservableProperty] private string earlyClosureAmount = string.Empty;
 
-    [ObservableProperty] private string installmentsText = string.Empty;
+    [ObservableProperty] private DateTime planInstallmentDate = DateTime.Today;
+    [ObservableProperty] private string planInstallmentAmount = string.Empty;
 
     [ObservableProperty] private string cardLimit = string.Empty;
     [ObservableProperty] private string statementRemaining = string.Empty;
@@ -44,8 +46,8 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
     [ObservableProperty] private string closingDay = "25";
     [ObservableProperty] private string dueDay = "5";
     [ObservableProperty] private string minimumRate = "40";
-    [ObservableProperty] private string manualPaymentPlans = string.Empty;
-    [ObservableProperty] private string futureCardInstallments = string.Empty;
+    [ObservableProperty] private DateTime cardFuturePaymentDate = DateTime.Today;
+    [ObservableProperty] private string cardFuturePaymentAmount = string.Empty;
 
     public async Task LoadAsync()
     {
@@ -63,19 +65,29 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
         Items.Clear();
         foreach (var salary in data.Salaries.OrderByDescending(x => x.EffectiveFrom))
         {
-            Items.Add(new SummaryLine("Maaş", $"{salary.EffectiveFrom:dd.MM.yyyy} itibarıyla", Money(salary.NetAmount), salary.Note));
+            Items.Add(new CommitmentSummaryLine(
+                salary.Id, CommitmentKind.Salary, "Maaş", $"{salary.EffectiveFrom:dd.MM.yyyy} itibarıyla",
+                Money(salary.NetAmount), salary.Note));
         }
         foreach (var loan in data.Loans)
         {
-            Items.Add(new SummaryLine($"{loan.Bank} {loan.Name}".Trim(), $"Her ayın {loan.PaymentDay}. günü", Money(loan.MonthlyInstallment), $"{loan.InstallmentCount ?? 0} taksit kaldı"));
+            Items.Add(new CommitmentSummaryLine(
+                loan.Id, CommitmentKind.Loan, $"{loan.Bank} {loan.Name}".Trim(),
+                $"Her ayın {loan.PaymentDay}. günü", Money(loan.MonthlyInstallment),
+                $"{loan.InstallmentCount ?? 0} taksit kaldı"));
         }
         foreach (var plan in data.PaymentPlans)
         {
-            Items.Add(new SummaryLine(plan.Name, $"{plan.Installments.Count} ödeme", Money(plan.Installments.Sum(x => x.Amount)), plan.Kind == PaymentPlanKind.Temporary ? "Geçici" : "Planlı"));
+            Items.Add(new CommitmentSummaryLine(
+                plan.Id, CommitmentKind.PaymentPlan, plan.Name, $"{plan.Installments.Count} ödeme",
+                Money(plan.Installments.Sum(x => x.Amount)),
+                plan.Kind == PaymentPlanKind.Temporary ? "Geçici" : "Planlı"));
         }
         foreach (var card in data.CreditCards)
         {
-            Items.Add(new SummaryLine(
+            Items.Add(new CommitmentSummaryLine(
+                card.Id,
+                CommitmentKind.CreditCard,
                 $"{card.Bank} {card.Name}".Trim(),
                 $"Kesim {card.StatementClosingDay} • Son ödeme {card.PaymentDueDay}",
                 Money(card.CurrentTotalDebt),
@@ -89,6 +101,83 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
         IsLoan = value?.Value == "loan";
         IsPlan = value?.Value == "plan";
         IsCard = value?.Value == "card";
+    }
+
+    [RelayCommand]
+    private void AddPlanInstallment()
+    {
+        try
+        {
+            var amount = RequirePositive(ParseMoney(PlanInstallmentAmount, "Taksit tutarı"), "Taksit tutarı");
+            PlanInstallments.Add(new DatedAmountLine(
+                Guid.NewGuid(), DateOnly.FromDateTime(PlanInstallmentDate), amount));
+            PlanInstallmentAmount = string.Empty;
+            SetStatus(string.Empty);
+        }
+        catch (Exception exception)
+        {
+            SetStatus(exception.Message);
+        }
+    }
+
+    [RelayCommand]
+    private void AddCardFuturePayment()
+    {
+        try
+        {
+            var amount = RequirePositive(
+                ParseMoney(CardFuturePaymentAmount, "Gelecek dönem tutarı"),
+                "Gelecek dönem tutarı");
+            CardFuturePayments.Add(new DatedAmountLine(
+                Guid.NewGuid(), DateOnly.FromDateTime(CardFuturePaymentDate), amount));
+            CardFuturePaymentAmount = string.Empty;
+            SetStatus(string.Empty);
+        }
+        catch (Exception exception)
+        {
+            SetStatus(exception.Message);
+        }
+    }
+
+    public void RemovePlanInstallment(DatedAmountLine line) => PlanInstallments.Remove(line);
+
+    public void RemoveCardFuturePayment(DatedAmountLine line) => CardFuturePayments.Remove(line);
+
+    public async Task DeleteAsync(CommitmentSummaryLine item)
+    {
+        try
+        {
+            IsBusy = true;
+            SetStatus(string.Empty);
+            switch (item.Kind)
+            {
+                case CommitmentKind.Salary:
+                    await service.DeleteSalaryAsync(item.Id);
+                    break;
+                case CommitmentKind.Loan:
+                    await service.DeleteLoanAsync(item.Id);
+                    break;
+                case CommitmentKind.PaymentPlan:
+                    await service.DeletePaymentPlanAsync(item.Id);
+                    break;
+                case CommitmentKind.CreditCard:
+                    await service.DeleteCreditCardAsync(item.Id);
+                    break;
+                default:
+                    throw new InvalidOperationException("Silinecek kayıt türü tanınmıyor.");
+            }
+
+            await LoadAsync();
+            SetStatus($"{item.Title} silindi.");
+        }
+        catch (Exception exception)
+        {
+            SetStatus($"Kayıt silinemedi: {exception.Message}");
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     [RelayCommand]
@@ -161,9 +250,20 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
 
     private Task SavePlanAsync()
     {
+        if (PlanInstallments.Count == 0)
+        {
+            throw new InvalidOperationException("En az bir taksit eklenmelidir.");
+        }
+
         var planId = Guid.NewGuid();
-        var installments = ParseDatedAmounts(InstallmentsText)
-            .Select(x => new TemporaryPaymentInstallment { PlanId = planId, DueDate = x.Date, Amount = x.Amount })
+        var installments = PlanInstallments
+            .OrderBy(x => x.Date)
+            .Select(x => new TemporaryPaymentInstallment
+            {
+                PlanId = planId,
+                DueDate = x.Date,
+                Amount = x.Amount
+            })
             .ToArray();
         return service.SavePaymentPlanAsync(new TemporaryPaymentPlan
         {
@@ -177,15 +277,14 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
     private Task SaveCardAsync()
     {
         var cardId = Guid.NewGuid();
-        var future = ParseDatedAmounts(FutureCardInstallments, allowEmpty: true)
-            .Select(x => new CardCharge { CreditCardId = cardId, Description = "Kart taksiti", PostingDate = x.Date, Amount = x.Amount })
-            .ToArray();
-        var manualPayments = ParseDatedAmounts(ManualPaymentPlans, allowEmpty: true)
-            .Select(x => new CreditCardPaymentPlan
+        var future = CardFuturePayments
+            .OrderBy(x => x.Date)
+            .Select(x => new CardCharge
             {
                 CreditCardId = cardId,
-                DueDate = x.Date,
-                PlannedPaymentAmount = x.Amount
+                Description = "Gelecek dönem ödemesi",
+                PostingDate = x.Date,
+                Amount = x.Amount
             })
             .ToArray();
         var rate = ParseMoney(MinimumRate, "Asgari oran") / 100m;
@@ -214,7 +313,7 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
             PaymentDueDay = ParseDay(DueDay, "Son ödeme günü"),
             MinimumPaymentRate = rate,
             Charges = future,
-            PaymentPlans = manualPayments
+            PaymentPlans = []
         });
     }
 
@@ -231,7 +330,9 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
         RemainingDebt = string.Empty;
         EarlyClosureAmount = string.Empty;
 
-        InstallmentsText = string.Empty;
+        PlanInstallmentDate = DateTime.Today;
+        PlanInstallmentAmount = string.Empty;
+        PlanInstallments.Clear();
 
         CardLimit = string.Empty;
         StatementRemaining = string.Empty;
@@ -239,36 +340,9 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
         ClosingDay = "25";
         DueDay = "5";
         MinimumRate = "40";
-        ManualPaymentPlans = string.Empty;
-        FutureCardInstallments = string.Empty;
-    }
-
-    private static IReadOnlyList<(DateOnly Date, decimal Amount)> ParseDatedAmounts(string input, bool allowEmpty = false)
-    {
-        var lines = input.Split(['\r', '\n', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (lines.Length == 0 && allowEmpty)
-        {
-            return [];
-        }
-
-        var result = new List<(DateOnly, decimal)>();
-        foreach (var line in lines)
-        {
-            var separator = line.IndexOf(':');
-            if (separator < 0 || !DateOnly.TryParseExact(line[..separator].Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
-            {
-                throw new InvalidOperationException("Taksitler yyyy-MM-dd:tutar biçiminde, satır satır girilmelidir.");
-            }
-
-            var amount = ParseMoney(line[(separator + 1)..].Trim(), "Taksit tutarı");
-            result.Add((date, RequirePositive(amount, "Taksit tutarı")));
-        }
-
-        if (result.Count == 0)
-        {
-            throw new InvalidOperationException("En az bir taksit girilmelidir.");
-        }
-        return result;
+        CardFuturePaymentDate = DateTime.Today;
+        CardFuturePaymentAmount = string.Empty;
+        CardFuturePayments.Clear();
     }
 
     private static int ParseDay(string value, string field)

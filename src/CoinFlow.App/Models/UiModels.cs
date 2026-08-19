@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace CoinFlow.App.Models;
 
 public sealed record SelectionOption<T>(string Label, T Value)
@@ -5,7 +7,28 @@ public sealed record SelectionOption<T>(string Label, T Value)
     public override string ToString() => Label;
 }
 
-public sealed record SummaryLine(string Title, string Subtitle, string Amount, string Badge = "");
+public enum CommitmentKind
+{
+    Salary,
+    Loan,
+    PaymentPlan,
+    CreditCard
+}
+
+public sealed record CommitmentSummaryLine(
+    Guid Id,
+    CommitmentKind Kind,
+    string Title,
+    string Subtitle,
+    string Amount,
+    string Badge = "");
+
+public sealed record DatedAmountLine(Guid Id, DateOnly Date, decimal Amount)
+{
+    public string DateText => Date.ToString("dd.MM.yyyy");
+
+    public string AmountText => $"{Amount.ToString("N2", CultureInfo.GetCultureInfo("tr-TR"))} TL";
+}
 
 public sealed record ProjectionLine(
     string Period,
