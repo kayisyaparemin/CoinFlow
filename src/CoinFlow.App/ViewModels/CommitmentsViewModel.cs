@@ -12,8 +12,8 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
 {
     public ObservableCollection<SelectionOption<string>> Types { get; } =
     [
-        new("Maaş değişikliği", "salary"), new("Kredi", "loan"),
-        new("Geçici ödeme planı", "plan"), new("Kredi kartı", "card")
+        new("Maaş ekle / değiştir", "salary"), new("Kredi", "loan"),
+        new("Kredi kartı", "card"), new("Geçici ödeme planı", "plan")
     ];
 
     public ObservableCollection<SummaryLine> Items { get; } = [];
@@ -23,6 +23,7 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
     [ObservableProperty] private bool isLoan;
     [ObservableProperty] private bool isPlan;
     [ObservableProperty] private bool isCard;
+    [ObservableProperty] private bool hasNoSalary;
 
     [ObservableProperty] private string name = string.Empty;
     [ObservableProperty] private string bank = string.Empty;
@@ -35,24 +36,31 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
     [ObservableProperty] private string remainingDebt = string.Empty;
     [ObservableProperty] private string earlyClosureAmount = string.Empty;
 
-    [ObservableProperty] private string installmentsText = "2026-09-05:28167\n2026-10-05:28167\n2026-11-05:55492";
+    [ObservableProperty] private string installmentsText = string.Empty;
 
-    [ObservableProperty] private string cardLimit = "200000";
-    [ObservableProperty] private string currentDebt = "0";
-    [ObservableProperty] private string statementDebt = "0";
-    [ObservableProperty] private string statementRemaining = "0";
-    [ObservableProperty] private string cycleSpending = "0";
+    [ObservableProperty] private string cardLimit = string.Empty;
+    [ObservableProperty] private string statementRemaining = string.Empty;
+    [ObservableProperty] private string cycleSpending = string.Empty;
     [ObservableProperty] private string closingDay = "25";
     [ObservableProperty] private string dueDay = "5";
     [ObservableProperty] private string minimumRate = "40";
     [ObservableProperty] private bool useManualPayment;
     [ObservableProperty] private string manualPayment = string.Empty;
-    [ObservableProperty] private string futureCardInstallments = "2026-09-25:14500\n2026-10-25:8000\n2026-11-25:1600";
+    [ObservableProperty] private string futureCardInstallments = string.Empty;
 
     public async Task LoadAsync()
     {
-        SelectedType ??= Types[0];
         var data = await service.GetFinanceDataAsync();
+        HasNoSalary = data.Salaries.Count == 0;
+        if (HasNoSalary)
+        {
+            SelectedType = Types.First(x => x.Value == "salary");
+        }
+        else
+        {
+            SelectedType ??= Types[0];
+        }
+
         Items.Clear();
         foreach (var salary in data.Salaries.OrderByDescending(x => x.EffectiveFrom))
         {
@@ -60,7 +68,7 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
         }
         foreach (var loan in data.Loans)
         {
-            Items.Add(new SummaryLine($"{loan.Bank} {loan.Name}".Trim(), $"Her ayın {loan.PaymentDay}. günü", Money(loan.MonthlyInstallment), $"{loan.InstallmentCount ?? 0} taksit"));
+            Items.Add(new SummaryLine($"{loan.Bank} {loan.Name}".Trim(), $"Her ayın {loan.PaymentDay}. günü", Money(loan.MonthlyInstallment), $"{loan.InstallmentCount ?? 0} taksit kaldı"));
         }
         foreach (var plan in data.PaymentPlans)
         {
@@ -105,7 +113,9 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
                     throw new InvalidOperationException("Kayıt türü seçilmelidir.");
             }
 
-            SetStatus("Plan kaydedildi ve bütçe projeksiyonuna eklendi.");
+            var savedType = SelectedType?.Label ?? "Kayıt";
+            ClearForm();
+            SetStatus($"{savedType} kaydedildi ve bütçe projeksiyonuna eklendi.");
             await LoadAsync();
         }
         catch (Exception exception)
@@ -173,16 +183,23 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
             throw new InvalidOperationException("Asgari oran 0 ile 100 arasında olmalıdır.");
         }
 
+        var statementRemaining = RequireNonNegative(
+            ParseMoney(StatementRemaining, "Son ekstreden kalan"),
+            "Son ekstreden kalan");
+        var cycleSpending = RequireNonNegative(
+            ParseMoney(CycleSpending, "Dönem içi harcama"),
+            "Dönem içi harcama");
+
         return service.SaveCreditCardAsync(new CreditCard
         {
             Id = cardId,
             Name = RequireText(Name, "Kart adı"),
             Bank = Bank.Trim(),
             Limit = RequirePositive(ParseMoney(CardLimit, "Kart limiti"), "Kart limiti"),
-            CurrentTotalDebt = ParseMoney(CurrentDebt, "Güncel borç"),
-            LastStatementDebt = ParseMoney(StatementDebt, "Son ekstre borcu"),
-            LastStatementRemaining = ParseMoney(StatementRemaining, "Ekstreden kalan"),
-            CurrentCycleSpending = ParseMoney(CycleSpending, "Dönem içi harcama"),
+            CurrentTotalDebt = 0m,
+            LastStatementDebt = 0m,
+            LastStatementRemaining = statementRemaining,
+            CurrentCycleSpending = cycleSpending,
             StatementClosingDay = ParseDay(ClosingDay, "Kesim günü"),
             PaymentDueDay = ParseDay(DueDay, "Son ödeme günü"),
             MinimumPaymentRate = rate,
@@ -190,6 +207,32 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
             ManualPaymentAmount = UseManualPayment ? RequirePositive(ParseMoney(ManualPayment, "Manuel ödeme"), "Manuel ödeme") : null,
             FutureInstallments = future
         });
+    }
+
+    private void ClearForm()
+    {
+        Name = string.Empty;
+        Bank = string.Empty;
+        Amount = string.Empty;
+        EffectiveDate = DateTime.Today;
+
+        PaymentDay = "10";
+        LoanStartDate = DateTime.Today;
+        InstallmentCount = "12";
+        RemainingDebt = string.Empty;
+        EarlyClosureAmount = string.Empty;
+
+        InstallmentsText = string.Empty;
+
+        CardLimit = string.Empty;
+        StatementRemaining = string.Empty;
+        CycleSpending = string.Empty;
+        ClosingDay = "25";
+        DueDay = "5";
+        MinimumRate = "40";
+        UseManualPayment = false;
+        ManualPayment = string.Empty;
+        FutureCardInstallments = string.Empty;
     }
 
     private static IReadOnlyList<(DateOnly Date, decimal Amount)> ParseDatedAmounts(string input, bool allowEmpty = false)
@@ -234,6 +277,9 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
 
     private static decimal RequirePositive(decimal value, string field) =>
         value <= 0m ? throw new InvalidOperationException($"{field} sıfırdan büyük olmalıdır.") : value;
+
+    private static decimal RequireNonNegative(decimal value, string field) =>
+        value < 0m ? throw new InvalidOperationException($"{field} negatif olamaz.") : value;
 
     private static decimal? OptionalMoney(string value) =>
         string.IsNullOrWhiteSpace(value) ? null : ParseMoney(value, "Opsiyonel tutar");

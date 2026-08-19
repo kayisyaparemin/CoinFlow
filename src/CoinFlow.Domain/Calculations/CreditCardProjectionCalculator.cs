@@ -12,6 +12,20 @@ public sealed record CreditCardMonthProjection(
 
 public sealed class CreditCardProjectionCalculator
 {
+    public static decimal DeriveCurrentTotalDebt(CreditCard card)
+    {
+        if (card.LastStatementRemaining < 0m ||
+            card.CurrentCycleSpending < 0m ||
+            card.FutureInstallments.Any(x => x.Amount < 0m))
+        {
+            throw new InvalidOperationException("Kart borç bileşenleri negatif olamaz.");
+        }
+
+        return card.LastStatementRemaining +
+               card.CurrentCycleSpending +
+               card.FutureInstallments.Sum(x => x.Amount);
+    }
+
     public IReadOnlyList<CreditCardMonthProjection> Project(
         CreditCard card,
         DateOnly firstMonth,

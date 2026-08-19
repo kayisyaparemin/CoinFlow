@@ -94,11 +94,9 @@ Debug/development build, yalnızca boş bir veritabanında örnek verileri ekler
 
 - 115.000 TL maaş, maaş günü 10
 - 1 Ocak 2027 itibarıyla 132.250 TL maaş
-- Garanti 14.500 TL ve Burgan 7.500 TL kredileri
-- Eylül–Kasım 2026 farklı tutarlı geçici ödeme planı
-- %40 asgari ödemeli kart ve Eylül–Kasım gelecek taksitleri
+- Garanti'de 22 × 14.501,23 TL ve Burgan On Dijital'de 9 × 7.374,59 TL kalan kredi taksiti
+- Akbank Axess'te 61.283,91 TL dönem içi harcama, 35.201,77 TL son ekstreden kalan ve Eylül–Kasım gelecek taksitleri
 - 150.000 TL hedef / 32.000 TL mevcut acil tampon
-- 19 Ağustos 2026 için 11.000 TL kalan, 22 gün ve 500 TL sürdürülebilir günlük bütçeyi üreten demo harcamalar
 
 Stable build development seed eklemez ve ilk açılışta boş finans verisiyle başlar.
 

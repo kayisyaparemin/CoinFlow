@@ -235,8 +235,15 @@ public sealed class CoinFlowService
     public Task SavePaymentPlanAsync(TemporaryPaymentPlan plan, CancellationToken cancellationToken = default) =>
         _store.UpsertPaymentPlanAsync(plan, cancellationToken);
 
-    public Task SaveCreditCardAsync(CreditCard card, CancellationToken cancellationToken = default) =>
-        _store.UpsertCreditCardAsync(card, cancellationToken);
+    public Task SaveCreditCardAsync(CreditCard card, CancellationToken cancellationToken = default)
+    {
+        var normalized = card with
+        {
+            LastStatementDebt = card.LastStatementRemaining,
+            CurrentTotalDebt = CreditCardProjectionCalculator.DeriveCurrentTotalDebt(card)
+        };
+        return _store.UpsertCreditCardAsync(normalized, cancellationToken);
+    }
 
     public Task SaveSettingsAsync(UserSettings settings, CancellationToken cancellationToken = default) =>
         _store.SaveSettingsAsync(settings, cancellationToken);

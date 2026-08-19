@@ -50,6 +50,24 @@ public sealed class CreditCardAndSimulationTests
     }
 
     [Fact]
+    public void CurrentCardDebt_IsDerivedFromVisibleFormComponents()
+    {
+        var card = CreateCard() with
+        {
+            LastStatementRemaining = 35_201.77m,
+            CurrentCycleSpending = 61_283.91m,
+            FutureInstallments =
+            [
+                new CardInstallment { Amount = 15_538.36m },
+                new CardInstallment { Amount = 9_102.90m },
+                new CardInstallment { Amount = 2_624.55m }
+            ]
+        };
+
+        Assert.Equal(123_751.49m, CreditCardProjectionCalculator.DeriveCurrentTotalDebt(card));
+    }
+
+    [Fact]
     public void Simulation_PreservesTotalUsingLastInstallmentRemainder()
     {
         var baseline = CreateBaseline(new DateOnly(2026, 12, 10), 3);

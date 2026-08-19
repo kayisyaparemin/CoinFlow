@@ -13,7 +13,7 @@ public sealed class AppShell : Shell
         {
             (Title: "Özet", ColorKey: "SoftPink", Item: CreateFlyoutItem("Özet", "dashboard", () => services.GetRequiredService<MainPage>())),
             (Title: "Harcama ekle", ColorKey: "SoftPeach", Item: CreateFlyoutItem("Harcama ekle", "expense", () => services.GetRequiredService<ExpensePage>())),
-            (Title: "Planlar ve borçlar", ColorKey: "SoftYellow", Item: CreateFlyoutItem("Planlar ve borçlar", "commitments", () => services.GetRequiredService<CommitmentsPage>())),
+            (Title: "Ödemeler", ColorKey: "SoftYellow", Item: CreateFlyoutItem("Ödemeler", "commitments", () => services.GetRequiredService<CommitmentsPage>())),
             (Title: "Önündeki 12 ay", ColorKey: "SoftSky", Item: CreateFlyoutItem("Önündeki 12 ay", "future-months", () => services.GetRequiredService<FutureMonthsPage>())),
             (Title: "Simülasyon", ColorKey: "SoftLavender", Item: CreateFlyoutItem("Simülasyon", "simulation", () => services.GetRequiredService<SimulationPage>())),
             (Title: "Ayarlar", ColorKey: "SoftPink", Item: CreateFlyoutItem("Ayarlar", "settings", () => services.GetRequiredService<SettingsPage>()))
