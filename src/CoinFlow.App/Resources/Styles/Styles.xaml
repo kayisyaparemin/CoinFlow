@@ -69,15 +69,15 @@
         <Setter Property="MinimumHeightRequest" Value="48" />
     </Style>
     <Style TargetType="Button">
-        <Setter Property="BackgroundColor" Value="{StaticResource Ink}" />
-        <Setter Property="TextColor" Value="{StaticResource White}" />
+        <Setter Property="BackgroundColor" Value="{StaticResource Mint}" />
+        <Setter Property="TextColor" Value="{StaticResource PrimaryDeep}" />
         <Setter Property="FontFamily" Value="OpenSansSemibold" />
         <Setter Property="CornerRadius" Value="14" />
         <Setter Property="MinimumHeightRequest" Value="50" />
         <Setter Property="Padding" Value="18,12" />
     </Style>
     <Style x:Key="SecondaryButton" TargetType="Button">
-        <Setter Property="BackgroundColor" Value="{StaticResource Mint}" />
+        <Setter Property="BackgroundColor" Value="{StaticResource SoftBlue}" />
         <Setter Property="TextColor" Value="{StaticResource Ink}" />
     </Style>
     <Style TargetType="Switch">
@@ -93,9 +93,10 @@
         <Setter Property="Color" Value="{StaticResource MintStrong}" />
     </Style>
     <Style TargetType="Shell">
-        <Setter Property="Shell.TabBarBackgroundColor" Value="{StaticResource Surface}" />
-        <Setter Property="Shell.TabBarForegroundColor" Value="{StaticResource MintStrong}" />
-        <Setter Property="Shell.TabBarTitleColor" Value="{StaticResource MintStrong}" />
-        <Setter Property="Shell.TabBarUnselectedColor" Value="{StaticResource Muted}" />
+        <Setter Property="Shell.BackgroundColor" Value="{StaticResource Surface}" />
+        <Setter Property="Shell.ForegroundColor" Value="{StaticResource PrimaryDeep}" />
+        <Setter Property="Shell.TitleColor" Value="{StaticResource Ink}" />
+        <Setter Property="Shell.UnselectedColor" Value="{StaticResource Muted}" />
+        <Setter Property="Shell.FlyoutBackgroundColor" Value="{StaticResource Surface}" />
     </Style>
 </ResourceDictionary>

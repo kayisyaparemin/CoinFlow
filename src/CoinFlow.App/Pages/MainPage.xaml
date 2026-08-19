@@ -16,11 +16,11 @@
                     </Border>
                 </Grid>
 
-                <Border BackgroundColor="{StaticResource Ink}" StrokeThickness="0" Padding="20">
+                <Border BackgroundColor="{StaticResource HeroSurface}" StrokeThickness="0" Padding="20">
                     <VerticalStackLayout Spacing="7">
-                        <Label Text="BUGÜNÜN SÜRDÜRÜLEBİLİR COIN'İ" Style="{StaticResource Eyebrow}" TextColor="{StaticResource Mint}" />
-                        <Label Text="{Binding DailyCoin}" Style="{StaticResource HeroNumber}" TextColor="White" />
-                        <Label Text="{Binding Encouragement}" TextColor="White" FontSize="13" />
+                        <Label Text="BUGÜNÜN SÜRDÜRÜLEBİLİR COIN'İ" Style="{StaticResource Eyebrow}" TextColor="{StaticResource PrimaryDeep}" />
+                        <Label Text="{Binding DailyCoin}" Style="{StaticResource HeroNumber}" TextColor="{StaticResource PrimaryDeep}" />
+                        <Label Text="{Binding Encouragement}" TextColor="{StaticResource InkSoft}" FontSize="13" />
                         <ProgressBar Progress="{Binding Progress}" Margin="0,8,0,0" />
                     </VerticalStackLayout>
                 </Border>

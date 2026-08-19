@@ -6,23 +6,65 @@ public sealed class AppShell : Shell
 {
     public AppShell(IServiceProvider services)
     {
-        FlyoutBehavior = FlyoutBehavior.Disabled;
-        Shell.SetNavBarIsVisible(this, false);
+        FlyoutBehavior = FlyoutBehavior.Flyout;
+        FlyoutHeaderBehavior = FlyoutHeaderBehavior.CollapseOnScroll;
+        Shell.SetNavBarIsVisible(this, true);
 
-        var tabs = new TabBar();
-        tabs.Items.Add(CreateTab("Özet", () => services.GetRequiredService<MainPage>()));
-        tabs.Items.Add(CreateTab("Harcama", () => services.GetRequiredService<ExpensePage>()));
-        tabs.Items.Add(CreateTab("Planlar", () => services.GetRequiredService<CommitmentsPage>()));
-        tabs.Items.Add(CreateTab("12 Ay", () => services.GetRequiredService<FutureMonthsPage>()));
-        tabs.Items.Add(CreateTab("Simülasyon", () => services.GetRequiredService<SimulationPage>()));
-        tabs.Items.Add(CreateTab("Ayarlar", () => services.GetRequiredService<SettingsPage>()));
-        Items.Add(tabs);
+        FlyoutHeader = CreateFlyoutHeader();
+
+        Items.Add(CreateFlyoutItem("Özet", "dashboard", () => services.GetRequiredService<MainPage>()));
+        Items.Add(CreateFlyoutItem("Harcama ekle", "expense", () => services.GetRequiredService<ExpensePage>()));
+        Items.Add(CreateFlyoutItem("Planlar ve borçlar", "commitments", () => services.GetRequiredService<CommitmentsPage>()));
+        Items.Add(CreateFlyoutItem("Önündeki 12 ay", "future-months", () => services.GetRequiredService<FutureMonthsPage>()));
+        Items.Add(CreateFlyoutItem("Simülasyon", "simulation", () => services.GetRequiredService<SimulationPage>()));
+        Items.Add(CreateFlyoutItem("Ayarlar", "settings", () => services.GetRequiredService<SettingsPage>()));
     }
 
-    private static Tab CreateTab(string title, Func<Page> factory)
+    private static FlyoutItem CreateFlyoutItem(string title, string route, Func<Page> factory)
     {
-        var tab = new Tab { Title = title };
-        tab.Items.Add(new ShellContent { Title = title, ContentTemplate = new DataTemplate(factory) });
-        return tab;
+        var item = new FlyoutItem
+        {
+            Title = title,
+            Route = route,
+            FlyoutDisplayOptions = FlyoutDisplayOptions.AsSingleItem
+        };
+
+        item.Items.Add(new ShellContent
+        {
+            Title = title,
+            Route = $"{route}-content",
+            ContentTemplate = new DataTemplate(factory)
+        });
+
+        return item;
+    }
+
+    private static View CreateFlyoutHeader()
+    {
+        var title = new Label
+        {
+            Text = "CoinFlow",
+            FontFamily = "OpenSansSemibold",
+            FontSize = 26
+        };
+        title.SetDynamicResource(Label.TextColorProperty, "Ink");
+
+        var subtitle = new Label
+        {
+            Text = "Paranın ritmi sende",
+            FontFamily = "OpenSansRegular",
+            FontSize = 13
+        };
+        subtitle.SetDynamicResource(Label.TextColorProperty, "Muted");
+
+        var content = new VerticalStackLayout
+        {
+            Padding = new Thickness(22, 36, 22, 20),
+            Spacing = 3,
+            Children = { title, subtitle }
+        };
+        content.SetDynamicResource(VisualElement.BackgroundColorProperty, "FlyoutHeaderSurface");
+
+        return content;
     }
 }
