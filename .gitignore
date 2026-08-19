@@ -1,0 +1,17 @@
+bin/
+obj/
+.vs/
+.idea/
+*.user
+*.suo
+*.keystore
+*.jks
+*.p12
+*.mobileprovision
+artifacts/
+*.apk
+*.aab
+*.db
+*.db-shm
+*.db-wal
+local.properties

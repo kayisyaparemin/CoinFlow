@@ -1,0 +1,117 @@
+name: Development build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: coinflow-dev-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  PROJECT: src/CoinFlow.App/CoinFlow.App.csproj
+
+jobs:
+  build-test-apk:
+    name: Test and build development APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up .NET from global.json
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: microsoft
+          java-version: '17'
+
+      - name: Install .NET MAUI Android workload
+        run: dotnet workload install maui-android
+
+      - name: Restore
+        run: dotnet restore CoinFlow.sln
+
+      - name: Unit tests
+        run: dotnet test tests/CoinFlow.Tests/CoinFlow.Tests.csproj -c Release --no-restore --logger "console;verbosity=minimal"
+
+      - name: Build development APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          short_sha="${GITHUB_SHA::7}"
+          dotnet publish "$PROJECT" \
+            -f net8.0-android \
+            -c Release \
+            --no-restore \
+            -p:AndroidPackageFormat=apk \
+            -p:RunAOTCompilation=false \
+            -p:CoinFlowDevBuild=true \
+            -p:CoinFlowVersion=0.0.0-dev \
+            -p:CoinFlowBuildNumber="${GITHUB_RUN_NUMBER}" \
+            -p:CoinFlowCommit="$short_sha"
+
+      - name: Locate, verify, and normalize APK
+        id: apk
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t signed_apks < <(find src/CoinFlow.App/bin/Release/net8.0-android -type f -name '*-Signed.apk' -print)
+          if [[ ${#signed_apks[@]} -eq 0 ]]; then
+            echo "No signed APK was produced." >&2
+            find src/CoinFlow.App/bin/Release/net8.0-android -type f -maxdepth 5 -print >&2
+            exit 1
+          fi
+          apk="$(ls -1t "${signed_apks[@]}" | head -n 1)"
+          apksigner="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner -print | sort -V | tail -n 1)"
+          aapt="$(find "$ANDROID_HOME/build-tools" -type f -name aapt -print | sort -V | tail -n 1)"
+          [[ -x "$apksigner" && -x "$aapt" ]] || { echo "Android verification tools not found." >&2; exit 1; }
+          "$apksigner" verify --verbose "$apk"
+          package_id="$($aapt dump badging "$apk" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")"
+          [[ "$package_id" == "com.coinflow.mobile" ]] || { echo "Unexpected package id: $package_id" >&2; exit 1; }
+          mkdir -p artifacts
+          short_sha="${GITHUB_SHA::7}"
+          cp "$apk" "artifacts/CoinFlow-dev-${short_sha}.apk"
+          cp "$apk" artifacts/CoinFlow-dev-latest.apk
+          unzip -t artifacts/CoinFlow-dev-latest.apk >/dev/null
+          echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
+          echo "artifact_path=artifacts/CoinFlow-dev-${short_sha}.apk" >> "$GITHUB_OUTPUT"
+
+      - name: Upload development artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coinflow-dev-apk
+          path: ${{ steps.apk.outputs.artifact_path }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Update dev-latest prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release delete dev-latest --cleanup-tag --yes >/dev/null 2>&1 || true
+          build_date="$(date -u +'%Y-%m-%d %H:%M UTC')"
+          gh release create dev-latest artifacts/CoinFlow-dev-latest.apk \
+            --target "$GITHUB_SHA" \
+            --title "CoinFlow Development Build" \
+            --notes "Commit: $GITHUB_SHA
+          Build: #$GITHUB_RUN_NUMBER
+          Date: $build_date
+
+          This is a test build and may be unstable." \
+            --prerelease

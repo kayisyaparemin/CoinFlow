@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:CoinFlow.App.ViewModels"
+             xmlns:models="clr-namespace:CoinFlow.App.Models"
+             x:Class="CoinFlow.App.Pages.CommitmentsPage"
+             x:DataType="vm:CommitmentsViewModel"
+             Title="Planlar">
+    <ScrollView>
+        <VerticalStackLayout Padding="20,28,20,40" Spacing="14">
+            <Label Text="PARA AKIŞI" Style="{StaticResource Eyebrow}" />
+            <Label Text="Planlar ve borçlar" Style="{StaticResource PageTitle}" />
+            <Picker ItemsSource="{Binding Types}" SelectedItem="{Binding SelectedType}" />
+
+            <Border>
+                <VerticalStackLayout Spacing="10">
+                    <VerticalStackLayout IsVisible="{Binding IsSalary}" Spacing="8">
+                        <Label Text="Yeni maaş tutarı" Style="{StaticResource FieldLabel}" />
+                        <Entry Text="{Binding Amount}" Placeholder="115000" Keyboard="Numeric" />
+                        <Label Text="Geçerlilik tarihi" Style="{StaticResource FieldLabel}" />
+                        <DatePicker Date="{Binding EffectiveDate}" Format="dd.MM.yyyy" />
+                        <Label Text="Not" Style="{StaticResource FieldLabel}" />
+                        <Entry Text="{Binding Name}" Placeholder="Örn. %15 zam" />
+                    </VerticalStackLayout>
+
+                    <VerticalStackLayout IsVisible="{Binding IsLoan}" Spacing="8">
+                        <Label Text="Kredi adı" Style="{StaticResource FieldLabel}" />
+                        <Entry Text="{Binding Name}" Placeholder="İhtiyaç kredisi" />
+                        <Label Text="Banka" Style="{StaticResource FieldLabel}" />
+                        <Entry Text="{Binding Bank}" />
+                        <Label Text="Aylık taksit" Style="{StaticResource FieldLabel}" />
+                        <Entry Text="{Binding Amount}" Keyboard="Numeric" />
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                            <VerticalStackLayout>
+                                <Label Text="Ödeme günü" Style="{StaticResource FieldLabel}" />
+                                <Entry Text="{Binding PaymentDay}" Keyboard="Numeric" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Column="1">
+                                <Label Text="Taksit sayısı" Style="{StaticResource FieldLabel}" />
+                                <Entry Text="{Binding InstallmentCount}" Keyboard="Numeric" />
+                            </VerticalStackLayout>
+                        </Grid>
+                        <Label Text="Başlangıç" Style="{StaticResource FieldLabel}" />
+                        <DatePicker Date="{Binding LoanStartDate}" Format="dd.MM.yyyy" />
+                        <Label Text="Kalan borç (opsiyonel)" Style="{StaticResource FieldLabel}" />
+                        <Entry Text="{Binding RemainingDebt}" Keyboard="Numeric" />
+                        <Label Text="Erken kapama (opsiyonel)" Style="{StaticResource FieldLabel}" />
+                        <Entry Text="{Binding EarlyClosureAmount}" Keyboard="Numeric" />
+                    </VerticalStackLayout>
+
+                    <VerticalStackLayout IsVisible="{Binding IsPlan}" Spacing="8">
+                        <Label Text="Plan adı" Style="{StaticResource FieldLabel}" />
+                        <Entry Text="{Binding Name}" Placeholder="Geçici ödeme" />
+                        <Label Text="Taksitler" Style="{StaticResource FieldLabel}" />
+                        <Editor Text="{Binding InstallmentsText}" MinimumHeightRequest="130" AutoSize="TextChanges" />
+                        <Label Text="Her satırı yyyy-AA-gg:tutar biçiminde girin. Tutarlar farklı olabilir." Style="{StaticResource MutedText}" />
+                    </VerticalStackLayout>
+
+                    <VerticalStackLayout IsVisible="{Binding IsCard}" Spacing="8">
+                        <Label Text="Kart adı" Style="{StaticResource FieldLabel}" />
+                        <Entry Text="{Binding Name}" Placeholder="Bonus" />
+                        <Label Text="Banka" Style="{StaticResource FieldLabel}" />
+                        <Entry Text="{Binding Bank}" />
+                        <Label Text="Toplam limit" Style="{StaticResource FieldLabel}" />
+                        <Entry Text="{Binding CardLimit}" Keyboard="Numeric" />
+                        <Label Text="Güncel toplam borç" Style="{StaticResource FieldLabel}" />
+                        <Entry Text="{Binding CurrentDebt}" Keyboard="Numeric" />
+                        <Label Text="Son ekstre borcu" Style="{StaticResource FieldLabel}" />
+                        <Entry Text="{Binding StatementDebt}" Keyboard="Numeric" />
+                        <Label Text="Son ekstreden kalan" Style="{StaticResource FieldLabel}" />
+                        <Entry Text="{Binding StatementRemaining}" Keyboard="Numeric" />
+                        <Label Text="Dönem içi harcama" Style="{StaticResource FieldLabel}" />
+                        <Entry Text="{Binding CycleSpending}" Keyboard="Numeric" />
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                            <VerticalStackLayout>
+                                <Label Text="Kesim günü" Style="{StaticResource FieldLabel}" />
+                                <Entry Text="{Binding ClosingDay}" Keyboard="Numeric" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Column="1">
+                                <Label Text="Son ödeme günü" Style="{StaticResource FieldLabel}" />
+                                <Entry Text="{Binding DueDay}" Keyboard="Numeric" />
+                            </VerticalStackLayout>
+                        </Grid>
+                        <Label Text="Asgari ödeme oranı (%)" Style="{StaticResource FieldLabel}" />
+                        <Entry Text="{Binding MinimumRate}" Keyboard="Numeric" />
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Label Text="Bu ay manuel ödeme kullan" VerticalOptions="Center" />
+                            <Switch Grid.Column="1" IsToggled="{Binding UseManualPayment}" />
+                        </Grid>
+                        <Entry Text="{Binding ManualPayment}" Placeholder="Manuel ödeme tutarı" Keyboard="Numeric" IsVisible="{Binding UseManualPayment}" />
+                        <Label Text="Gelecek kart taksitleri" Style="{StaticResource FieldLabel}" />
+                        <Editor Text="{Binding FutureCardInstallments}" MinimumHeightRequest="120" AutoSize="TextChanges" />
+                        <Label Text="Her satır: yyyy-AA-gg:tutar" Style="{StaticResource MutedText}" />
+                    </VerticalStackLayout>
+
+                    <Button Text="Kaydet" Command="{Binding SaveCommand}" />
+                    <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" />
+                    <Label Text="{Binding StatusMessage}" IsVisible="{Binding HasStatus}" TextColor="{StaticResource MintStrong}" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Label Text="Kayıtlı planlar" Style="{StaticResource SectionTitle}" Margin="0,8,0,0" />
+            <CollectionView ItemsSource="{Binding Items}" SelectionMode="None" HeightRequest="650">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="models:SummaryLine">
+                        <Border Margin="0,0,0,10" Padding="14">
+                            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                                <Label Text="{Binding Title}" FontFamily="OpenSansSemibold" />
+                                <Label Grid.Column="1" Text="{Binding Amount}" FontFamily="OpenSansSemibold" />
+                                <Label Grid.Row="1" Text="{Binding Subtitle}" Style="{StaticResource MutedText}" />
+                                <Label Grid.Row="1" Grid.Column="1" Text="{Binding Badge}" Style="{StaticResource MutedText}" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

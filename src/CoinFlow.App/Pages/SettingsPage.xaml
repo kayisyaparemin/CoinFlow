@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:CoinFlow.App.ViewModels"
+             x:Class="CoinFlow.App.Pages.SettingsPage"
+             x:DataType="vm:SettingsViewModel"
+             Title="Ayarlar">
+    <ScrollView>
+        <VerticalStackLayout Padding="20,28,20,40" Spacing="14">
+            <Label Text="KONTROL SENDE" Style="{StaticResource Eyebrow}" />
+            <Label Text="Ayarlar" Style="{StaticResource PageTitle}" />
+
+            <Border>
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Hesaplama" Style="{StaticResource SectionTitle}" />
+                    <Label Text="Maaş günü" Style="{StaticResource FieldLabel}" />
+                    <Entry Text="{Binding SalaryDay}" Keyboard="Numeric" />
+                    <Grid ColumnDefinitions="*,Auto">
+                        <VerticalStackLayout>
+                            <Label Text="Oyunlaştırma dili" FontFamily="OpenSansSemibold" />
+                            <Label Text="Coin, farm ve birikim mesajlarını kullan." Style="{StaticResource MutedText}" />
+                        </VerticalStackLayout>
+                        <Switch Grid.Column="1" IsToggled="{Binding GamificationEnabled}" />
+                    </Grid>
+                </VerticalStackLayout>
+            </Border>
+
+            <Border>
+                <VerticalStackLayout Spacing="9">
+                    <Label Text="Acil durum tamponu" Style="{StaticResource SectionTitle}" />
+                    <Label Text="Hedef" Style="{StaticResource FieldLabel}" />
+                    <Entry Text="{Binding BufferTarget}" Keyboard="Numeric" />
+                    <Label Text="Mevcut" Style="{StaticResource FieldLabel}" />
+                    <Entry Text="{Binding BufferCurrent}" Keyboard="Numeric" />
+                    <Label Text="Her maaş döneminde ayrılacak" Style="{StaticResource FieldLabel}" />
+                    <Entry Text="{Binding PeriodContribution}" Keyboard="Numeric" />
+                    <Label Text="Tampondaki para Daily Coin hesabına katılmaz." Style="{StaticResource MutedText}" />
+                    <Button Text="Ayarları kaydet" Command="{Binding SaveCommand}" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border BackgroundColor="{StaticResource Mint}" StrokeThickness="0">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Tampona özel aktarım" Style="{StaticResource SectionTitle}" />
+                    <Entry Text="{Binding TransferAmount}" Placeholder="Tutar" Keyboard="Numeric" />
+                    <Button Text="Tampona aktar" Command="{Binding TransferCommand}" />
+                </VerticalStackLayout>
+            </Border>
+            <Label Text="{Binding StatusMessage}" IsVisible="{Binding HasStatus}" TextColor="{StaticResource MintStrong}" />
+
+            <Border>
+                <VerticalStackLayout Spacing="5">
+                    <Label Text="Hakkında" Style="{StaticResource SectionTitle}" />
+                    <Border IsVisible="{Binding IsDevelopment}" BackgroundColor="{StaticResource Sun}" StrokeThickness="0" HorizontalOptions="Start" Padding="10,5">
+                        <Label Text="DEVELOPMENT BUILD" Style="{StaticResource Eyebrow}" />
+                    </Border>
+                    <Label Text="CoinFlow" FontFamily="OpenSansSemibold" FontSize="20" />
+                    <Label Text="{Binding BuildChannel}" Style="{StaticResource MutedText}" />
+                    <Label Text="{Binding VersionText}" />
+                    <Label Text="{Binding CommitText}" IsVisible="{Binding IsDevelopment}" />
+                    <Label Text="{Binding BuildText}" IsVisible="{Binding IsDevelopment}" />
+                    <Label Text="Tamamen çevrimdışı. Veriler yalnızca bu cihazda saklanır." Style="{StaticResource MutedText}" Margin="0,8,0,0" />
+                </VerticalStackLayout>
+            </Border>
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

@@ -1,0 +1,57 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{246D1317-6F63-4AF1-941D-ACD47566281C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CoinFlow.Domain", "src\CoinFlow.Domain\CoinFlow.Domain.csproj", "{7AADF8D9-057F-4F55-B2C3-230C46CF92D1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CoinFlow.Application", "src\CoinFlow.Application\CoinFlow.Application.csproj", "{26AE7C57-DAE8-4CD3-B388-9F1AC45424D1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CoinFlow.Infrastructure", "src\CoinFlow.Infrastructure\CoinFlow.Infrastructure.csproj", "{394F2499-F27D-48E1-B752-1DC4DF699C12}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CoinFlow.App", "src\CoinFlow.App\CoinFlow.App.csproj", "{0C677005-51D1-4219-8481-45A1A478D014}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{2153145E-8B04-4EB0-A9CE-02F35900C709}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CoinFlow.Tests", "tests\CoinFlow.Tests\CoinFlow.Tests.csproj", "{AD61E2FD-D2E9-4CE7-A9D1-3AC6BF11B026}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{7AADF8D9-057F-4F55-B2C3-230C46CF92D1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7AADF8D9-057F-4F55-B2C3-230C46CF92D1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7AADF8D9-057F-4F55-B2C3-230C46CF92D1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7AADF8D9-057F-4F55-B2C3-230C46CF92D1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{26AE7C57-DAE8-4CD3-B388-9F1AC45424D1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{26AE7C57-DAE8-4CD3-B388-9F1AC45424D1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{26AE7C57-DAE8-4CD3-B388-9F1AC45424D1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{26AE7C57-DAE8-4CD3-B388-9F1AC45424D1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{394F2499-F27D-48E1-B752-1DC4DF699C12}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{394F2499-F27D-48E1-B752-1DC4DF699C12}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{394F2499-F27D-48E1-B752-1DC4DF699C12}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{394F2499-F27D-48E1-B752-1DC4DF699C12}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0C677005-51D1-4219-8481-45A1A478D014}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0C677005-51D1-4219-8481-45A1A478D014}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0C677005-51D1-4219-8481-45A1A478D014}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0C677005-51D1-4219-8481-45A1A478D014}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AD61E2FD-D2E9-4CE7-A9D1-3AC6BF11B026}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AD61E2FD-D2E9-4CE7-A9D1-3AC6BF11B026}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AD61E2FD-D2E9-4CE7-A9D1-3AC6BF11B026}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AD61E2FD-D2E9-4CE7-A9D1-3AC6BF11B026}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{7AADF8D9-057F-4F55-B2C3-230C46CF92D1} = {246D1317-6F63-4AF1-941D-ACD47566281C}
+		{26AE7C57-DAE8-4CD3-B388-9F1AC45424D1} = {246D1317-6F63-4AF1-941D-ACD47566281C}
+		{394F2499-F27D-48E1-B752-1DC4DF699C12} = {246D1317-6F63-4AF1-941D-ACD47566281C}
+		{0C677005-51D1-4219-8481-45A1A478D014} = {246D1317-6F63-4AF1-941D-ACD47566281C}
+		{AD61E2FD-D2E9-4CE7-A9D1-3AC6BF11B026} = {2153145E-8B04-4EB0-A9CE-02F35900C709}
+	EndGlobalSection
+EndGlobal

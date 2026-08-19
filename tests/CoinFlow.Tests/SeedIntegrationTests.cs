@@ -1,0 +1,144 @@
+using CoinFlow.Application.Abstractions;
+using CoinFlow.Application.Services;
+using CoinFlow.Domain.Calculations;
+using CoinFlow.Domain.Models;
+using CoinFlow.Infrastructure.Persistence;
+
+namespace CoinFlow.Tests;
+
+public sealed class SeedIntegrationTests
+{
+    [Fact]
+    public async Task DevelopmentSeed_ProducesRequiredDemoSnapshot()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"coinflow-{Guid.NewGuid():N}.db");
+        SqliteCoinFlowStore? store = null;
+        try
+        {
+            store = new SqliteCoinFlowStore(path, seedDevelopmentData: true);
+            var service = CreateService(store, new DateOnly(2026, 8, 19));
+
+            var dashboard = await service.GetDashboardAsync();
+
+            Assert.Equal(115_000m, dashboard.SalaryPeriod.Salary);
+            Assert.Equal(87_767m, dashboard.SalaryPeriod.TotalObligations);
+            Assert.Equal(27_233m, dashboard.SalaryPeriod.SpendableBudget);
+            Assert.Equal(11_000m, dashboard.DailyCoin.RemainingBudget);
+            Assert.Equal(22, dashboard.DailyCoin.RemainingDays);
+            Assert.Equal(500m, dashboard.DailyCoin.SustainableDailyBudget);
+        }
+        finally
+        {
+            if (store is not null)
+            {
+                await store.DisposeAsync();
+            }
+            TryDelete(path);
+            TryDelete(path + "-shm");
+            TryDelete(path + "-wal");
+        }
+    }
+
+    [Fact]
+    public async Task StableEmptyDatabase_DoesNotReceiveDevelopmentFinanceData()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"coinflow-{Guid.NewGuid():N}.db");
+        SqliteCoinFlowStore? store = null;
+        try
+        {
+            store = new SqliteCoinFlowStore(path, seedDevelopmentData: false);
+            await store.InitializeAsync();
+
+            Assert.Empty(await store.GetSalaryScheduleAsync());
+            Assert.Empty(await store.GetLoansAsync());
+            Assert.Empty(await store.GetCreditCardsAsync());
+        }
+        finally
+        {
+            if (store is not null)
+            {
+                await store.DisposeAsync();
+            }
+            TryDelete(path);
+            TryDelete(path + "-shm");
+            TryDelete(path + "-wal");
+        }
+    }
+
+    [Fact]
+    public async Task CardExpense_ChangesCardDebtButNotCurrentCashBudget()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"coinflow-{Guid.NewGuid():N}.db");
+        SqliteCoinFlowStore? store = null;
+        try
+        {
+            store = new SqliteCoinFlowStore(path, seedDevelopmentData: true);
+            var service = CreateService(store, new DateOnly(2026, 8, 19));
+            var before = await service.GetDashboardAsync();
+            var card = Assert.Single((await service.GetFinanceDataAsync()).CreditCards);
+
+            await service.AddExpenseAsync(new CoinFlow.Application.Models.ExpenseDraft(
+                1_000m, new DateOnly(2026, 8, 19), ExpenseCategory.Car,
+                ExpensePaymentType.CreditCard, "Tamir", card.Id));
+
+            var after = await service.GetDashboardAsync();
+            var updatedCard = Assert.Single((await service.GetFinanceDataAsync()).CreditCards);
+            Assert.Equal(before.DailyCoin.RemainingBudget, after.DailyCoin.RemainingBudget);
+            Assert.Equal(card.CurrentTotalDebt + 1_000m, updatedCard.CurrentTotalDebt);
+        }
+        finally
+        {
+            if (store is not null) await store.DisposeAsync();
+            TryDelete(path);
+            TryDelete(path + "-shm");
+            TryDelete(path + "-wal");
+        }
+    }
+
+    [Fact]
+    public async Task EmergencyTransfer_IsRemovedFromCashBudgetAndAddedToBuffer()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"coinflow-{Guid.NewGuid():N}.db");
+        SqliteCoinFlowStore? store = null;
+        try
+        {
+            store = new SqliteCoinFlowStore(path, seedDevelopmentData: true);
+            var service = CreateService(store, new DateOnly(2026, 8, 19));
+            var before = await service.GetDashboardAsync();
+
+            await service.TransferToEmergencyFundAsync(1_000m);
+
+            var after = await service.GetDashboardAsync();
+            Assert.Equal(before.EmergencyFund.CurrentAmount + 1_000m, after.EmergencyFund.CurrentAmount);
+            Assert.Equal(before.DailyCoin.RemainingBudget - 1_000m, after.DailyCoin.RemainingBudget);
+        }
+        finally
+        {
+            if (store is not null) await store.DisposeAsync();
+            TryDelete(path);
+            TryDelete(path + "-shm");
+            TryDelete(path + "-wal");
+        }
+    }
+
+    private static CoinFlowService CreateService(ICoinFlowStore store, DateOnly today) => new(
+        store,
+        new FixedClock(today),
+        new SalaryPeriodCalculator(),
+        new DailyCoinCalculator(),
+        new CreditCardProjectionCalculator(),
+        new PurchaseSimulationCalculator());
+
+    private static void TryDelete(string path)
+    {
+        if (File.Exists(path))
+        {
+            File.Delete(path);
+        }
+    }
+
+    private sealed class FixedClock(DateOnly today) : IClock
+    {
+        public DateOnly Today { get; } = today;
+    }
+}

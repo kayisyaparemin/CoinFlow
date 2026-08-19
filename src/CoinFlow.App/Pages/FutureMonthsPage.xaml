@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:CoinFlow.App.ViewModels"
+             xmlns:models="clr-namespace:CoinFlow.App.Models"
+             x:Class="CoinFlow.App.Pages.FutureMonthsPage"
+             x:DataType="vm:FutureMonthsViewModel"
+             Title="12 Ay">
+    <Grid RowDefinitions="Auto,*" Padding="20,28,20,16" RowSpacing="16">
+        <VerticalStackLayout>
+            <Label Text="İLERİ BAK" Style="{StaticResource Eyebrow}" />
+            <Label Text="Önündeki 12 ay" Style="{StaticResource PageTitle}" />
+            <Label Text="Maaş zamları, biten ödemeler ve kart devri her maaş dönemi için yeniden hesaplanır." Style="{StaticResource MutedText}" />
+            <Label Text="{Binding StatusMessage}" IsVisible="{Binding HasStatus}" TextColor="{StaticResource Error}" />
+        </VerticalStackLayout>
+        <RefreshView Grid.Row="1" Command="{Binding LoadCommand}" IsRefreshing="{Binding IsBusy}">
+            <CollectionView ItemsSource="{Binding Months}" SelectionMode="None">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="models:ProjectionLine">
+                        <Border Margin="0,0,0,12">
+                            <VerticalStackLayout Spacing="7">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <Label Text="{Binding Month}" FontFamily="OpenSansSemibold" FontSize="18" />
+                                    <Label Grid.Column="1" Text="{Binding Spendable}" FontFamily="OpenSansSemibold" TextColor="{StaticResource MintStrong}" />
+                                </Grid>
+                                <Grid ColumnDefinitions="*,*">
+                                    <Label Text="{Binding Salary, StringFormat='Maaş: {0}'}" Style="{StaticResource MutedText}" />
+                                    <Label Grid.Column="1" Text="{Binding Obligations, StringFormat='Zorunlu: {0}'}" Style="{StaticResource MutedText}" HorizontalTextAlignment="End" />
+                                </Grid>
+                                <Label Text="{Binding Breakdown}" Style="{StaticResource MutedText}" />
+                                <Label Text="{Binding Highlight}" TextColor="{StaticResource MintStrong}" FontFamily="OpenSansSemibold" />
+                            </VerticalStackLayout>
+                        </Border>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+        </RefreshView>
+    </Grid>
+</ContentPage>
