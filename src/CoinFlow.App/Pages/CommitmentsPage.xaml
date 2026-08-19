@@ -72,9 +72,9 @@
                         <Entry Text="{Binding Bank}" />
                         <Label Text="Toplam limit" Style="{StaticResource FieldLabel}" />
                         <Entry Text="{Binding CardLimit}" Keyboard="Numeric" />
-                        <Label Text="Son ekstreden kalan" Style="{StaticResource FieldLabel}" />
+                        <Label Text="Devreden bakiye" Style="{StaticResource FieldLabel}" />
                         <Entry Text="{Binding StatementRemaining}" Keyboard="Numeric" />
-                        <Label Text="Dönem içi harcama" Style="{StaticResource FieldLabel}" />
+                        <Label Text="Henüz ekstreleşmemiş harcama" Style="{StaticResource FieldLabel}" />
                         <Entry Text="{Binding CycleSpending}" Keyboard="Numeric" />
                         <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
                             <VerticalStackLayout>
@@ -88,14 +88,11 @@
                         </Grid>
                         <Label Text="Asgari ödeme oranı (%)" Style="{StaticResource FieldLabel}" />
                         <Entry Text="{Binding MinimumRate}" Keyboard="Numeric" />
-                        <Grid ColumnDefinitions="*,Auto">
-                            <Label Text="Bu ay manuel ödeme kullan" VerticalOptions="Center" />
-                            <Switch Grid.Column="1" IsToggled="{Binding UseManualPayment}" />
-                        </Grid>
-                        <Entry Text="{Binding ManualPayment}" Placeholder="Manuel ödeme tutarı" Keyboard="Numeric" IsVisible="{Binding UseManualPayment}" />
-                        <Label Text="Gelecek kart taksitleri" Style="{StaticResource FieldLabel}" />
+                        <Label Text="Gelecek kart işlemleri / taksit posting tarihleri" Style="{StaticResource FieldLabel}" />
                         <Editor Text="{Binding FutureCardInstallments}" MinimumHeightRequest="120" AutoSize="TextChanges" />
-                        <Label Text="Her satır: yyyy-AA-gg:tutar" Style="{StaticResource MutedText}" />
+                        <Label Text="Planlı manuel ödemeler (son ödeme tarihi:tutar)" Style="{StaticResource FieldLabel}" />
+                        <Editor Text="{Binding ManualPaymentPlans}" MinimumHeightRequest="90" AutoSize="TextChanges" />
+                        <Label Text="Her satır: yyyy-AA-gg:tutar. Projeksiyon faiz ve vergiler hariçtir." Style="{StaticResource MutedText}" />
                     </VerticalStackLayout>
 
                     <Button Text="Kaydet" Command="{Binding SaveCommand}" />

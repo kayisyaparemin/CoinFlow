@@ -80,24 +80,31 @@ public sealed record CreditCard
     public string Bank { get; init; } = string.Empty;
     public decimal Limit { get; init; }
     public decimal CurrentTotalDebt { get; init; }
-    public decimal LastStatementDebt { get; init; }
-    public decimal LastStatementRemaining { get; init; }
-    public decimal CurrentCycleSpending { get; init; }
+    public decimal CarriedBalance { get; init; }
+    public decimal UnbilledSpending { get; init; }
+    public DateOnly BalanceAsOfDate { get; init; }
     public int StatementClosingDay { get; init; }
     public int PaymentDueDay { get; init; }
     public decimal MinimumPaymentRate { get; init; }
-    public CreditCardPaymentMode PaymentMode { get; init; }
-    public decimal? ManualPaymentAmount { get; init; }
-    public IReadOnlyList<CardInstallment> FutureInstallments { get; init; } = [];
+    public IReadOnlyList<CardCharge> Charges { get; init; } = [];
+    public IReadOnlyList<CreditCardPaymentPlan> PaymentPlans { get; init; } = [];
 }
 
-public sealed record CardInstallment
+public sealed record CardCharge
 {
     public Guid Id { get; init; } = Guid.NewGuid();
     public Guid CreditCardId { get; init; }
     public string Description { get; init; } = string.Empty;
-    public DateOnly DueDate { get; init; }
+    public DateOnly PostingDate { get; init; }
     public decimal Amount { get; init; }
+}
+
+public sealed record CreditCardPaymentPlan
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid CreditCardId { get; init; }
+    public DateOnly DueDate { get; init; }
+    public decimal PlannedPaymentAmount { get; init; }
 }
 
 public sealed record Expense
@@ -111,6 +118,17 @@ public sealed record Expense
     public Guid? CreditCardId { get; init; }
     public int? InstallmentCount { get; init; }
     public DateOnly? FirstInstallmentDate { get; init; }
+    public DateTimeOffset CreatedAtUtc { get; init; }
+}
+
+public sealed record SpendableBalanceSnapshot
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public decimal Amount { get; init; }
+    public DateOnly SnapshotDate { get; init; }
+    public DateOnly SalaryPeriodStart { get; init; }
+    public DateTimeOffset CreatedAtUtc { get; init; }
+    public string Note { get; init; } = string.Empty;
 }
 
 public sealed record EmergencyFund
@@ -121,9 +139,20 @@ public sealed record EmergencyFund
     public decimal PlannedPeriodContribution { get; init; }
 }
 
+public sealed record EmergencyFundTransfer
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public DateOnly TransferDate { get; init; }
+    public DateOnly SalaryPeriodStart { get; init; }
+    public decimal Amount { get; init; }
+    public decimal CoveredPlannedAmount { get; init; }
+    public DateTimeOffset CreatedAtUtc { get; init; }
+}
+
 public sealed record UserSettings
 {
     public int SalaryDay { get; init; } = 10;
     public bool GamificationEnabled { get; init; } = true;
     public bool DevelopmentSeedEnabled { get; init; } = true;
+    public DateOnly? TrackingStartedDate { get; init; }
 }

@@ -57,7 +57,6 @@ public sealed class SalaryPeriodCalculatorTests
     [Fact]
     public void PaymentOnSalaryDay_IsIncludedInNewPeriod()
     {
-        var salary = new SalaryScheduleEntry { NetAmount = 10_000m, EffectiveFrom = new DateOnly(2026, 1, 1) };
         var loan = new Loan
         {
             Name = "Test",
@@ -67,25 +66,51 @@ public sealed class SalaryPeriodCalculatorTests
             InstallmentCount = 2
         };
 
-        var result = _calculator.Calculate(new SalaryPeriodRequest(
-            new DateOnly(2026, 9, 10), 10, [salary], [loan], [], []));
+        var period = _calculator.GetPeriod(new DateOnly(2026, 9, 10), 10);
+        var dates = new LoanScheduleCalculator().GetPaymentDates(loan);
 
-        Assert.Single(result.Obligations);
-        Assert.Equal(new DateOnly(2026, 9, 10), result.Obligations[0].DueDate);
-        Assert.Equal(9_000m, result.SpendableBudget);
+        Assert.Contains(new DateOnly(2026, 9, 10), dates.Where(period.Contains));
     }
 
     [Fact]
     public void PaymentOnNextSalaryDay_IsExcludedFromCurrentPeriod()
     {
-        var salary = new SalaryScheduleEntry { NetAmount = 10_000m, EffectiveFrom = new DateOnly(2026, 1, 1) };
-        var obligation = new ObligationItem("Kart", ObligationType.CreditCard, new DateOnly(2026, 10, 10), 2_000m);
+        var period = _calculator.GetPeriod(new DateOnly(2026, 9, 10), 10);
 
-        var result = _calculator.Calculate(new SalaryPeriodRequest(
-            new DateOnly(2026, 9, 10), 10, [salary], [], [], [obligation]));
+        Assert.False(period.Contains(new DateOnly(2026, 10, 10)));
+    }
 
-        Assert.Empty(result.Obligations);
-        Assert.Equal(10_000m, result.SpendableBudget);
+    [Fact]
+    public void TemporaryPayment_UsesExactDateForSalaryPeriod()
+    {
+        var period = _calculator.GetPeriod(new DateOnly(2026, 9, 10), 10);
+        var planId = Guid.NewGuid();
+        var plan = new TemporaryPaymentPlan
+        {
+            Id = planId,
+            Name = "Geçici",
+            Installments =
+            [
+                new TemporaryPaymentInstallment
+                {
+                    PlanId = planId,
+                    DueDate = new DateOnly(2026, 10, 9),
+                    Amount = 500m
+                },
+                new TemporaryPaymentInstallment
+                {
+                    PlanId = planId,
+                    DueDate = new DateOnly(2026, 10, 10),
+                    Amount = 700m
+                }
+            ]
+        };
+
+        var result = new MandatoryPaymentCalculator(new LoanScheduleCalculator()).Calculate(
+            period, [], [plan], [], 0m);
+
+        Assert.Equal(500m, result.TemporaryPayments);
+        Assert.Single(result.Items);
     }
 
     [Fact]
@@ -112,7 +137,7 @@ public sealed class SalaryPeriodCalculatorTests
             StartDate = new DateOnly(2027, 1, 30),
             EndDate = new DateOnly(2027, 4, 30)
         };
-        var dates = _calculator.GetLoanDates(loan);
+        var dates = new LoanScheduleCalculator().GetPaymentDates(loan);
         var period = _calculator.GetPeriod(new DateOnly(2027, 2, 28), 31);
 
         Assert.Equal(2, dates.Count(period.Contains));
@@ -131,11 +156,14 @@ public sealed class SalaryPeriodCalculatorTests
             StartDate = new DateOnly(2026, 8, 15),
             InstallmentCount = 2
         };
-        var salary = new SalaryScheduleEntry { NetAmount = 10_000m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        var period = _calculator.GetPeriod(new DateOnly(2026, 9, 10), 10);
+        var result = new MandatoryPaymentCalculator(new LoanScheduleCalculator()).Calculate(
+            period,
+            [loan],
+            [],
+            [],
+            0m);
 
-        var result = _calculator.Calculate(new SalaryPeriodRequest(
-            new DateOnly(2026, 9, 10), 10, [salary], [loan], [], []));
-
-        Assert.True(Assert.Single(result.Obligations).IsFinalPayment);
+        Assert.True(Assert.Single(result.Items).IsFinalPayment);
     }
 }

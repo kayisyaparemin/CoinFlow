@@ -5,88 +5,80 @@ using CoinFlow.Domain.Models;
 
 namespace CoinFlow.Application.Services;
 
-public sealed class CoinFlowService
+public sealed class CoinFlowService(
+    ICoinFlowStore store,
+    IClock clock,
+    SalaryPeriodCalculator salaryPeriodCalculator,
+    FinancialProjectionService projectionService,
+    PurchaseSimulationCalculator simulationCalculator,
+    InstallmentScheduleCalculator installmentScheduleCalculator,
+    EmergencyFundCalculator emergencyFundCalculator)
 {
-    private readonly ICoinFlowStore _store;
-    private readonly IClock _clock;
-    private readonly SalaryPeriodCalculator _salaryCalculator;
-    private readonly DailyCoinCalculator _dailyCoinCalculator;
-    private readonly CreditCardProjectionCalculator _cardCalculator;
-    private readonly PurchaseSimulationCalculator _simulationCalculator;
-
-    public CoinFlowService(
-        ICoinFlowStore store,
-        IClock clock,
-        SalaryPeriodCalculator salaryCalculator,
-        DailyCoinCalculator dailyCoinCalculator,
-        CreditCardProjectionCalculator cardCalculator,
-        PurchaseSimulationCalculator simulationCalculator)
-    {
-        _store = store;
-        _clock = clock;
-        _salaryCalculator = salaryCalculator;
-        _dailyCoinCalculator = dailyCoinCalculator;
-        _cardCalculator = cardCalculator;
-        _simulationCalculator = simulationCalculator;
-    }
-
     public Task InitializeAsync(CancellationToken cancellationToken = default) =>
-        _store.InitializeAsync(cancellationToken);
+        store.InitializeAsync(cancellationToken);
 
-    public Task ResetAllDataAsync(CancellationToken cancellationToken = default) =>
-        _store.ResetAllDataAsync(cancellationToken);
+    public async Task ResetAllDataAsync(CancellationToken cancellationToken = default)
+    {
+        await store.ResetAllDataAsync(cancellationToken);
+        await store.SaveSettingsAsync(new UserSettings
+        {
+            SalaryDay = 10,
+            GamificationEnabled = true,
+            DevelopmentSeedEnabled = false,
+            TrackingStartedDate = clock.Today
+        }, cancellationToken);
+    }
 
     public async Task<FinanceData> GetFinanceDataAsync(CancellationToken cancellationToken = default)
     {
         await InitializeAsync(cancellationToken);
-        var settingsTask = _store.GetSettingsAsync(cancellationToken);
-        var salaryTask = _store.GetSalaryScheduleAsync(cancellationToken);
-        var loansTask = _store.GetLoansAsync(cancellationToken);
-        var plansTask = _store.GetPaymentPlansAsync(cancellationToken);
-        var cardsTask = _store.GetCreditCardsAsync(cancellationToken);
-        var expensesTask = _store.GetExpensesAsync(cancellationToken: cancellationToken);
-        var emergencyTask = _store.GetEmergencyFundAsync(cancellationToken);
+        var settingsTask = store.GetSettingsAsync(cancellationToken);
+        var salaryTask = store.GetSalaryScheduleAsync(cancellationToken);
+        var loansTask = store.GetLoansAsync(cancellationToken);
+        var plansTask = store.GetPaymentPlansAsync(cancellationToken);
+        var cardsTask = store.GetCreditCardsAsync(cancellationToken);
+        var expensesTask = store.GetExpensesAsync(cancellationToken: cancellationToken);
+        var snapshotsTask = store.GetSpendableBalanceSnapshotsAsync(cancellationToken);
+        var emergencyTask = store.GetEmergencyFundAsync(cancellationToken);
+        var transfersTask = store.GetEmergencyFundTransfersAsync(cancellationToken);
 
-        await Task.WhenAll(settingsTask, salaryTask, loansTask, plansTask, cardsTask, expensesTask, emergencyTask);
+        await Task.WhenAll(
+            settingsTask,
+            salaryTask,
+            loansTask,
+            plansTask,
+            cardsTask,
+            expensesTask,
+            snapshotsTask,
+            emergencyTask,
+            transfersTask);
+
+        var settings = await settingsTask;
+        if (settings.TrackingStartedDate is null)
+        {
+            settings = settings with { TrackingStartedDate = clock.Today };
+            await store.SaveSettingsAsync(settings, cancellationToken);
+        }
+
         return new FinanceData(
-            await settingsTask,
+            settings,
             await salaryTask,
             await loansTask,
             await plansTask,
             await cardsTask,
             await expensesTask,
-            await emergencyTask);
+            await snapshotsTask,
+            await emergencyTask,
+            await transfersTask);
     }
 
     public async Task<DashboardSnapshot> GetDashboardAsync(
         DateOnly? asOf = null,
         CancellationToken cancellationToken = default)
     {
-        var date = asOf ?? _clock.Today;
+        var date = asOf ?? clock.Today;
         var data = await GetFinanceDataAsync(cancellationToken);
-        var period = _salaryCalculator.GetPeriod(date, data.Settings.SalaryDay);
-        var cardPayments = BuildCardPayments(data.CreditCards, period.Start, 3);
-        var salarySummary = _salaryCalculator.Calculate(new SalaryPeriodRequest(
-            date,
-            data.Settings.SalaryDay,
-            data.Salaries,
-            data.Loans,
-            data.PaymentPlans,
-            cardPayments,
-            data.EmergencyFund.PlannedPeriodContribution));
-        var dailyCoin = _dailyCoinCalculator.Calculate(
-            salarySummary.Period,
-            date,
-            salarySummary.SpendableBudget,
-            data.Expenses);
-        var encouragement = CreateEncouragement(dailyCoin, data.Settings.GamificationEnabled);
-
-        return new DashboardSnapshot(
-            salarySummary,
-            dailyCoin,
-            data.EmergencyFund,
-            data.Settings.GamificationEnabled,
-            encouragement);
+        return projectionService.BuildDashboard(data, date);
     }
 
     public async Task<IReadOnlyList<FutureMonthProjection>> GetFutureMonthsAsync(
@@ -94,71 +86,9 @@ public sealed class CoinFlowService
         int monthCount = 12,
         CancellationToken cancellationToken = default)
     {
-        if (monthCount is < 1 or > 60)
-        {
-            throw new ArgumentOutOfRangeException(nameof(monthCount));
-        }
-
-        var date = asOf ?? _clock.Today;
+        var date = asOf ?? clock.Today;
         var data = await GetFinanceDataAsync(cancellationToken);
-        return BuildFutureMonths(date, monthCount, data);
-    }
-
-    private IReadOnlyList<FutureMonthProjection> BuildFutureMonths(
-        DateOnly date,
-        int monthCount,
-        FinanceData data)
-    {
-        var firstPeriod = _salaryCalculator.GetPeriod(date, data.Settings.SalaryDay);
-        var horizonEnd = firstPeriod.End.AddMonths(monthCount + 1);
-        var cardPayments = BuildCardPayments(data.CreditCards, firstPeriod.Start, monthCount + 2);
-        var rows = new List<FutureMonthProjection>(monthCount);
-
-        for (var i = 0; i < monthCount; i++)
-        {
-            var periodStart = CalendarRules.AddMonthsKeepingDay(firstPeriod.Start, i, data.Settings.SalaryDay);
-            var period = new SalaryPeriod(
-                periodStart,
-                CalendarRules.AddMonthsKeepingDay(periodStart, 1, data.Settings.SalaryDay));
-            if (period.Start >= horizonEnd)
-            {
-                break;
-            }
-
-            var salary = _salaryCalculator.ResolveSalary(period.Start, data.Salaries);
-            var loanPayments = data.Loans.Where(x => x.IsActive)
-                .SelectMany(x => _salaryCalculator.GetLoanDates(x).Select(d => (Loan: x, Date: d)))
-                .Where(x => period.Contains(x.Date))
-                .Sum(x => x.Loan.MonthlyInstallment);
-            var temporary = data.PaymentPlans
-                .Where(x => x.Kind == PaymentPlanKind.Temporary)
-                .SelectMany(x => x.Installments)
-                .Where(x => !x.IsPaid && period.Contains(x.DueDate))
-                .Sum(x => x.Amount);
-            var planned = data.PaymentPlans
-                .Where(x => x.Kind == PaymentPlanKind.PlannedInstallment)
-                .SelectMany(x => x.Installments)
-                .Where(x => !x.IsPaid && period.Contains(x.DueDate))
-                .Sum(x => x.Amount);
-            var cards = cardPayments.Where(x => period.Contains(x.DueDate)).Sum(x => x.Amount);
-            var buffer = data.EmergencyFund.PlannedPeriodContribution;
-            var total = loanPayments + temporary + planned + cards + buffer;
-            var highlights = CreateHighlights(period, data, planned + temporary);
-
-            rows.Add(new FutureMonthProjection(
-                period,
-                salary,
-                loanPayments,
-                cards,
-                temporary,
-                planned,
-                buffer,
-                total,
-                salary - total,
-                highlights));
-        }
-
-        return rows;
+        return projectionService.BuildFuturePeriods(data, date, monthCount);
     }
 
     public async Task<PurchaseSimulationResult> SimulatePurchaseAsync(
@@ -166,10 +96,10 @@ public sealed class CoinFlowService
         DateOnly? asOf = null,
         CancellationToken cancellationToken = default)
     {
-        var date = asOf ?? _clock.Today;
+        var date = asOf ?? clock.Today;
         var data = await GetFinanceDataAsync(cancellationToken);
-        var baseline = BuildFutureMonths(date, 12, data);
-        return _simulationCalculator.Calculate(request, baseline, data.CreditCards);
+        var baseline = projectionService.BuildFuturePeriods(data, date, 12);
+        return simulationCalculator.Calculate(request, baseline, data.CreditCards);
     }
 
     public async Task AddExpenseAsync(ExpenseDraft draft, CancellationToken cancellationToken = default)
@@ -188,7 +118,8 @@ public sealed class CoinFlowService
             Note = draft.Note.Trim(),
             CreditCardId = draft.CreditCardId,
             InstallmentCount = draft.InstallmentCount,
-            FirstInstallmentDate = draft.FirstInstallmentDate
+            FirstInstallmentDate = draft.FirstInstallmentDate,
+            CreatedAtUtc = clock.UtcNow
         };
 
         CreditCard? targetCard = null;
@@ -199,7 +130,7 @@ public sealed class CoinFlowService
                 throw new InvalidOperationException("Kredi kartı harcaması için kart seçilmelidir.");
             }
 
-            targetCard = (await _store.GetCreditCardsAsync(cancellationToken))
+            targetCard = (await store.GetCreditCardsAsync(cancellationToken))
                 .SingleOrDefault(x => x.Id == draft.CreditCardId.Value)
                 ?? throw new InvalidOperationException("Seçilen kredi kartı bulunamadı.");
         }
@@ -210,15 +141,24 @@ public sealed class CoinFlowService
             throw new InvalidOperationException("Yeni taksit için taksit sayısı ve ilk ödeme tarihi gereklidir.");
         }
 
-        await _store.UpsertExpenseAsync(expense, cancellationToken);
+        await store.UpsertExpenseAsync(expense, cancellationToken);
 
         if (targetCard is not null)
         {
-            await _store.UpsertCreditCardAsync(targetCard with
+            var charge = new CardCharge
             {
-                CurrentTotalDebt = targetCard.CurrentTotalDebt + draft.Amount,
-                CurrentCycleSpending = targetCard.CurrentCycleSpending + draft.Amount
-            }, cancellationToken);
+                Id = expense.Id,
+                CreditCardId = targetCard.Id,
+                Description = string.IsNullOrWhiteSpace(expense.Note) ? "Kart harcaması" : expense.Note,
+                PostingDate = expense.Date,
+                Amount = expense.Amount
+            };
+            var updated = targetCard with
+            {
+                Charges = targetCard.Charges.Concat([charge]).ToArray()
+            };
+            updated = updated with { CurrentTotalDebt = CreditCardProjectionCalculator.DeriveCurrentTotalDebt(updated) };
+            await store.UpsertCreditCardAsync(updated, cancellationToken);
         }
         else if (draft.PaymentType == ExpensePaymentType.NewInstallment)
         {
@@ -227,73 +167,102 @@ public sealed class CoinFlowService
     }
 
     public Task SaveSalaryAsync(SalaryScheduleEntry entry, CancellationToken cancellationToken = default) =>
-        _store.UpsertSalaryAsync(entry, cancellationToken);
+        store.UpsertSalaryAsync(entry, cancellationToken);
 
     public Task SaveLoanAsync(Loan loan, CancellationToken cancellationToken = default) =>
-        _store.UpsertLoanAsync(loan, cancellationToken);
+        store.UpsertLoanAsync(loan, cancellationToken);
 
     public Task SavePaymentPlanAsync(TemporaryPaymentPlan plan, CancellationToken cancellationToken = default) =>
-        _store.UpsertPaymentPlanAsync(plan, cancellationToken);
+        store.UpsertPaymentPlanAsync(plan, cancellationToken);
 
     public Task SaveCreditCardAsync(CreditCard card, CancellationToken cancellationToken = default)
     {
-        var normalized = card with
+        var withAnchor = card with
         {
-            LastStatementDebt = card.LastStatementRemaining,
-            CurrentTotalDebt = CreditCardProjectionCalculator.DeriveCurrentTotalDebt(card)
+            BalanceAsOfDate = card.BalanceAsOfDate == default ? clock.Today : card.BalanceAsOfDate
         };
-        return _store.UpsertCreditCardAsync(normalized, cancellationToken);
+        var normalized = withAnchor with
+        {
+            CurrentTotalDebt = CreditCardProjectionCalculator.DeriveCurrentTotalDebt(withAnchor)
+        };
+        return store.UpsertCreditCardAsync(normalized, cancellationToken);
     }
 
     public Task SaveSettingsAsync(UserSettings settings, CancellationToken cancellationToken = default) =>
-        _store.SaveSettingsAsync(settings, cancellationToken);
+        store.SaveSettingsAsync(
+            settings.TrackingStartedDate is null
+                ? settings with { TrackingStartedDate = clock.Today }
+                : settings,
+            cancellationToken);
 
     public Task SaveEmergencyFundAsync(EmergencyFund fund, CancellationToken cancellationToken = default) =>
-        _store.SaveEmergencyFundAsync(fund, cancellationToken);
+        store.SaveEmergencyFundAsync(fund, cancellationToken);
+
+    public async Task SaveSpendableBalanceSnapshotAsync(
+        decimal amount,
+        DateOnly snapshotDate,
+        string note,
+        CancellationToken cancellationToken = default)
+    {
+        if (snapshotDate > clock.Today)
+        {
+            throw new InvalidOperationException("Serbest bakiye tarihi gelecekte olamaz.");
+        }
+
+        var settings = await store.GetSettingsAsync(cancellationToken);
+        var activePeriod = salaryPeriodCalculator.GetPeriod(clock.Today, settings.SalaryDay);
+        if (!activePeriod.Contains(snapshotDate))
+        {
+            throw new InvalidOperationException("Serbest bakiye düzeltmesi yalnızca aktif maaş dönemi için yapılabilir.");
+        }
+
+        await store.UpsertSpendableBalanceSnapshotAsync(new SpendableBalanceSnapshot
+        {
+            Amount = amount,
+            SnapshotDate = snapshotDate,
+            SalaryPeriodStart = activePeriod.Start,
+            CreatedAtUtc = clock.UtcNow,
+            Note = note.Trim()
+        }, cancellationToken);
+    }
 
     public async Task TransferToEmergencyFundAsync(decimal amount, CancellationToken cancellationToken = default)
     {
-        if (amount <= 0m)
-        {
-            throw new ArgumentOutOfRangeException(nameof(amount));
-        }
+        var data = await GetFinanceDataAsync(cancellationToken);
+        var period = salaryPeriodCalculator.GetPeriod(clock.Today, data.Settings.SalaryDay);
+        var allocation = emergencyFundCalculator.AllocateTransfer(
+            data.EmergencyFund,
+            period.Start,
+            amount,
+            data.EmergencyFundTransfers);
+        var now = clock.UtcNow;
 
-        var fund = await _store.GetEmergencyFundAsync(cancellationToken);
-        await _store.UpsertExpenseAsync(new Expense
+        await store.UpsertEmergencyFundTransferAsync(new EmergencyFundTransfer
         {
+            TransferDate = clock.Today,
+            SalaryPeriodStart = period.Start,
             Amount = amount,
-            Date = _clock.Today,
-            Category = ExpenseCategory.Other,
-            PaymentType = ExpensePaymentType.Cash,
-            Note = "Acil durum tamponuna aktarım"
+            CoveredPlannedAmount = allocation.CoveredPlannedAmount,
+            CreatedAtUtc = now
         }, cancellationToken);
-        await _store.SaveEmergencyFundAsync(fund with { CurrentAmount = fund.CurrentAmount + amount }, cancellationToken);
-    }
 
-    private IReadOnlyList<ObligationItem> BuildCardPayments(
-        IEnumerable<CreditCard> cards,
-        DateOnly fromInclusive,
-        int months)
-    {
-        var results = new List<ObligationItem>();
-        foreach (var card in cards)
+        if (allocation.ExtraSpendableAmount > 0m)
         {
-            var firstDue = CalendarRules.ResolveDay(fromInclusive.Year, fromInclusive.Month, card.PaymentDueDay);
-            if (firstDue < fromInclusive)
+            await store.UpsertExpenseAsync(new Expense
             {
-                firstDue = CalendarRules.AddMonthsKeepingDay(firstDue, 1, card.PaymentDueDay);
-            }
-
-            results.AddRange(_cardCalculator
-                .Project(card, firstDue, months)
-                .Select(x => new ObligationItem(
-                    $"{card.Bank} {card.Name}".Trim(),
-                    ObligationType.CreditCard,
-                    x.PaymentDueDate,
-                    x.Payment)));
+                Amount = allocation.ExtraSpendableAmount,
+                Date = clock.Today,
+                Category = ExpenseCategory.Other,
+                PaymentType = ExpensePaymentType.Cash,
+                Note = "Plan dışı acil durum tamponu aktarımı",
+                CreatedAtUtc = now
+            }, cancellationToken);
         }
 
-        return results;
+        await store.SaveEmergencyFundAsync(data.EmergencyFund with
+        {
+            CurrentAmount = data.EmergencyFund.CurrentAmount + amount
+        }, cancellationToken);
     }
 
     private async Task CreatePlanFromExpenseAsync(Expense expense, CancellationToken cancellationToken)
@@ -305,61 +274,22 @@ public sealed class CoinFlowService
             throw new InvalidOperationException("Yeni taksit için taksit sayısı ve ilk ödeme tarihi gereklidir.");
         }
 
-        var regular = decimal.Round(expense.Amount / count, 2, MidpointRounding.AwayFromZero);
-        var installments = new List<TemporaryPaymentInstallment>(count);
         var planId = Guid.NewGuid();
-        for (var index = 0; index < count; index++)
-        {
-            var amount = index == count - 1 ? expense.Amount - (regular * (count - 1)) : regular;
-            installments.Add(new TemporaryPaymentInstallment
+        var installments = installmentScheduleCalculator
+            .Split(expense.Amount, count, first.Value)
+            .Select(x => new TemporaryPaymentInstallment
             {
                 PlanId = planId,
-                DueDate = first.Value.AddMonths(index),
-                Amount = amount
-            });
-        }
-
-        await _store.UpsertPaymentPlanAsync(new TemporaryPaymentPlan
+                DueDate = x.Date,
+                Amount = x.Amount
+            })
+            .ToArray();
+        await store.UpsertPaymentPlanAsync(new TemporaryPaymentPlan
         {
             Id = planId,
             Name = string.IsNullOrWhiteSpace(expense.Note) ? "Yeni taksit" : expense.Note,
             Kind = PaymentPlanKind.PlannedInstallment,
             Installments = installments
         }, cancellationToken);
-    }
-
-    private static string CreateEncouragement(DailyCoinSnapshot daily, bool gamified)
-    {
-        if (daily.TodayEarned >= 0m)
-        {
-            return gamified
-                ? $"Bugün {daily.TodayEarned:N0} coin farm'ladın."
-                : $"Bugünkü bütçenden {daily.TodayEarned:N0} TL kaldı.";
-        }
-
-        return gamified
-            ? $"Bugün coin havuzundan {Math.Abs(daily.TodayEarned):N0} TL kullandın. Yarın tekrar alan açılacak."
-            : $"Bugünkü harcaman günlük ortalamanın {Math.Abs(daily.TodayEarned):N0} TL üzerinde. Bütçe dönem geneline yayılır.";
-    }
-
-    private IReadOnlyList<string> CreateHighlights(SalaryPeriod period, FinanceData data, decimal plans)
-    {
-        var result = new List<string>();
-        var finalLoans = data.Loans
-            .Where(x => _salaryCalculator.GetLoanDates(x).LastOrDefault() is var last && last != default && period.Contains(last))
-            .Select(x => $"{x.Name}: bu dönem son ödeme!");
-        result.AddRange(finalLoans);
-
-        var finalPlans = data.PaymentPlans
-            .Where(x => x.Installments.Where(i => !i.IsPaid).OrderBy(i => i.DueDate).LastOrDefault() is var last && last is not null && period.Contains(last.DueDate))
-            .Select(x => $"{x.Name}: bu dönem tamamlanıyor.");
-        result.AddRange(finalPlans);
-
-        if (plans == 0m && result.Count > 0)
-        {
-            result.Add("Sonraki dönemde aylık alan açılıyor.");
-        }
-
-        return result;
     }
 }

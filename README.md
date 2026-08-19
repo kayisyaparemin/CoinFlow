@@ -9,10 +9,11 @@ Uygulama klasik “günlük limit aşıldı” yaklaşımını kullanmaz. Harcan
 - Tarihe bağlı maaş planı ve ileri tarihli zamlar
 - Bitiş tarihi veya taksit sayısı olan düzenli krediler
 - Tek plan altında farklı tarih ve tutarlara sahip geçici ödemeler
-- Asgari veya bu aya özel manuel ödemeli kredi kartları
-- Kart devri ve gelecek kart taksitleri için faizsiz projeksiyon
+- Exact posting/kesim/son ödeme tarihleriyle kredi kartı ekstre projeksiyonu
+- Belirli son ödeme tarihine bağlı manuel kart ödeme planları
 - Nakit, kart, yeni taksit ve diğer ödeme tipleriyle hızlı harcama
-- Gerçek takvim günleriyle maaş dönemi ve Daily Coin havuzu
+- Serbest bakiye snapshot'ıyla gerçek Current Actual ve düzeltme geçmişi
+- Ayrı Daily Reward, sürdürülebilir Daily Coin ve Coin havuzu
 - Önümüzdeki 12 maaş döneminin görünümü
 - Mevcut borçları temel alan kredi kartı, nakit borç, banka kredisi ve nakit alışveriş simülasyonu
 - Günlük bütçeden ayrı acil durum tamponu
@@ -40,9 +41,23 @@ Ayrıntılı kararlar için [mimari belgesine](docs/ARCHITECTURE.md), teslim kap
 - Ayın 29/30/31'i ilgili ayda yoksa ayın son günü kullanılır.
 - Maaş, dönem başlangıcında yürürlükte olan en yeni salary schedule kaydından gelir.
 - Bütün para hesapları `decimal` kullanır; taksit kuruş farkı son taksite yazılır.
+- Ana ekranın kaynağı, aktif dönemdeki son serbest bakiye snapshot'ı ve ondan sonraki nakit/diğer harcamalardır. Snapshot yoksa yalnızca takip maaş döneminin başında başladıysa teorik dönem bütçesi fallback olarak kullanılabilir.
+- Daily Reward snapshot tutarının snapshot tarihinden sonraki maaşa kalan günlere bölünmüş sabit referansıdır. Sürdürülebilir Coin, gerçek kalan bakiyenin bugünden sonraki maaşa kalan günlere yeniden bölünmüş halidir.
 - Kart harcaması nakit havuzunu anında azaltmaz; kart borcunu ve gelecek ödemeyi artırır.
-- Kart faizi MVP'de hesaplanmaz. Bu hesap ayrı bir motor olduğundan faiz stratejisi sonradan eklenebilir.
-- Simülasyon hiçbir kayıt oluşturmaz. Nakit alışveriş ilgili maaş döneminden tek seferde düşer; nakit borç ve banka kredisi girilen toplam geri ödemeye göre vadelenir; kredi kartı seçilen kartın mevcut borç ve ödeme projeksiyonuyla karşılaştırılır.
+- Kart işlemleri exact posting tarihinde ilk uygun statement close'a girer; ödeme tarihi close sonrasındaki ilk uygun due day'dir. Kart faizi ve vergiler MVP'de hesaplanmaz.
+- Planlanan tampon katkısı hedefte kalan tutarla sınırlanır. Manuel aktarımın rezerve katkıya kadar olan bölümü Current Actual'dan ikinci kez düşülmez.
+- Simülasyon hiçbir kayıt oluşturmaz; mevcut dönemde Current Actual, gelecek dönemlerde Projected Free Budget kullanır ve kart senaryosu aynı statement motorunu yeniden çalıştırır.
+
+## Mevcut veritabanı migration'ı
+
+Uygulama veritabanını silip yeniden oluşturmaz. Açılışta yeni snapshot, kart ödeme planı ve tampon transfer tabloları idempotent biçimde eklenir. Eski kart alanları şu varsayımla korunur:
+
+- `LastStatementRemaining` → açılış `CarriedBalance`
+- `CurrentCycleSpending` → açılış `UnbilledSpending`
+- Eski `card_installments` kayıtları → aynı exact tarihte `CardCharge`
+- Eski tek manuel ödeme → migration gününden sonraki ilk uygun due date'e bağlı ödeme planı
+
+Migration günü kart açılış bakiyesinin referans tarihi olur; veri sessizce silinmez.
 
 ## Gereksinimler
 
@@ -97,6 +112,7 @@ Debug/development build, yalnızca boş bir veritabanında örnek verileri ekler
 - Garanti'de 22 × 14.501,23 TL ve Burgan On Dijital'de 9 × 7.374,59 TL kalan kredi taksiti
 - Akbank Axess'te 61.283,91 TL dönem içi harcama, 35.201,77 TL son ekstreden kalan ve Eylül–Kasım gelecek taksitleri
 - 150.000 TL hedef / 32.000 TL mevcut acil tampon
+- 19 Ağustos 2026 için 11.000 TL `Serbest bakiye` snapshot'ı; 22 gün için 500 TL Daily Reward
 
 Stable build development seed eklemez ve ilk açılışta boş finans verisiyle başlar.
 

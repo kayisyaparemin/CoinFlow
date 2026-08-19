@@ -30,6 +30,11 @@ public interface ICoinFlowStore
     Task UpsertExpenseAsync(Expense expense, CancellationToken cancellationToken = default);
     Task DeleteExpenseAsync(Guid id, CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<SpendableBalanceSnapshot>> GetSpendableBalanceSnapshotsAsync(CancellationToken cancellationToken = default);
+    Task UpsertSpendableBalanceSnapshotAsync(SpendableBalanceSnapshot snapshot, CancellationToken cancellationToken = default);
+
     Task<EmergencyFund> GetEmergencyFundAsync(CancellationToken cancellationToken = default);
     Task SaveEmergencyFundAsync(EmergencyFund emergencyFund, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<EmergencyFundTransfer>> GetEmergencyFundTransfersAsync(CancellationToken cancellationToken = default);
+    Task UpsertEmergencyFundTransferAsync(EmergencyFundTransfer transfer, CancellationToken cancellationToken = default);
 }

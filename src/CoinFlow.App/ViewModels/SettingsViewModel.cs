@@ -9,6 +9,7 @@ namespace CoinFlow.App.ViewModels;
 public partial class SettingsViewModel(CoinFlowService service) : ViewModelBase
 {
     private Guid _fundId;
+    private DateOnly? _trackingStartedDate;
 
     [ObservableProperty] private string salaryDay = "10";
     [ObservableProperty] private bool gamificationEnabled = true;
@@ -29,6 +30,7 @@ public partial class SettingsViewModel(CoinFlowService service) : ViewModelBase
         _fundId = data.EmergencyFund.Id;
         SalaryDay = data.Settings.SalaryDay.ToString(TurkishCulture);
         GamificationEnabled = data.Settings.GamificationEnabled;
+        _trackingStartedDate = data.Settings.TrackingStartedDate;
         BufferTarget = data.EmergencyFund.TargetAmount.ToString("0.##", TurkishCulture);
         BufferCurrent = data.EmergencyFund.CurrentAmount.ToString("0.##", TurkishCulture);
         PeriodContribution = data.EmergencyFund.PlannedPeriodContribution.ToString("0.##", TurkishCulture);
@@ -49,14 +51,22 @@ public partial class SettingsViewModel(CoinFlowService service) : ViewModelBase
             {
                 SalaryDay = day,
                 GamificationEnabled = GamificationEnabled,
-                DevelopmentSeedEnabled = BuildInfo.IsDevelopment
+                DevelopmentSeedEnabled = BuildInfo.IsDevelopment,
+                TrackingStartedDate = _trackingStartedDate
             });
+            var target = ParseMoney(BufferTarget, "Tampon hedefi");
+            var current = ParseMoney(BufferCurrent, "Mevcut tampon");
+            var contribution = ParseMoney(PeriodContribution, "Dönem katkısı");
+            if (target < 0m || current < 0m || contribution < 0m)
+            {
+                throw new InvalidOperationException("Tampon tutarları negatif olamaz.");
+            }
             await service.SaveEmergencyFundAsync(new EmergencyFund
             {
                 Id = _fundId,
-                TargetAmount = ParseMoney(BufferTarget, "Tampon hedefi"),
-                CurrentAmount = ParseMoney(BufferCurrent, "Mevcut tampon"),
-                PlannedPeriodContribution = ParseMoney(PeriodContribution, "Dönem katkısı")
+                TargetAmount = target,
+                CurrentAmount = current,
+                PlannedPeriodContribution = contribution
             });
             SetStatus("Ayarlar kaydedildi.");
         }

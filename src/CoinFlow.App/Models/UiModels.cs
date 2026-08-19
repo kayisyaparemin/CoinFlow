@@ -8,10 +8,13 @@ public sealed record SelectionOption<T>(string Label, T Value)
 public sealed record SummaryLine(string Title, string Subtitle, string Amount, string Badge = "");
 
 public sealed record ProjectionLine(
-    string Month,
+    string Period,
     string Salary,
     string Obligations,
-    string Spendable,
+    string ProjectedSpendable,
+    string ActualRemaining,
+    bool HasActualRemaining,
+    string ProjectedDailyCoin,
     string Breakdown,
     string Highlight);
 

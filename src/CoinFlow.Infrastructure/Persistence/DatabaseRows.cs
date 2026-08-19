@@ -61,6 +61,10 @@ internal sealed class CreditCardRow
     public decimal MinimumPaymentRate { get; set; }
     public int PaymentMode { get; set; }
     public decimal? ManualPaymentAmount { get; set; }
+    public decimal CarriedBalance { get; set; }
+    public decimal UnbilledSpending { get; set; }
+    public string BalanceAsOfDate { get; set; } = string.Empty;
+    public int StatementModelVersion { get; set; }
 }
 
 [Table("card_installments")]
@@ -85,6 +89,27 @@ internal sealed class ExpenseRow
     public string? CreditCardId { get; set; }
     public int? InstallmentCount { get; set; }
     public string? FirstInstallmentDate { get; set; }
+    public string? CreatedAtUtc { get; set; }
+}
+
+[Table("credit_card_payment_plans")]
+internal sealed class CreditCardPaymentPlanRow
+{
+    [PrimaryKey] public string Id { get; set; } = string.Empty;
+    [Indexed] public string CreditCardId { get; set; } = string.Empty;
+    [Indexed] public string DueDate { get; set; } = string.Empty;
+    public decimal PlannedPaymentAmount { get; set; }
+}
+
+[Table("spendable_balance_snapshots")]
+internal sealed class SpendableBalanceSnapshotRow
+{
+    [PrimaryKey] public string Id { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    [Indexed] public string SnapshotDate { get; set; } = string.Empty;
+    [Indexed] public string SalaryPeriodStart { get; set; } = string.Empty;
+    public string CreatedAtUtc { get; set; } = string.Empty;
+    public string Note { get; set; } = string.Empty;
 }
 
 [Table("settings")]
@@ -94,6 +119,7 @@ internal sealed class SettingsRow
     public int SalaryDay { get; set; }
     public bool GamificationEnabled { get; set; }
     public bool DevelopmentSeedEnabled { get; set; }
+    public string? TrackingStartedDate { get; set; }
 }
 
 [Table("emergency_fund")]
@@ -103,4 +129,15 @@ internal sealed class EmergencyFundRow
     public decimal TargetAmount { get; set; }
     public decimal CurrentAmount { get; set; }
     public decimal PlannedPeriodContribution { get; set; }
+}
+
+[Table("emergency_fund_transfers")]
+internal sealed class EmergencyFundTransferRow
+{
+    [PrimaryKey] public string Id { get; set; } = string.Empty;
+    [Indexed] public string TransferDate { get; set; } = string.Empty;
+    [Indexed] public string SalaryPeriodStart { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    public decimal CoveredPlannedAmount { get; set; }
+    public string CreatedAtUtc { get; set; } = string.Empty;
 }

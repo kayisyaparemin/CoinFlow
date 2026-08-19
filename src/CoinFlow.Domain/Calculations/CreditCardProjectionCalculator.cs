@@ -2,40 +2,109 @@ using CoinFlow.Domain.Models;
 
 namespace CoinFlow.Domain.Calculations;
 
-public sealed record CreditCardMonthProjection(
-    DateOnly Month,
+public sealed record CreditCardStatementProjection(
+    DateOnly StatementCloseDate,
     DateOnly PaymentDueDate,
-    decimal OpeningStatementBalance,
+    decimal OpeningCarriedBalance,
     decimal NewCharges,
+    decimal StatementBalance,
     decimal Payment,
-    decimal ClosingBalance);
+    decimal CarriedAfterPayment);
 
 public sealed class CreditCardProjectionCalculator
 {
     public static decimal DeriveCurrentTotalDebt(CreditCard card)
     {
-        if (card.LastStatementRemaining < 0m ||
-            card.CurrentCycleSpending < 0m ||
-            card.FutureInstallments.Any(x => x.Amount < 0m))
-        {
-            throw new InvalidOperationException("Kart borç bileşenleri negatif olamaz.");
-        }
-
-        return card.LastStatementRemaining +
-               card.CurrentCycleSpending +
-               card.FutureInstallments.Sum(x => x.Amount);
+        ValidateMoney(card);
+        return card.CarriedBalance + card.UnbilledSpending + card.Charges.Sum(x => x.Amount);
     }
 
-    public IReadOnlyList<CreditCardMonthProjection> Project(
-        CreditCard card,
-        DateOnly firstMonth,
-        int monthCount)
+    public IReadOnlyList<CreditCardStatementProjection> Project(CreditCard card, int statementCount)
     {
-        if (monthCount < 1)
+        if (statementCount < 1)
         {
             return [];
         }
 
+        Validate(card);
+        var anchor = card.BalanceAsOfDate == default
+            ? throw new InvalidOperationException("Kart bakiye referans tarihi gereklidir.")
+            : card.BalanceAsOfDate;
+        var closeDate = ResolveStatementCloseOnOrAfter(anchor, card.StatementClosingDay);
+        var firstClose = closeDate;
+        var assignedCharges = card.Charges
+            .GroupBy(x => ResolveChargeStatementClose(x.PostingDate, firstClose, card.StatementClosingDay))
+            .ToDictionary(x => x.Key, x => x.Sum(charge => charge.Amount));
+        var carried = card.CarriedBalance;
+        var result = new List<CreditCardStatementProjection>(statementCount);
+
+        for (var index = 0; index < statementCount; index++)
+        {
+            var charges = assignedCharges.GetValueOrDefault(closeDate);
+            if (index == 0)
+            {
+                charges += card.UnbilledSpending;
+            }
+
+            var statementBalance = carried + charges;
+            var dueDate = ResolvePaymentDueDate(closeDate, card.PaymentDueDay);
+            var manual = card.PaymentPlans
+                .Where(x => x.DueDate == dueDate)
+                .OrderByDescending(x => x.PlannedPaymentAmount)
+                .FirstOrDefault();
+            var payment = manual is null
+                ? decimal.Round(statementBalance * card.MinimumPaymentRate, 2, MidpointRounding.AwayFromZero)
+                : manual.PlannedPaymentAmount;
+            payment = Math.Min(statementBalance, Math.Max(0m, payment));
+            var carriedAfterPayment = Math.Max(0m, statementBalance - payment);
+
+            result.Add(new CreditCardStatementProjection(
+                closeDate,
+                dueDate,
+                carried,
+                charges,
+                statementBalance,
+                payment,
+                carriedAfterPayment));
+
+            carried = carriedAfterPayment;
+            closeDate = CalendarRules.AddMonthsKeepingDay(closeDate, 1, card.StatementClosingDay);
+        }
+
+        return result;
+    }
+
+    public static DateOnly ResolveStatementCloseOnOrAfter(DateOnly date, int closingDay)
+    {
+        var close = CalendarRules.ResolveDay(date.Year, date.Month, closingDay);
+        return close >= date
+            ? close
+            : CalendarRules.AddMonthsKeepingDay(close, 1, closingDay);
+    }
+
+    public static DateOnly ResolveChargeStatementClose(
+        DateOnly postingDate,
+        DateOnly firstProjectionClose,
+        int closingDay)
+    {
+        var close = ResolveStatementCloseOnOrAfter(postingDate, closingDay);
+        return close < firstProjectionClose ? firstProjectionClose : close;
+    }
+
+    public static DateOnly ResolvePaymentDueDate(DateOnly statementCloseDate, int paymentDueDay)
+    {
+        CalendarRules.ValidateDay(paymentDueDay);
+        var sameMonth = CalendarRules.ResolveDay(
+            statementCloseDate.Year,
+            statementCloseDate.Month,
+            paymentDueDay);
+        return sameMonth > statementCloseDate
+            ? sameMonth
+            : CalendarRules.AddMonthsKeepingDay(sameMonth, 1, paymentDueDay);
+    }
+
+    private static void Validate(CreditCard card)
+    {
         CalendarRules.ValidateDay(card.StatementClosingDay);
         CalendarRules.ValidateDay(card.PaymentDueDay);
         if (card.MinimumPaymentRate is < 0m or > 1m)
@@ -43,53 +112,20 @@ public sealed class CreditCardProjectionCalculator
             throw new ArgumentOutOfRangeException(nameof(card), "Asgari ödeme oranı 0 ile 1 arasında olmalıdır.");
         }
 
-        var month = new DateOnly(firstMonth.Year, firstMonth.Month, 1);
-        var statementBalance = card.LastStatementRemaining > 0m
-            ? card.LastStatementRemaining
-            : card.LastStatementDebt;
-        var result = new List<CreditCardMonthProjection>(monthCount);
-
-        for (var index = 0; index < monthCount; index++)
+        ValidateMoney(card);
+        if (card.PaymentPlans.Any(x => x.PlannedPaymentAmount < 0m))
         {
-            var charges = card.FutureInstallments
-                .Where(x => x.DueDate.Year == month.Year && x.DueDate.Month == month.Month)
-                .Sum(x => x.Amount);
-            if (index == 0)
-            {
-                charges += card.CurrentCycleSpending;
-            }
-
-            var payment = CalculatePayment(card, statementBalance, index == 0);
-            var closing = Math.Max(0m, statementBalance - payment) + charges;
-            var dueDate = CalendarRules.ResolveDay(month.Year, month.Month, card.PaymentDueDay);
-
-            result.Add(new CreditCardMonthProjection(
-                month,
-                dueDate,
-                statementBalance,
-                charges,
-                payment,
-                closing));
-
-            statementBalance = closing;
-            month = month.AddMonths(1);
+            throw new InvalidOperationException("Manuel kart ödemesi negatif olamaz.");
         }
-
-        return result;
     }
 
-    private static decimal CalculatePayment(CreditCard card, decimal balance, bool firstMonth)
+    private static void ValidateMoney(CreditCard card)
     {
-        if (balance <= 0m)
+        if (card.CarriedBalance < 0m ||
+            card.UnbilledSpending < 0m ||
+            card.Charges.Any(x => x.Amount < 0m))
         {
-            return 0m;
+            throw new InvalidOperationException("Kart borç bileşenleri negatif olamaz.");
         }
-
-        if (firstMonth && card.PaymentMode == CreditCardPaymentMode.Manual)
-        {
-            return Math.Min(balance, Math.Max(0m, card.ManualPaymentAmount ?? 0m));
-        }
-
-        return Math.Min(balance, decimal.Round(balance * card.MinimumPaymentRate, 2, MidpointRounding.AwayFromZero));
     }
 }

@@ -21,10 +21,13 @@ public partial class FutureMonthsViewModel(CoinFlowService service) : ViewModelB
             foreach (var row in rows)
             {
                 Months.Add(new ProjectionLine(
-                    row.Period.Start.ToString("MMMM yyyy", TurkishCulture),
+                    $"{row.Period.Start:dd MMM yyyy} → {row.Period.End:dd MMM yyyy}".ToUpper(TurkishCulture),
                     Money(row.Salary),
-                    Money(row.TotalObligations),
-                    Money(row.Spendable),
+                    Money(row.TotalObligations, 2),
+                    Money(row.ProjectedSpendable, 2),
+                    row.ActualRemaining is null ? string.Empty : Money(row.ActualRemaining.Value, 2),
+                    row.ActualRemaining is not null,
+                    Money(row.ProjectedDailyCoin, 2),
                     $"Kredi {Money(row.LoanPayments)} • Kart {Money(row.CardPayments)} • Geçici {Money(row.TemporaryPayments)} • Planlı {Money(row.PlannedInstallments)}",
                     string.Join(" ", row.Highlights)));
             }

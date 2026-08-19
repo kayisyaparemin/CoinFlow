@@ -63,7 +63,7 @@ public partial class SimulationViewModel(CoinFlowService service) : ViewModelBas
         IsDebtOrLoan = method is PurchaseFundingMethod.CashDebt or PurchaseFundingMethod.BankLoan;
         MethodDescription = method switch
         {
-            PurchaseFundingMethod.CreditCard => "Seçilen kartın güncel borcu, gelecek taksitleri ve asgari/manüel ödeme düzeni birlikte hesaplanır.",
+            PurchaseFundingMethod.CreditCard => "Taksitler alışveriş tarihinden itibaren exact posting tarihleriyle kartın gerçek kesim ve son ödeme döngüsüne yerleştirilir.",
             PurchaseFundingMethod.CashDebt => "Alışveriş anında nakit azalmaz; borç geri ödemeleri mevcut zorunlu ödemelere eklenir.",
             PurchaseFundingMethod.BankLoan => "Faiz ve masraflar dahil toplam geri ödeme, seçilen vadeye bölünerek mevcut kredilere eklenir.",
             PurchaseFundingMethod.Cash => "Tutar, alışveriş tarihini içeren maaş döneminin serbest parasından tek seferde düşülür.",
@@ -114,7 +114,7 @@ public partial class SimulationViewModel(CoinFlowService service) : ViewModelBas
             foreach (var row in result.Rows)
             {
                 Results.Add(new SimulationLine(
-                    row.Month.ToString("MMMM yyyy", TurkishCulture),
+                    $"{row.PeriodStart:dd MMM yyyy} → {row.PeriodEnd:dd MMM yyyy}".ToUpper(TurkishCulture),
                     Money(row.BaselineObligations),
                     Money(row.BaselineSpendable),
                     Money(row.NewPayment, 2),
@@ -123,7 +123,7 @@ public partial class SimulationViewModel(CoinFlowService service) : ViewModelBas
                     Money(row.RemainingNewDebt, 2)));
             }
 
-            SummaryText = $"Mevcut 12 aylık zorunlu ödeme: {Money(result.ExistingObligationsInHorizon)} • " +
+            SummaryText = $"Mevcut 12 dönemlik zorunlu ödeme: {Money(result.ExistingObligationsInHorizon)} • " +
                           $"Bu seçimden doğan 12 aylık ek ödeme: {Money(result.NewPaymentsInHorizon, 2)} • " +
                           $"12. dönem sonunda kalan yeni borç: {Money(result.RemainingNewDebtAfterHorizon, 2)}";
             Explanation = result.Explanation;

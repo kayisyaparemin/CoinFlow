@@ -4,323 +4,351 @@ using CoinFlow.Application.Services;
 using CoinFlow.Domain.Calculations;
 using CoinFlow.Domain.Models;
 using CoinFlow.Infrastructure.Persistence;
+using SQLite;
 
 namespace CoinFlow.Tests;
 
 public sealed class SeedIntegrationTests
 {
+    private static readonly DateOnly Today = new(2026, 8, 19);
+    private static readonly DateTimeOffset Now = new(2026, 8, 19, 13, 0, 0, TimeSpan.Zero);
+
     [Fact]
-    public async Task DevelopmentSeed_ProducesRequiredDemoSnapshot()
+    public async Task DevelopmentSeed_UsesCurrentActualSnapshotAndExactCardStatements()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"coinflow-{Guid.NewGuid():N}.db");
-        SqliteCoinFlowStore? store = null;
-        try
+        await WithStore(seed: true, async store =>
         {
-            store = new SqliteCoinFlowStore(path, seedDevelopmentData: true);
-            var service = CreateService(store, new DateOnly(2026, 8, 19));
+            var service = CreateService(store);
 
             var dashboard = await service.GetDashboardAsync();
             var data = await service.GetFinanceDataAsync();
-
-            Assert.Equal(115_000m, dashboard.SalaryPeriod.Salary);
-            Assert.Equal(28_581.94m, dashboard.SalaryPeriod.TotalObligations);
-            Assert.Equal(86_418.06m, dashboard.SalaryPeriod.SpendableBudget);
-            Assert.Equal(86_418.06m, dashboard.DailyCoin.RemainingBudget);
-            Assert.Equal(22, dashboard.DailyCoin.RemainingDays);
-            Assert.Equal(3_928.09m, dashboard.DailyCoin.SustainableDailyBudget);
-
-            Assert.Empty(data.PaymentPlans);
-            Assert.Empty(data.Expenses);
-            Assert.Collection(
-                data.Loans,
-                loan =>
-                {
-                    Assert.Equal("Garanti kredi", loan.Name);
-                    Assert.Equal("Garanti", loan.Bank);
-                    Assert.Equal(22, loan.InstallmentCount);
-                    Assert.Equal(7, loan.PaymentDay);
-                    Assert.Equal(14_501.23m, loan.MonthlyInstallment);
-                },
-                loan =>
-                {
-                    Assert.Equal("On Dijital", loan.Name);
-                    Assert.Equal("Burgan", loan.Bank);
-                    Assert.Equal(9, loan.InstallmentCount);
-                    Assert.Equal(18, loan.PaymentDay);
-                    Assert.Equal(7_374.59m, loan.MonthlyInstallment);
-                });
-
             var card = Assert.Single(data.CreditCards);
-            Assert.Equal("Axess", card.Name);
-            Assert.Equal("Akbank", card.Bank);
-            Assert.Equal(61_283.91m, card.CurrentCycleSpending);
-            Assert.Equal(35_201.77m, card.LastStatementRemaining);
+            var firstStatement = new CreditCardProjectionCalculator().Project(card, 1)[0];
+
+            Assert.Equal(11_000m, dashboard.DailyCoin.RemainingBudget);
+            Assert.Equal(22, dashboard.DailyCoin.RemainingDays);
+            Assert.Equal(500m, dashboard.DailyCoin.BaseDailyCoin);
+            Assert.Equal(500m, dashboard.DailyCoin.SustainableDailyBudget);
+            Assert.Equal(53_095.50m, dashboard.SalaryPeriod.TotalObligations);
+            Assert.Equal(61_904.50m, dashboard.SalaryPeriod.SpendableBudget);
+            Assert.Equal(new DateOnly(2026, 8, 25), firstStatement.StatementCloseDate);
+            Assert.Equal(new DateOnly(2026, 9, 5), firstStatement.PaymentDueDate);
+            Assert.Equal(96_485.68m, firstStatement.StatementBalance);
+            Assert.Equal(38_594.27m, firstStatement.Payment);
             Assert.Equal(123_751.49m, card.CurrentTotalDebt);
-            Assert.Collection(
-                card.FutureInstallments,
-                installment =>
-                {
-                    Assert.Equal(new DateOnly(2026, 9, 28), installment.DueDate);
-                    Assert.Equal(15_538.36m, installment.Amount);
-                },
-                installment =>
-                {
-                    Assert.Equal(new DateOnly(2026, 10, 30), installment.DueDate);
-                    Assert.Equal(9_102.90m, installment.Amount);
-                },
-                installment =>
-                {
-                    Assert.Equal(new DateOnly(2026, 11, 28), installment.DueDate);
-                    Assert.Equal(2_624.55m, installment.Amount);
-                });
-        }
-        finally
-        {
-            if (store is not null)
-            {
-                await store.DisposeAsync();
-            }
-            TryDelete(path);
-            TryDelete(path + "-shm");
-            TryDelete(path + "-wal");
-        }
+            Assert.Contains(card.Charges, x => x.PostingDate == new DateOnly(2026, 9, 28));
+        });
     }
 
     [Fact]
-    public async Task StableEmptyDatabase_DoesNotReceiveDevelopmentFinanceData()
+    public async Task FuturePeriods_FirstRowUsesActualAndFutureRowsUseProjection()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"coinflow-{Guid.NewGuid():N}.db");
-        SqliteCoinFlowStore? store = null;
-        try
+        await WithStore(seed: true, async store =>
         {
-            store = new SqliteCoinFlowStore(path, seedDevelopmentData: false);
-            await store.InitializeAsync();
+            var rows = await CreateService(store).GetFutureMonthsAsync();
 
-            Assert.Empty(await store.GetSalaryScheduleAsync());
-            Assert.Empty(await store.GetLoansAsync());
-            Assert.Empty(await store.GetCreditCardsAsync());
-        }
-        finally
-        {
-            if (store is not null)
-            {
-                await store.DisposeAsync();
-            }
-            TryDelete(path);
-            TryDelete(path + "-shm");
-            TryDelete(path + "-wal");
-        }
+            Assert.True(rows[0].IsCurrentActual);
+            Assert.Equal(11_000m, rows[0].Spendable);
+            Assert.False(rows[1].IsCurrentActual);
+            Assert.Equal(rows[1].ProjectedSpendable, rows[1].Spendable);
+        });
     }
 
     [Fact]
-    public async Task SalaryCanBeAddedAfterFullReset()
+    public async Task CashExpenseReducesActualButCardAndInstallmentDoNot()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"coinflow-{Guid.NewGuid():N}.db");
+        await WithStore(seed: true, async store =>
+        {
+            var service = CreateService(store);
+            var card = Assert.Single((await service.GetFinanceDataAsync()).CreditCards);
+
+            await service.AddExpenseAsync(new ExpenseDraft(
+                1_000m, Today, ExpenseCategory.Food, ExpensePaymentType.Cash, "Nakit"));
+            await service.AddExpenseAsync(new ExpenseDraft(
+                2_000m, Today, ExpenseCategory.Home, ExpensePaymentType.CreditCard, "Kart", card.Id));
+            await service.AddExpenseAsync(new ExpenseDraft(
+                3_000m, Today, ExpenseCategory.Car, ExpensePaymentType.NewInstallment, "Taksit",
+                InstallmentCount: 3,
+                FirstInstallmentDate: new DateOnly(2026, 9, 20)));
+
+            var dashboard = await service.GetDashboardAsync();
+            var data = await service.GetFinanceDataAsync();
+            var updatedCard = Assert.Single(data.CreditCards);
+            Assert.Equal(10_000m, dashboard.DailyCoin.RemainingBudget);
+            Assert.Contains(updatedCard.Charges, x => x.PostingDate == Today && x.Amount == 2_000m);
+            var plan = Assert.Single(data.PaymentPlans);
+            Assert.Equal(3_000m, plan.Installments.Sum(x => x.Amount));
+        });
+    }
+
+    [Fact]
+    public async Task PlannedEmergencyTransfer_DoesNotReduceActualTwice()
+    {
+        await WithStore(seed: true, async store =>
+        {
+            var service = CreateService(store);
+            var data = await service.GetFinanceDataAsync();
+            await service.SaveEmergencyFundAsync(data.EmergencyFund with
+            {
+                TargetAmount = 200_000m,
+                CurrentAmount = 100_000m,
+                PlannedPeriodContribution = 20_000m
+            });
+
+            await service.TransferToEmergencyFundAsync(20_000m);
+
+            var dashboard = await service.GetDashboardAsync();
+            Assert.Equal(11_000m, dashboard.DailyCoin.RemainingBudget);
+            Assert.Equal(120_000m, dashboard.EmergencyFund.CurrentAmount);
+        });
+    }
+
+    [Fact]
+    public async Task PaperAcceptanceCase_Produces87767And27233And90777()
+    {
+        await WithStore(seed: false, async store =>
+        {
+            var service = CreateService(store, new DateOnly(2026, 9, 10));
+            await service.SaveSettingsAsync(new UserSettings
+            {
+                SalaryDay = 10,
+                TrackingStartedDate = new DateOnly(2026, 9, 10)
+            });
+            await service.SaveSalaryAsync(new SalaryScheduleEntry
+            {
+                NetAmount = 115_000m,
+                EffectiveFrom = new DateOnly(2026, 1, 1)
+            });
+            await service.SaveLoanAsync(new Loan
+            {
+                Name = "Garanti",
+                MonthlyInstallment = 14_500m,
+                PaymentDay = 7,
+                StartDate = new DateOnly(2026, 10, 7),
+                InstallmentCount = 1
+            });
+            await service.SaveLoanAsync(new Loan
+            {
+                Name = "Burgan",
+                MonthlyInstallment = 7_500m,
+                PaymentDay = 18,
+                StartDate = new DateOnly(2026, 9, 18),
+                InstallmentCount = 1
+            });
+            var planId = Guid.NewGuid();
+            await service.SavePaymentPlanAsync(new TemporaryPaymentPlan
+            {
+                Id = planId,
+                Name = "Geçici finansman",
+                Kind = PaymentPlanKind.Temporary,
+                Installments =
+                [
+                    new TemporaryPaymentInstallment
+                    {
+                        PlanId = planId,
+                        DueDate = new DateOnly(2026, 9, 20),
+                        Amount = 28_167m
+                    }
+                ]
+            });
+            await service.SaveCreditCardAsync(new CreditCard
+            {
+                Name = "Kağıt hesabı",
+                Limit = 200_000m,
+                CarriedBalance = 35_000m,
+                UnbilledSpending = 59_000m,
+                BalanceAsOfDate = new DateOnly(2026, 9, 1),
+                StatementClosingDay = 25,
+                PaymentDueDay = 5,
+                MinimumPaymentRate = 0.40m
+            });
+
+            var row = Assert.Single(await service.GetFutureMonthsAsync(new DateOnly(2026, 9, 10), 1));
+
+            Assert.Equal(87_767m, row.TotalObligations);
+            Assert.Equal(27_233m, row.ProjectedSpendable);
+            Assert.Equal(907.77m, row.ProjectedDailyCoin);
+        });
+    }
+
+    [Fact]
+    public async Task ResetAllData_RemovesSnapshotsAndDoesNotReseed()
+    {
+        var path = TempPath();
         SqliteCoinFlowStore? store = null;
         try
         {
-            store = new SqliteCoinFlowStore(path, seedDevelopmentData: true);
-            var service = CreateService(store, new DateOnly(2026, 8, 19));
+            store = new SqliteCoinFlowStore(path, true, Today);
+            var service = CreateService(store);
+            Assert.NotEmpty((await service.GetFinanceDataAsync()).SpendableBalanceSnapshots);
+
             await service.ResetAllDataAsync();
+            var reset = await service.GetFinanceDataAsync();
 
+            Assert.Empty(reset.Salaries);
+            Assert.Empty(reset.CreditCards);
+            Assert.Empty(reset.SpendableBalanceSnapshots);
+            Assert.False(reset.Settings.DevelopmentSeedEnabled);
+
+            await store.DisposeAsync();
+            store = new SqliteCoinFlowStore(path, true, Today);
+            var reopened = await CreateService(store).GetFinanceDataAsync();
+            Assert.Empty(reopened.Salaries);
+            Assert.Empty(reopened.SpendableBalanceSnapshots);
+        }
+        finally
+        {
+            if (store is not null) await store.DisposeAsync();
+            DeleteDatabase(path);
+        }
+    }
+
+    [Fact]
+    public async Task SalaryCanBeAddedAfterReset()
+    {
+        await WithStore(seed: true, async store =>
+        {
+            var service = CreateService(store);
+            await service.ResetAllDataAsync();
             await service.SaveSalaryAsync(new SalaryScheduleEntry
             {
                 NetAmount = 120_000m,
-                EffectiveFrom = new DateOnly(2026, 8, 1),
-                Note = "Sıfırlama sonrası maaş"
+                EffectiveFrom = new DateOnly(2026, 8, 1)
             });
 
-            var data = await service.GetFinanceDataAsync();
-            var dashboard = await service.GetDashboardAsync();
-            Assert.Equal(120_000m, Assert.Single(data.Salaries).NetAmount);
-            Assert.Equal(120_000m, dashboard.SalaryPeriod.Salary);
-        }
-        finally
-        {
-            if (store is not null)
-            {
-                await store.DisposeAsync();
-            }
-            TryDelete(path);
-            TryDelete(path + "-shm");
-            TryDelete(path + "-wal");
-        }
+            Assert.Equal(120_000m, Assert.Single((await service.GetFinanceDataAsync()).Salaries).NetAmount);
+        });
     }
 
     [Fact]
-    public async Task ResetAllData_RemovesEverythingAndDoesNotReseedAfterRestart()
+    public async Task FutureProjection_DoesNotClampNegativeFreeBudget()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"coinflow-{Guid.NewGuid():N}.db");
-        SqliteCoinFlowStore? store = null;
+        await WithStore(seed: false, async store =>
+        {
+            var service = CreateService(store);
+            await service.SaveSalaryAsync(new SalaryScheduleEntry
+            {
+                NetAmount = 100m,
+                EffectiveFrom = new DateOnly(2026, 1, 1)
+            });
+            await service.SaveLoanAsync(new Loan
+            {
+                Name = "Büyük taksit",
+                MonthlyInstallment = 500m,
+                PaymentDay = 7,
+                StartDate = new DateOnly(2026, 9, 7),
+                InstallmentCount = 1
+            });
+
+            var row = Assert.Single(await service.GetFutureMonthsAsync(Today, 1));
+
+            Assert.Equal(-400m, row.ProjectedSpendable);
+        });
+    }
+
+    [Fact]
+    public async Task LegacyCardAggregate_IsMigratedWithoutLosingBalances()
+    {
+        var path = TempPath();
+        SQLitePCL.Batteries_V2.Init();
+        var legacy = new SQLiteAsyncConnection(path, SQLiteOpenFlags.ReadWrite | SQLiteOpenFlags.Create);
+        await legacy.ExecuteAsync(
+            """
+            CREATE TABLE credit_cards (
+                Id TEXT PRIMARY KEY NOT NULL,
+                Name TEXT NOT NULL,
+                Bank TEXT NOT NULL,
+                [Limit] DECIMAL NOT NULL,
+                CurrentTotalDebt DECIMAL NOT NULL,
+                LastStatementDebt DECIMAL NOT NULL,
+                LastStatementRemaining DECIMAL NOT NULL,
+                CurrentCycleSpending DECIMAL NOT NULL,
+                StatementClosingDay INTEGER NOT NULL,
+                PaymentDueDay INTEGER NOT NULL,
+                MinimumPaymentRate DECIMAL NOT NULL,
+                PaymentMode INTEGER NOT NULL,
+                ManualPaymentAmount DECIMAL NULL
+            )
+            """);
+        var id = Guid.NewGuid();
+        await legacy.ExecuteAsync(
+            "INSERT INTO credit_cards VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            id.ToString("D"), "Legacy", "Banka", 200_000m, 96_485.68m,
+            35_201.77m, 35_201.77m, 61_283.91m, 25, 5, 0.40m, 0, null);
+        await legacy.CloseAsync();
+
+        var store = new SqliteCoinFlowStore(path, false, Today);
         try
         {
-            store = new SqliteCoinFlowStore(path, seedDevelopmentData: true);
-            var service = CreateService(store, new DateOnly(2026, 8, 19));
-            await service.AddExpenseAsync(new ExpenseDraft(
-                250m,
-                new DateOnly(2026, 8, 19),
-                ExpenseCategory.Other,
-                ExpensePaymentType.Cash,
-                "Sıfırlama testi"));
-            var seeded = await service.GetFinanceDataAsync();
-            Assert.NotEmpty(seeded.Salaries);
-            Assert.NotEmpty(seeded.Loans);
-            Assert.NotEmpty(seeded.CreditCards);
-            Assert.NotEmpty(seeded.Expenses);
+            var card = Assert.Single((await CreateService(store).GetFinanceDataAsync()).CreditCards);
 
-            await service.ResetAllDataAsync();
-
-            var reset = await service.GetFinanceDataAsync();
-            Assert.Empty(reset.Salaries);
-            Assert.Empty(reset.Loans);
-            Assert.Empty(reset.PaymentPlans);
-            Assert.Empty(reset.CreditCards);
-            Assert.Empty(reset.Expenses);
-            Assert.Equal(10, reset.Settings.SalaryDay);
-            Assert.True(reset.Settings.GamificationEnabled);
-            Assert.False(reset.Settings.DevelopmentSeedEnabled);
-            Assert.Equal(0m, reset.EmergencyFund.TargetAmount);
-            Assert.Equal(0m, reset.EmergencyFund.CurrentAmount);
-            Assert.Equal(0m, reset.EmergencyFund.PlannedPeriodContribution);
-
+            Assert.Equal(35_201.77m, card.CarriedBalance);
+            Assert.Equal(61_283.91m, card.UnbilledSpending);
+            Assert.Equal(Today, card.BalanceAsOfDate);
+        }
+        finally
+        {
             await store.DisposeAsync();
-            store = new SqliteCoinFlowStore(path, seedDevelopmentData: true);
-            var reopened = await CreateService(store, new DateOnly(2026, 8, 19)).GetFinanceDataAsync();
-
-            Assert.Empty(reopened.Salaries);
-            Assert.Empty(reopened.Loans);
-            Assert.Empty(reopened.PaymentPlans);
-            Assert.Empty(reopened.CreditCards);
-            Assert.Empty(reopened.Expenses);
-            Assert.False(reopened.Settings.DevelopmentSeedEnabled);
-        }
-        finally
-        {
-            if (store is not null)
-            {
-                await store.DisposeAsync();
-            }
-            TryDelete(path);
-            TryDelete(path + "-shm");
-            TryDelete(path + "-wal");
+            DeleteDatabase(path);
         }
     }
 
-    [Fact]
-    public async Task CardExpense_ChangesCardDebtButNotCurrentCashBudget()
+    private static async Task WithStore(bool seed, Func<SqliteCoinFlowStore, Task> test)
     {
-        var path = Path.Combine(Path.GetTempPath(), $"coinflow-{Guid.NewGuid():N}.db");
-        SqliteCoinFlowStore? store = null;
+        var path = TempPath();
+        var store = new SqliteCoinFlowStore(path, seed, Today);
         try
         {
-            store = new SqliteCoinFlowStore(path, seedDevelopmentData: true);
-            var service = CreateService(store, new DateOnly(2026, 8, 19));
-            var before = await service.GetDashboardAsync();
-            var card = Assert.Single((await service.GetFinanceDataAsync()).CreditCards);
-
-            await service.AddExpenseAsync(new CoinFlow.Application.Models.ExpenseDraft(
-                1_000m, new DateOnly(2026, 8, 19), ExpenseCategory.Car,
-                ExpensePaymentType.CreditCard, "Tamir", card.Id));
-
-            var after = await service.GetDashboardAsync();
-            var updatedCard = Assert.Single((await service.GetFinanceDataAsync()).CreditCards);
-            Assert.Equal(before.DailyCoin.RemainingBudget, after.DailyCoin.RemainingBudget);
-            Assert.Equal(card.CurrentTotalDebt + 1_000m, updatedCard.CurrentTotalDebt);
+            await test(store);
         }
         finally
         {
-            if (store is not null) await store.DisposeAsync();
-            TryDelete(path);
-            TryDelete(path + "-shm");
-            TryDelete(path + "-wal");
+            await store.DisposeAsync();
+            DeleteDatabase(path);
         }
     }
 
-    [Fact]
-    public async Task EmergencyTransfer_IsRemovedFromCashBudgetAndAddedToBuffer()
+    private static CoinFlowService CreateService(ICoinFlowStore store, DateOnly? today = null)
     {
-        var path = Path.Combine(Path.GetTempPath(), $"coinflow-{Guid.NewGuid():N}.db");
-        SqliteCoinFlowStore? store = null;
-        try
-        {
-            store = new SqliteCoinFlowStore(path, seedDevelopmentData: true);
-            var service = CreateService(store, new DateOnly(2026, 8, 19));
-            var before = await service.GetDashboardAsync();
-
-            await service.TransferToEmergencyFundAsync(1_000m);
-
-            var after = await service.GetDashboardAsync();
-            Assert.Equal(before.EmergencyFund.CurrentAmount + 1_000m, after.EmergencyFund.CurrentAmount);
-            Assert.Equal(before.DailyCoin.RemainingBudget - 1_000m, after.DailyCoin.RemainingBudget);
-        }
-        finally
-        {
-            if (store is not null) await store.DisposeAsync();
-            TryDelete(path);
-            TryDelete(path + "-shm");
-            TryDelete(path + "-wal");
-        }
+        var salary = new SalaryPeriodCalculator();
+        var loan = new LoanScheduleCalculator();
+        var card = new CreditCardProjectionCalculator();
+        var mandatory = new MandatoryPaymentCalculator(loan);
+        var spendable = new SpendableBalanceCalculator();
+        var daily = new DailyCoinCalculator();
+        var emergency = new EmergencyFundCalculator();
+        var installments = new InstallmentScheduleCalculator();
+        var projection = new FinancialProjectionService(
+            salary,
+            loan,
+            card,
+            mandatory,
+            spendable,
+            daily,
+            emergency);
+        return new CoinFlowService(
+            store,
+            new FixedClock(today ?? Today, Now),
+            salary,
+            projection,
+            new PurchaseSimulationCalculator(card, installments),
+            installments,
+            emergency);
     }
 
-    [Fact]
-    public async Task SeededCardSimulation_IncludesCurrentDebtsAndFutureInstallments()
+    private static string TempPath() => Path.Combine(Path.GetTempPath(), $"coinflow-{Guid.NewGuid():N}.db");
+
+    private static void DeleteDatabase(string path)
     {
-        var path = Path.Combine(Path.GetTempPath(), $"coinflow-{Guid.NewGuid():N}.db");
-        SqliteCoinFlowStore? store = null;
-        try
+        foreach (var candidate in new[] { path, path + "-shm", path + "-wal" })
         {
-            store = new SqliteCoinFlowStore(path, seedDevelopmentData: true);
-            var service = CreateService(store, new DateOnly(2026, 8, 19));
-            var data = await service.GetFinanceDataAsync();
-            var card = Assert.Single(data.CreditCards);
-
-            var result = await service.SimulatePurchaseAsync(
-                new PurchaseSimulationRequest(
-                    "Test alışverişi",
-                    30_000m,
-                    PurchaseFundingMethod.CreditCard,
-                    new DateOnly(2026, 8, 20),
-                    3,
-                    new DateOnly(2026, 10, 5),
-                    card.Id));
-
-            Assert.Equal(12, result.Rows.Count);
-            Assert.Equal(28_581.94m, result.Rows[0].BaselineObligations);
-            Assert.True(result.ExistingObligationsInHorizon > result.Rows[0].BaselineObligations);
-            Assert.Contains(result.Rows, row => row.NewPayment > 0m);
-            Assert.True(result.NewPaymentsInHorizon > 0m);
-            Assert.True(result.RemainingNewDebtAfterHorizon >= 0m);
-        }
-        finally
-        {
-            if (store is not null)
-            {
-                await store.DisposeAsync();
-            }
-            TryDelete(path);
-            TryDelete(path + "-shm");
-            TryDelete(path + "-wal");
+            if (File.Exists(candidate)) File.Delete(candidate);
         }
     }
 
-    private static CoinFlowService CreateService(ICoinFlowStore store, DateOnly today) => new(
-        store,
-        new FixedClock(today),
-        new SalaryPeriodCalculator(),
-        new DailyCoinCalculator(),
-        new CreditCardProjectionCalculator(),
-        new PurchaseSimulationCalculator(new CreditCardProjectionCalculator()));
-
-    private static void TryDelete(string path)
-    {
-        if (File.Exists(path))
-        {
-            File.Delete(path);
-        }
-    }
-
-    private sealed class FixedClock(DateOnly today) : IClock
+    private sealed class FixedClock(DateOnly today, DateTimeOffset utcNow) : IClock
     {
         public DateOnly Today { get; } = today;
+        public DateTimeOffset UtcNow { get; } = utcNow;
     }
 }

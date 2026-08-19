@@ -6,9 +6,25 @@ namespace CoinFlow.Application.Models;
 public sealed record DashboardSnapshot(
     SalaryPeriodSummary SalaryPeriod,
     DailyCoinSnapshot DailyCoin,
+    FutureMonthProjection NextSalaryPeriod,
     EmergencyFund EmergencyFund,
     bool GamificationEnabled,
-    string Encouragement);
+    string Encouragement,
+    CalculationDetails Details);
+
+public sealed record CalculationDetails(
+    SalaryPeriod CurrentPeriod,
+    SpendableBalanceSource BalanceSource,
+    DateOnly? SnapshotDate,
+    decimal SnapshotOrStartAmount,
+    decimal EligibleSpending,
+    decimal CurrentAvailable,
+    int RemainingDays,
+    decimal SustainableDaily,
+    DateOnly? NextCardStatementClose,
+    DateOnly? NextCardPaymentDue,
+    decimal NextCardStatementBalance,
+    decimal NextCardPayment);
 
 public sealed record ExpenseDraft(
     decimal Amount,
@@ -27,4 +43,6 @@ public sealed record FinanceData(
     IReadOnlyList<TemporaryPaymentPlan> PaymentPlans,
     IReadOnlyList<CreditCard> CreditCards,
     IReadOnlyList<Expense> Expenses,
-    EmergencyFund EmergencyFund);
+    IReadOnlyList<SpendableBalanceSnapshot> SpendableBalanceSnapshots,
+    EmergencyFund EmergencyFund,
+    IReadOnlyList<EmergencyFundTransfer> EmergencyFundTransfers);

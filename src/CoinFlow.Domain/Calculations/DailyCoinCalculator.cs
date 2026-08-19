@@ -4,6 +4,10 @@ namespace CoinFlow.Domain.Calculations;
 
 public sealed record DailyCoinSnapshot(
     DateOnly AsOf,
+    bool HasCurrentActual,
+    SpendableBalanceSource BalanceSource,
+    DateOnly OriginDate,
+    decimal OriginAmount,
     decimal PeriodBudget,
     decimal PeriodCashSpending,
     decimal RemainingBudget,
@@ -22,50 +26,92 @@ public sealed class DailyCoinCalculator
     public DailyCoinSnapshot Calculate(
         SalaryPeriod period,
         DateOnly asOf,
-        decimal periodBudget,
-        IEnumerable<Expense> expenses)
+        decimal projectedPeriodBudget,
+        SpendableBalanceState balance)
     {
         if (asOf < period.Start || asOf >= period.End)
         {
             throw new ArgumentOutOfRangeException(nameof(asOf), "Tarih maaş döneminin içinde olmalıdır.");
         }
 
-        var cashExpenses = expenses
-            .Where(x => x.Date >= period.Start && x.Date <= asOf)
-            .Where(AffectsCashBudget)
-            .ToArray();
-
         var totalDays = period.DayCount;
-        var elapsedDays = asOf.DayNumber - period.Start.DayNumber + 1;
         var remainingDays = period.End.DayNumber - asOf.DayNumber;
-        var baseDaily = totalDays == 0
+        if (balance.RequiresSnapshot)
+        {
+            return new DailyCoinSnapshot(
+                asOf,
+                false,
+                balance.Source,
+                balance.OriginDate,
+                0m,
+                projectedPeriodBudget,
+                0m,
+                0m,
+                totalDays,
+                0,
+                remainingDays,
+                0m,
+                0m,
+                0m,
+                0m,
+                0m,
+                totalDays == 0 ? 1m : decimal.Round((decimal)(asOf.DayNumber - period.Start.DayNumber) / totalDays, 4));
+        }
+
+        var rewardDays = period.End.DayNumber - balance.OriginDate.DayNumber;
+        var elapsedDays = asOf.DayNumber - balance.OriginDate.DayNumber + 1;
+        var dailyReward = rewardDays <= 0
             ? 0m
-            : decimal.Round(periodBudget / totalDays, 2, MidpointRounding.AwayFromZero);
-        var spent = cashExpenses.Sum(x => x.Amount);
-        var todaySpent = cashExpenses.Where(x => x.Date == asOf).Sum(x => x.Amount);
-        var remaining = periodBudget - spent;
-        var pool = (baseDaily * elapsedDays) - spent;
+            : decimal.Round(balance.OriginAmount / rewardDays, 2, MidpointRounding.AwayFromZero);
+        var pool = (dailyReward * elapsedDays) - balance.EligibleExpenses;
         var sustainable = remainingDays == 0
-            ? remaining
-            : decimal.Round(remaining / remainingDays, 2, MidpointRounding.AwayFromZero);
-        var progress = totalDays == 0 ? 1m : decimal.Round((decimal)(elapsedDays - 1) / totalDays, 4);
+            ? balance.CurrentAvailable
+            : decimal.Round(balance.CurrentAvailable / remainingDays, 2, MidpointRounding.AwayFromZero);
+        var progress = rewardDays <= 0 ? 1m : decimal.Round((decimal)(elapsedDays - 1) / rewardDays, 4);
 
         return new DailyCoinSnapshot(
             asOf,
-            periodBudget,
-            spent,
-            remaining,
+            true,
+            balance.Source,
+            balance.OriginDate,
+            balance.OriginAmount,
+            projectedPeriodBudget,
+            balance.EligibleExpenses,
+            balance.CurrentAvailable,
             totalDays,
             elapsedDays,
             remainingDays,
-            baseDaily,
-            todaySpent,
-            baseDaily - todaySpent,
+            dailyReward,
+            balance.TodayEligibleExpenses,
+            dailyReward - balance.TodayEligibleExpenses,
             pool,
             sustainable,
             progress);
     }
 
+    public DailyCoinSnapshot Calculate(
+        SalaryPeriod period,
+        DateOnly asOf,
+        decimal periodBudget,
+        IEnumerable<Expense> expenses)
+    {
+        var eligible = expenses
+            .Where(x => x.Date >= period.Start && x.Date <= asOf)
+            .Where(SpendableBalanceCalculator.AffectsCurrentBalance)
+            .ToArray();
+        var spent = eligible.Sum(x => x.Amount);
+        var state = new SpendableBalanceState(
+            SpendableBalanceSource.PeriodStart,
+            false,
+            period.Start,
+            periodBudget,
+            spent,
+            eligible.Where(x => x.Date == asOf).Sum(x => x.Amount),
+            periodBudget - spent,
+            null);
+        return Calculate(period, asOf, periodBudget, state);
+    }
+
     public static bool AffectsCashBudget(Expense expense) =>
-        expense.PaymentType is ExpensePaymentType.Cash or ExpensePaymentType.Other;
+        SpendableBalanceCalculator.AffectsCurrentBalance(expense);
 }

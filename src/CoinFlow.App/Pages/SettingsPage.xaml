@@ -34,7 +34,7 @@
                     <Entry Text="{Binding BufferCurrent}" Keyboard="Numeric" />
                     <Label Text="Her maaş döneminde ayrılacak" Style="{StaticResource FieldLabel}" />
                     <Entry Text="{Binding PeriodContribution}" Keyboard="Numeric" />
-                    <Label Text="Tampondaki para Daily Coin hesabına katılmaz." Style="{StaticResource MutedText}" />
+                    <Label Text="Katkı hedefte kalan tutarla sınırlandırılır. Hedef dolunca gelecek katkı otomatik sıfır olur." Style="{StaticResource MutedText}" />
                     <Button Text="Ayarları kaydet" Command="{Binding SaveCommand}" />
                 </VerticalStackLayout>
             </Border>
@@ -42,6 +42,7 @@
             <Border BackgroundColor="{StaticResource Mint}" StrokeThickness="0">
                 <VerticalStackLayout Spacing="8">
                     <Label Text="Tampona özel aktarım" Style="{StaticResource SectionTitle}" />
+                    <Label Text="Planlanan dönem katkısına kadar olan bölüm ikinci kez serbest bakiyeden düşülmez; yalnızca plan üstü kısım harcama sayılır." Style="{StaticResource MutedText}" />
                     <Entry Text="{Binding TransferAmount}" Placeholder="Tutar" Keyboard="Numeric" />
                     <Button Text="Tampona aktar" Command="{Binding TransferCommand}" />
                 </VerticalStackLayout>

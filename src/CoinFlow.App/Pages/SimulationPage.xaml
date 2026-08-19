@@ -10,7 +10,7 @@
         <VerticalStackLayout Padding="20,28,20,40" Spacing="14">
             <Label Text="ÖNCE DENE" Style="{StaticResource Eyebrow}" />
             <Label Text="Alışveriş simülasyonu" Style="{StaticResource PageTitle}" />
-            <Label Text="Mevcut krediler, kart borçları, planlar ve düzenli ödemeler temel senaryoya dahildir. Simülasyon hiçbir kayıt oluşturmaz." Style="{StaticResource MutedText}" />
+            <Label Text="Mevcut dönemde gerçek serbest bakiye, gelecek dönemlerde tahmini bütçe kullanılır. Kartlar exact kesim ve son ödeme tarihleriyle hesaplanır; simülasyon kayıt oluşturmaz." Style="{StaticResource MutedText}" />
             <Border>
                 <VerticalStackLayout Spacing="8">
                     <Label Text="Alışveriş adı" Style="{StaticResource FieldLabel}" />
@@ -37,11 +37,11 @@
                     <VerticalStackLayout IsVisible="{Binding IsFinanced}" Spacing="8">
                         <Label Text="Taksit / vade sayısı" Style="{StaticResource FieldLabel}" />
                         <Entry Text="{Binding InstallmentCount}" Keyboard="Numeric" />
-                        <Label Text="İlk ödeme tarihi" Style="{StaticResource FieldLabel}" />
-                        <DatePicker Date="{Binding FirstPaymentDate}" Format="dd.MM.yyyy" />
                     </VerticalStackLayout>
 
                     <VerticalStackLayout IsVisible="{Binding IsDebtOrLoan}" Spacing="8">
+                        <Label Text="İlk ödeme tarihi" Style="{StaticResource FieldLabel}" />
+                        <DatePicker Date="{Binding FirstPaymentDate}" Format="dd.MM.yyyy" />
                         <Label Text="Toplam geri ödeme" Style="{StaticResource FieldLabel}" />
                         <Entry Text="{Binding TotalRepaymentAmount}"
                                Keyboard="Numeric"

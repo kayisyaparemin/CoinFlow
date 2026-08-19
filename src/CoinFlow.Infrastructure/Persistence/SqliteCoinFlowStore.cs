@@ -1,5 +1,6 @@
 using System.Globalization;
 using CoinFlow.Application.Abstractions;
+using CoinFlow.Domain.Calculations;
 using CoinFlow.Domain.Models;
 using SQLite;
 
@@ -10,10 +11,11 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
     private const string DateFormat = "yyyy-MM-dd";
     private readonly SQLiteAsyncConnection _database;
     private readonly bool _seedDevelopmentData;
+    private readonly DateOnly _migrationDate;
     private readonly SemaphoreSlim _initializeLock = new(1, 1);
     private bool _initialized;
 
-    public SqliteCoinFlowStore(string databasePath, bool seedDevelopmentData)
+    public SqliteCoinFlowStore(string databasePath, bool seedDevelopmentData, DateOnly migrationDate)
     {
         if (string.IsNullOrWhiteSpace(databasePath))
         {
@@ -26,6 +28,7 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
             databasePath,
             SQLiteOpenFlags.ReadWrite | SQLiteOpenFlags.Create | SQLiteOpenFlags.SharedCache);
         _seedDevelopmentData = seedDevelopmentData;
+        _migrationDate = migrationDate;
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
@@ -49,9 +52,14 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
             await _database.CreateTableAsync<PaymentInstallmentRow>();
             await _database.CreateTableAsync<CreditCardRow>();
             await _database.CreateTableAsync<CardInstallmentRow>();
+            await _database.CreateTableAsync<CreditCardPaymentPlanRow>();
             await _database.CreateTableAsync<ExpenseRow>();
+            await _database.CreateTableAsync<SpendableBalanceSnapshotRow>();
             await _database.CreateTableAsync<SettingsRow>();
             await _database.CreateTableAsync<EmergencyFundRow>();
+            await _database.CreateTableAsync<EmergencyFundTransferRow>();
+
+            await MigrateLegacyCreditCardsAsync();
 
             if (await _database.Table<SettingsRow>().CountAsync() == 0)
             {
@@ -59,7 +67,8 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
                 {
                     SalaryDay = 10,
                     GamificationEnabled = true,
-                    DevelopmentSeedEnabled = _seedDevelopmentData
+                    DevelopmentSeedEnabled = _seedDevelopmentData,
+                    TrackingStartedDate = FormatDate(_migrationDate)
                 });
 
                 await _database.InsertAsync(ToRow(new EmergencyFund
@@ -92,10 +101,13 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
             connection.DeleteAll<PaymentInstallmentRow>();
             connection.DeleteAll<PaymentPlanRow>();
             connection.DeleteAll<CardInstallmentRow>();
+            connection.DeleteAll<CreditCardPaymentPlanRow>();
             connection.DeleteAll<CreditCardRow>();
             connection.DeleteAll<ExpenseRow>();
+            connection.DeleteAll<SpendableBalanceSnapshotRow>();
             connection.DeleteAll<SalaryRow>();
             connection.DeleteAll<LoanRow>();
+            connection.DeleteAll<EmergencyFundTransferRow>();
             connection.DeleteAll<EmergencyFundRow>();
             connection.DeleteAll<SettingsRow>();
 
@@ -103,7 +115,8 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
             {
                 SalaryDay = 10,
                 GamificationEnabled = true,
-                DevelopmentSeedEnabled = false
+                DevelopmentSeedEnabled = false,
+                TrackingStartedDate = FormatDate(_migrationDate)
             });
             connection.Insert(ToRow(new EmergencyFund()));
         });
@@ -117,7 +130,8 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         {
             SalaryDay = row.SalaryDay,
             GamificationEnabled = row.GamificationEnabled,
-            DevelopmentSeedEnabled = row.DevelopmentSeedEnabled
+            DevelopmentSeedEnabled = row.DevelopmentSeedEnabled,
+            TrackingStartedDate = ParseNullableDate(row.TrackingStartedDate)
         };
     }
 
@@ -128,7 +142,8 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         {
             SalaryDay = settings.SalaryDay,
             GamificationEnabled = settings.GamificationEnabled,
-            DevelopmentSeedEnabled = settings.DevelopmentSeedEnabled
+            DevelopmentSeedEnabled = settings.DevelopmentSeedEnabled,
+            TrackingStartedDate = FormatNullableDate(settings.TrackingStartedDate)
         });
     }
 
@@ -214,7 +229,11 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         await InitializeAsync(cancellationToken);
         var cards = await _database.Table<CreditCardRow>().ToListAsync();
         var installments = await _database.Table<CardInstallmentRow>().ToListAsync();
-        return cards.Select(row => FromRow(row, installments.Where(x => x.CreditCardId == row.Id))).ToArray();
+        var payments = await _database.Table<CreditCardPaymentPlanRow>().ToListAsync();
+        return cards.Select(row => FromRow(
+            row,
+            installments.Where(x => x.CreditCardId == row.Id),
+            payments.Where(x => x.CreditCardId == row.Id))).ToArray();
     }
 
     public async Task UpsertCreditCardAsync(CreditCard card, CancellationToken cancellationToken = default)
@@ -222,9 +241,14 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         await InitializeAsync(cancellationToken);
         await _database.InsertOrReplaceAsync(ToRow(card));
         await _database.ExecuteAsync("DELETE FROM card_installments WHERE CreditCardId = ?", Key(card.Id));
-        foreach (var installment in card.FutureInstallments)
+        foreach (var charge in card.Charges)
         {
-            await _database.InsertAsync(ToRow(installment with { CreditCardId = card.Id }));
+            await _database.InsertAsync(ToRow(charge with { CreditCardId = card.Id }));
+        }
+        await _database.ExecuteAsync("DELETE FROM credit_card_payment_plans WHERE CreditCardId = ?", Key(card.Id));
+        foreach (var payment in card.PaymentPlans)
+        {
+            await _database.InsertAsync(ToRow(payment with { CreditCardId = card.Id }));
         }
     }
 
@@ -232,6 +256,7 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
     {
         await InitializeAsync(cancellationToken);
         await _database.ExecuteAsync("DELETE FROM card_installments WHERE CreditCardId = ?", Key(id));
+        await _database.ExecuteAsync("DELETE FROM credit_card_payment_plans WHERE CreditCardId = ?", Key(id));
         await _database.ExecuteAsync("DELETE FROM credit_cards WHERE Id = ?", Key(id));
     }
 
@@ -258,6 +283,25 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         await _database.ExecuteAsync("DELETE FROM expenses WHERE Id = ?", Key(id));
     }
 
+    public async Task<IReadOnlyList<SpendableBalanceSnapshot>> GetSpendableBalanceSnapshotsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await InitializeAsync(cancellationToken);
+        return (await _database.Table<SpendableBalanceSnapshotRow>().ToListAsync())
+            .Select(FromRow)
+            .OrderBy(x => x.SnapshotDate)
+            .ThenBy(x => x.CreatedAtUtc)
+            .ToArray();
+    }
+
+    public async Task UpsertSpendableBalanceSnapshotAsync(
+        SpendableBalanceSnapshot snapshot,
+        CancellationToken cancellationToken = default)
+    {
+        await InitializeAsync(cancellationToken);
+        await _database.InsertOrReplaceAsync(ToRow(snapshot));
+    }
+
     public async Task<EmergencyFund> GetEmergencyFundAsync(CancellationToken cancellationToken = default)
     {
         await InitializeAsync(cancellationToken);
@@ -273,6 +317,25 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         await _database.InsertOrReplaceAsync(ToRow(value));
     }
 
+    public async Task<IReadOnlyList<EmergencyFundTransfer>> GetEmergencyFundTransfersAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await InitializeAsync(cancellationToken);
+        return (await _database.Table<EmergencyFundTransferRow>().ToListAsync())
+            .Select(FromRow)
+            .OrderBy(x => x.TransferDate)
+            .ThenBy(x => x.CreatedAtUtc)
+            .ToArray();
+    }
+
+    public async Task UpsertEmergencyFundTransferAsync(
+        EmergencyFundTransfer transfer,
+        CancellationToken cancellationToken = default)
+    {
+        await InitializeAsync(cancellationToken);
+        await _database.InsertOrReplaceAsync(ToRow(transfer));
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (_initialized)
@@ -286,6 +349,8 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
 
     internal static string FormatDate(DateOnly date) => date.ToString(DateFormat, CultureInfo.InvariantCulture);
     internal static DateOnly ParseDate(string value) => DateOnly.ParseExact(value, DateFormat, CultureInfo.InvariantCulture);
+    internal static string FormatInstant(DateTimeOffset value) => value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+    internal static DateTimeOffset ParseInstant(string value) => DateTimeOffset.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
     private static DateOnly? ParseNullableDate(string? value) => string.IsNullOrWhiteSpace(value) ? null : ParseDate(value);
     private static string? FormatNullableDate(DateOnly? value) => value is null ? null : FormatDate(value.Value);
     private static string Key(Guid id) => id.ToString("D");
@@ -362,50 +427,72 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         Bank = value.Bank,
         Limit = value.Limit,
         CurrentTotalDebt = value.CurrentTotalDebt,
-        LastStatementDebt = value.LastStatementDebt,
-        LastStatementRemaining = value.LastStatementRemaining,
-        CurrentCycleSpending = value.CurrentCycleSpending,
+        LastStatementDebt = value.CarriedBalance,
+        LastStatementRemaining = value.CarriedBalance,
+        CurrentCycleSpending = value.UnbilledSpending,
         StatementClosingDay = value.StatementClosingDay,
         PaymentDueDay = value.PaymentDueDay,
         MinimumPaymentRate = value.MinimumPaymentRate,
-        PaymentMode = (int)value.PaymentMode,
-        ManualPaymentAmount = value.ManualPaymentAmount
+        PaymentMode = (int)CreditCardPaymentMode.Minimum,
+        ManualPaymentAmount = null,
+        CarriedBalance = value.CarriedBalance,
+        UnbilledSpending = value.UnbilledSpending,
+        BalanceAsOfDate = FormatDate(value.BalanceAsOfDate),
+        StatementModelVersion = 2
     };
 
-    private static CreditCard FromRow(CreditCardRow row, IEnumerable<CardInstallmentRow> installments) => new()
+    private static CreditCard FromRow(
+        CreditCardRow row,
+        IEnumerable<CardInstallmentRow> installments,
+        IEnumerable<CreditCardPaymentPlanRow> paymentPlans) => new()
     {
         Id = ParseKey(row.Id),
         Name = row.Name,
         Bank = row.Bank,
         Limit = row.Limit,
         CurrentTotalDebt = row.CurrentTotalDebt,
-        LastStatementDebt = row.LastStatementDebt,
-        LastStatementRemaining = row.LastStatementRemaining,
-        CurrentCycleSpending = row.CurrentCycleSpending,
+        CarriedBalance = row.CarriedBalance,
+        UnbilledSpending = row.UnbilledSpending,
+        BalanceAsOfDate = ParseDate(row.BalanceAsOfDate),
         StatementClosingDay = row.StatementClosingDay,
         PaymentDueDay = row.PaymentDueDay,
         MinimumPaymentRate = row.MinimumPaymentRate,
-        PaymentMode = (CreditCardPaymentMode)row.PaymentMode,
-        ManualPaymentAmount = row.ManualPaymentAmount,
-        FutureInstallments = installments.Select(FromRow).OrderBy(x => x.DueDate).ToArray()
+        Charges = installments.Select(FromRow).OrderBy(x => x.PostingDate).ToArray(),
+        PaymentPlans = paymentPlans.Select(FromRow).OrderBy(x => x.DueDate).ToArray()
     };
 
-    internal static CardInstallmentRow ToRow(CardInstallment value) => new()
+    internal static CardInstallmentRow ToRow(CardCharge value) => new()
     {
         Id = Key(value.Id),
         CreditCardId = Key(value.CreditCardId),
         Description = value.Description,
-        DueDate = FormatDate(value.DueDate),
+        DueDate = FormatDate(value.PostingDate),
         Amount = value.Amount
     };
 
-    private static CardInstallment FromRow(CardInstallmentRow row) => new()
+    private static CardCharge FromRow(CardInstallmentRow row) => new()
     {
         Id = ParseKey(row.Id),
         CreditCardId = ParseKey(row.CreditCardId),
         Description = row.Description,
-        DueDate = ParseDate(row.DueDate),
+        PostingDate = ParseDate(row.DueDate),
         Amount = row.Amount
+    };
+
+    private static CreditCardPaymentPlanRow ToRow(CreditCardPaymentPlan value) => new()
+    {
+        Id = Key(value.Id),
+        CreditCardId = Key(value.CreditCardId),
+        DueDate = FormatDate(value.DueDate),
+        PlannedPaymentAmount = value.PlannedPaymentAmount
+    };
+
+    private static CreditCardPaymentPlan FromRow(CreditCardPaymentPlanRow row) => new()
+    {
+        Id = ParseKey(row.Id),
+        CreditCardId = ParseKey(row.CreditCardId),
+        DueDate = ParseDate(row.DueDate),
+        PlannedPaymentAmount = row.PlannedPaymentAmount
     };
 
     private static ExpenseRow ToRow(Expense value) => new()
@@ -418,7 +505,8 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         Note = value.Note,
         CreditCardId = value.CreditCardId?.ToString("D"),
         InstallmentCount = value.InstallmentCount,
-        FirstInstallmentDate = FormatNullableDate(value.FirstInstallmentDate)
+        FirstInstallmentDate = FormatNullableDate(value.FirstInstallmentDate),
+        CreatedAtUtc = value.CreatedAtUtc == default ? null : FormatInstant(value.CreatedAtUtc)
     };
 
     private static Expense FromRow(ExpenseRow row) => new()
@@ -431,7 +519,30 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         Note = row.Note,
         CreditCardId = string.IsNullOrWhiteSpace(row.CreditCardId) ? null : ParseKey(row.CreditCardId),
         InstallmentCount = row.InstallmentCount,
-        FirstInstallmentDate = ParseNullableDate(row.FirstInstallmentDate)
+        FirstInstallmentDate = ParseNullableDate(row.FirstInstallmentDate),
+        CreatedAtUtc = string.IsNullOrWhiteSpace(row.CreatedAtUtc)
+            ? new DateTimeOffset(ParseDate(row.Date).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero)
+            : ParseInstant(row.CreatedAtUtc)
+    };
+
+    internal static SpendableBalanceSnapshotRow ToRow(SpendableBalanceSnapshot value) => new()
+    {
+        Id = Key(value.Id),
+        Amount = value.Amount,
+        SnapshotDate = FormatDate(value.SnapshotDate),
+        SalaryPeriodStart = FormatDate(value.SalaryPeriodStart),
+        CreatedAtUtc = FormatInstant(value.CreatedAtUtc),
+        Note = value.Note
+    };
+
+    private static SpendableBalanceSnapshot FromRow(SpendableBalanceSnapshotRow row) => new()
+    {
+        Id = ParseKey(row.Id),
+        Amount = row.Amount,
+        SnapshotDate = ParseDate(row.SnapshotDate),
+        SalaryPeriodStart = ParseDate(row.SalaryPeriodStart),
+        CreatedAtUtc = ParseInstant(row.CreatedAtUtc),
+        Note = row.Note
     };
 
     private static EmergencyFundRow ToRow(EmergencyFund value) => new()
@@ -449,4 +560,53 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         CurrentAmount = row.CurrentAmount,
         PlannedPeriodContribution = row.PlannedPeriodContribution
     };
+
+    private static EmergencyFundTransferRow ToRow(EmergencyFundTransfer value) => new()
+    {
+        Id = Key(value.Id),
+        TransferDate = FormatDate(value.TransferDate),
+        SalaryPeriodStart = FormatDate(value.SalaryPeriodStart),
+        Amount = value.Amount,
+        CoveredPlannedAmount = value.CoveredPlannedAmount,
+        CreatedAtUtc = FormatInstant(value.CreatedAtUtc)
+    };
+
+    private static EmergencyFundTransfer FromRow(EmergencyFundTransferRow row) => new()
+    {
+        Id = ParseKey(row.Id),
+        TransferDate = ParseDate(row.TransferDate),
+        SalaryPeriodStart = ParseDate(row.SalaryPeriodStart),
+        Amount = row.Amount,
+        CoveredPlannedAmount = row.CoveredPlannedAmount,
+        CreatedAtUtc = ParseInstant(row.CreatedAtUtc)
+    };
+
+    private async Task MigrateLegacyCreditCardsAsync()
+    {
+        var cards = await _database.Table<CreditCardRow>().ToListAsync();
+        foreach (var row in cards.Where(x => x.StatementModelVersion < 2))
+        {
+            row.CarriedBalance = row.LastStatementRemaining > 0m
+                ? row.LastStatementRemaining
+                : row.LastStatementDebt;
+            row.UnbilledSpending = row.CurrentCycleSpending;
+            row.BalanceAsOfDate = FormatDate(_migrationDate);
+            row.StatementModelVersion = 2;
+            await _database.UpdateAsync(row);
+
+            if (row.PaymentMode == (int)CreditCardPaymentMode.Manual && row.ManualPaymentAmount is > 0m)
+            {
+                var close = CreditCardProjectionCalculator.ResolveStatementCloseOnOrAfter(
+                    _migrationDate,
+                    row.StatementClosingDay);
+                var due = CreditCardProjectionCalculator.ResolvePaymentDueDate(close, row.PaymentDueDay);
+                await _database.InsertOrReplaceAsync(ToRow(new CreditCardPaymentPlan
+                {
+                    CreditCardId = ParseKey(row.Id),
+                    DueDate = due,
+                    PlannedPaymentAmount = row.ManualPaymentAmount.Value
+                }));
+            }
+        }
+    }
 }

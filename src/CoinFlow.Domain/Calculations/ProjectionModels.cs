@@ -11,8 +11,14 @@ public sealed record FutureMonthProjection(
     decimal PlannedInstallments,
     decimal EmergencyFundContribution,
     decimal TotalObligations,
-    decimal Spendable,
-    IReadOnlyList<string> Highlights);
+    decimal ProjectedSpendable,
+    decimal? ActualRemaining,
+    decimal ProjectedDailyCoin,
+    IReadOnlyList<string> Highlights)
+{
+    public decimal Spendable => ActualRemaining ?? ProjectedSpendable;
+    public bool IsCurrentActual => ActualRemaining is not null;
+}
 
 public enum PurchaseFundingMethod
 {
@@ -33,7 +39,9 @@ public sealed record PurchaseSimulationRequest(
     decimal? TotalRepaymentAmount = null);
 
 public sealed record PurchaseSimulationRow(
-    DateOnly Month,
+    DateOnly PeriodStart,
+    DateOnly PeriodEnd,
+    bool UsesCurrentActual,
     decimal BaselineObligations,
     decimal BaselineSpendable,
     decimal NewPayment,
@@ -51,15 +59,10 @@ public sealed record PurchaseSimulationResult(
     string Explanation,
     IReadOnlyList<PurchaseSimulationRow> Rows);
 
-public sealed class PurchaseSimulationCalculator
+public sealed class PurchaseSimulationCalculator(
+    CreditCardProjectionCalculator cardCalculator,
+    InstallmentScheduleCalculator installmentScheduleCalculator)
 {
-    private readonly CreditCardProjectionCalculator _cardCalculator;
-
-    public PurchaseSimulationCalculator(CreditCardProjectionCalculator cardCalculator)
-    {
-        _cardCalculator = cardCalculator;
-    }
-
     public PurchaseSimulationResult Calculate(
         PurchaseSimulationRequest request,
         IEnumerable<FutureMonthProjection> baseline,
@@ -82,7 +85,7 @@ public sealed class PurchaseSimulationCalculator
             throw new ArgumentOutOfRangeException(nameof(request), "Taksit sayısı 1 ile 120 arasında olmalıdır.");
         }
 
-        if (request.FundingMethod != PurchaseFundingMethod.Cash &&
+        if (request.FundingMethod is PurchaseFundingMethod.CashDebt or PurchaseFundingMethod.BankLoan &&
             request.FirstPaymentDate < request.PurchaseDate)
         {
             throw new InvalidOperationException("İlk ödeme tarihi alışveriş tarihinden önce olamaz.");
@@ -102,21 +105,23 @@ public sealed class PurchaseSimulationCalculator
         PurchaseSimulationRequest request,
         IReadOnlyList<FutureMonthProjection> baseline)
     {
+        var purchaseInHorizon = baseline.Any(row => row.Period.Contains(request.PurchaseDate));
         var rows = baseline.Select(row =>
         {
             var payment = row.Period.Contains(request.PurchaseDate) ? request.TotalAmount : 0m;
-            return CreateRow(row, payment, 0m);
+            var remaining = purchaseInHorizon && row.Period.End > request.PurchaseDate ? 0m : request.TotalAmount;
+            return CreateRow(row, payment, remaining);
         }).ToArray();
 
         return CreateResult(
             request,
             baseline,
             request.TotalAmount,
-            "Alışveriş tutarı, alışveriş tarihini içeren maaş dönemindeki kullanılabilir nakitten tek seferde düşüldü.",
+            "Tutar, alışveriş tarihini içeren maaş döneminde mevcutsa gerçek serbest bakiyeden; gelecek dönemdeyse tahmini serbest bütçeden tek seferde düşüldü.",
             rows);
     }
 
-    private static PurchaseSimulationResult CalculateRepaymentPlan(
+    private PurchaseSimulationResult CalculateRepaymentPlan(
         PurchaseSimulationRequest request,
         IReadOnlyList<FutureMonthProjection> baseline,
         string methodName)
@@ -127,19 +132,21 @@ public sealed class PurchaseSimulationCalculator
             throw new InvalidOperationException("Toplam geri ödeme alışveriş tutarından düşük olamaz.");
         }
 
-        var schedule = BuildSchedule(repaymentTotal, request.InstallmentCount, request.FirstPaymentDate);
+        var schedule = installmentScheduleCalculator.Split(
+            repaymentTotal,
+            request.InstallmentCount,
+            request.FirstPaymentDate);
         var rows = baseline.Select(row =>
         {
-            var payment = schedule.Where(x => row.Period.Contains(x.DueDate)).Sum(x => x.Amount);
-            var paidThroughPeriod = schedule.Where(x => x.DueDate < row.Period.End).Sum(x => x.Amount);
-            var remaining = Math.Max(0m, repaymentTotal - paidThroughPeriod);
-            return CreateRow(row, payment, remaining);
+            var payment = schedule.Where(x => row.Period.Contains(x.Date)).Sum(x => x.Amount);
+            var paidThroughPeriod = schedule.Where(x => x.Date < row.Period.End).Sum(x => x.Amount);
+            return CreateRow(row, payment, Math.Max(0m, repaymentTotal - paidThroughPeriod));
         }).ToArray();
 
         var financingCost = repaymentTotal - request.TotalAmount;
         var explanation = financingCost == 0m
-            ? $"{methodName}, {request.InstallmentCount} eşit geri ödeme halinde mevcut zorunlu ödemelerin üzerine eklendi."
-            : $"{methodName}, girilen faiz ve masraflar dahil toplam geri ödeme ile mevcut zorunlu ödemelerin üzerine eklendi.";
+            ? $"{methodName}, exact ödeme tarihleriyle {request.InstallmentCount} eşit geri ödeme halinde mevcut zorunlu ödemelerin üzerine eklendi."
+            : $"{methodName}, faiz ve masraflar dahil girilen toplam geri ödeme exact tarihlerle mevcut zorunlu ödemelerin üzerine eklendi.";
 
         return CreateResult(request, baseline, repaymentTotal, explanation, rows);
     }
@@ -162,53 +169,25 @@ public sealed class PurchaseSimulationCalculator
             throw new InvalidOperationException("Kartın kullanılabilir limiti bu alışveriş için yetersiz.");
         }
 
-        var firstDueDate = CalendarRules.ResolveDay(
-            baseline[0].Period.Start.Year,
-            baseline[0].Period.Start.Month,
-            card.PaymentDueDay);
-        if (firstDueDate < baseline[0].Period.Start)
-        {
-            firstDueDate = CalendarRules.AddMonthsKeepingDay(firstDueDate, 1, card.PaymentDueDay);
-        }
-
-        var purchaseSchedule = BuildSchedule(request.TotalAmount, request.InstallmentCount, request.FirstPaymentDate);
-        var projectionStartMonth = new DateOnly(firstDueDate.Year, firstDueDate.Month, 1);
-        var firstProjectionChargeMonth = projectionStartMonth;
-        var preProjectionCharges = 0m;
-        var simulatedInstallments = new List<CardInstallment>();
-        foreach (var payment in purchaseSchedule)
-        {
-            var paymentMonth = new DateOnly(payment.DueDate.Year, payment.DueDate.Month, 1);
-            var chargeMonth = paymentMonth.AddMonths(-1);
-            if (chargeMonth < firstProjectionChargeMonth)
-            {
-                preProjectionCharges += payment.Amount;
-                continue;
-            }
-
-            simulatedInstallments.Add(new CardInstallment
+        var simulatedCharges = installmentScheduleCalculator
+            .Split(request.TotalAmount, request.InstallmentCount, request.PurchaseDate)
+            .Select(x => new CardCharge
             {
                 CreditCardId = card.Id,
                 Description = request.Name,
-                DueDate = CalendarRules.ResolveDay(chargeMonth.Year, chargeMonth.Month, card.StatementClosingDay),
-                Amount = payment.Amount
-            });
-        }
-
-        var openingBalance = card.LastStatementRemaining > 0m
-            ? card.LastStatementRemaining
-            : card.LastStatementDebt;
+                PostingDate = x.Date,
+                Amount = x.Amount
+            })
+            .ToArray();
         var scenarioCard = card with
         {
             CurrentTotalDebt = card.CurrentTotalDebt + request.TotalAmount,
-            LastStatementDebt = openingBalance + preProjectionCharges,
-            LastStatementRemaining = openingBalance + preProjectionCharges,
-            FutureInstallments = card.FutureInstallments.Concat(simulatedInstallments).ToArray()
+            Charges = card.Charges.Concat(simulatedCharges).ToArray()
         };
 
-        var projectionMonthCount = Math.Max(14, baseline.Count + 2);
-        var currentProjection = _cardCalculator.Project(card, firstDueDate, projectionMonthCount);
-        var scenarioProjection = _cardCalculator.Project(scenarioCard, firstDueDate, projectionMonthCount);
+        var statementCount = Math.Max(24, baseline.Count + request.InstallmentCount + 4);
+        var currentProjection = cardCalculator.Project(card, statementCount);
+        var scenarioProjection = cardCalculator.Project(scenarioCard, statementCount);
         var paymentDeltas = scenarioProjection
             .Zip(currentProjection, (scenario, current) => new
             {
@@ -225,12 +204,12 @@ public sealed class PurchaseSimulationCalculator
             return CreateRow(row, payment, Math.Max(0m, request.TotalAmount - cumulativePayment));
         }).ToArray();
 
-        var paymentMode = card.PaymentMode == CreditCardPaymentMode.Manual
-            ? "tanımlı manuel ilk ödeme"
-            : "tanımlı asgari ödeme oranı";
-        var explanation = $"{card.Bank} {card.Name} kartının güncel borcu, gelecek taksitleri ve {paymentMode} birlikte hesaplandı. Kart faizi modele dahil değildir.";
-
-        return CreateResult(request, baseline, request.TotalAmount, explanation, rows);
+        return CreateResult(
+            request,
+            baseline,
+            request.TotalAmount,
+            $"{card.Bank} {card.Name} için alışveriş taksitleri exact posting tarihleriyle gerçek ekstre kapanışlarına ve son ödeme tarihlerine dağıtıldı. Faiz ve vergiler dahil değildir.",
+            rows);
     }
 
     private static PurchaseSimulationResult CreateResult(
@@ -238,9 +217,7 @@ public sealed class PurchaseSimulationCalculator
         IReadOnlyList<FutureMonthProjection> baseline,
         decimal repaymentTotal,
         string explanation,
-        IReadOnlyList<PurchaseSimulationRow> rows)
-    {
-        return new PurchaseSimulationResult(
+        IReadOnlyList<PurchaseSimulationRow> rows) => new(
             request.FundingMethod,
             request.TotalAmount,
             repaymentTotal,
@@ -249,37 +226,18 @@ public sealed class PurchaseSimulationCalculator
             rows.Count == 0 ? repaymentTotal : rows[^1].RemainingNewDebt,
             explanation,
             rows);
-    }
 
     private static PurchaseSimulationRow CreateRow(
         FutureMonthProjection row,
         decimal newPayment,
-        decimal remainingNewDebt)
-    {
-        return new PurchaseSimulationRow(
+        decimal remainingNewDebt) => new(
             row.Period.Start,
+            row.Period.End,
+            row.IsCurrentActual,
             row.TotalObligations,
             row.Spendable,
             newPayment,
             row.TotalObligations + newPayment,
             row.Spendable - newPayment,
             remainingNewDebt);
-    }
-
-    private static IReadOnlyList<(DateOnly DueDate, decimal Amount)> BuildSchedule(
-        decimal total,
-        int count,
-        DateOnly firstPaymentDate)
-    {
-        var regular = decimal.Round(total / count, 2, MidpointRounding.AwayFromZero);
-        var paidBeforeLast = regular * (count - 1);
-        var schedule = new List<(DateOnly DueDate, decimal Amount)>(count);
-        for (var index = 0; index < count; index++)
-        {
-            var amount = index == count - 1 ? total - paidBeforeLast : regular;
-            schedule.Add((firstPaymentDate.AddMonths(index), amount));
-        }
-
-        return schedule;
-    }
 }

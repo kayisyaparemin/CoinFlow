@@ -7,53 +7,72 @@
              Title="Özet">
     <RefreshView Command="{Binding LoadCommand}" IsRefreshing="{Binding IsBusy}">
         <ScrollView>
-            <VerticalStackLayout Padding="20,28,20,32" Spacing="16">
+            <VerticalStackLayout Padding="20,28,20,40" Spacing="16">
                 <Label Text="MERHABA" Style="{StaticResource Eyebrow}" />
-                <Grid ColumnDefinitions="*,Auto">
-                    <Label Text="CoinFlow" Style="{StaticResource PageTitle}" />
-                    <Border Grid.Column="1" Padding="12,7" BackgroundColor="{StaticResource Lime}" StrokeThickness="0">
-                        <Label Text="{Binding PeriodText}" FontFamily="OpenSansSemibold" FontSize="11" />
-                    </Border>
-                </Grid>
+                <Label Text="CoinFlow" Style="{StaticResource PageTitle}" />
 
-                <Border BackgroundColor="{StaticResource HeroSurface}" StrokeThickness="0" Padding="20">
-                    <VerticalStackLayout Spacing="7">
-                        <Label Text="BUGÜNÜN SÜRDÜRÜLEBİLİR COIN'İ" Style="{StaticResource Eyebrow}" TextColor="{StaticResource PrimaryDeep}" />
-                        <Label Text="{Binding DailyCoin}" Style="{StaticResource HeroNumber}" TextColor="{StaticResource PrimaryDeep}" />
-                        <Label Text="{Binding Encouragement}" TextColor="{StaticResource InkSoft}" FontSize="13" />
-                        <ProgressBar Progress="{Binding Progress}" Margin="0,8,0,0" />
+                <Border IsVisible="{Binding NeedsSnapshot}" BackgroundColor="{StaticResource SoftPink}" StrokeThickness="0">
+                    <VerticalStackLayout Spacing="5">
+                        <Label Text="Gerçek bakiyeni birlikte başlatalım" Style="{StaticResource SectionTitle}" />
+                        <Label Text="Şu anda zorunlu ödemelerin dışında harcayabileceğin serbest parayı aşağıya gir. Bu banka hesabının toplam bakiyesi değildir." Style="{StaticResource MutedText}" />
                     </VerticalStackLayout>
                 </Border>
 
-                <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
-                    <Border BackgroundColor="{StaticResource Mint}" StrokeThickness="0">
-                        <VerticalStackLayout Spacing="4">
-                            <Label Text="COIN HAVUZU" Style="{StaticResource Eyebrow}" />
-                            <Label Text="{Binding CoinPool}" FontFamily="OpenSansSemibold" FontSize="22" />
-                        </VerticalStackLayout>
-                    </Border>
-                    <Border Grid.Column="1" BackgroundColor="{StaticResource Sun}" StrokeThickness="0">
-                        <VerticalStackLayout Spacing="4">
-                            <Label Text="MAAŞA KALAN" Style="{StaticResource Eyebrow}" />
-                            <Label Text="{Binding DaysRemaining}" FontFamily="OpenSansSemibold" FontSize="22" />
-                        </VerticalStackLayout>
-                    </Border>
-                </Grid>
+                <Label Text="ŞU AN" Style="{StaticResource Eyebrow}" />
+                <Border BackgroundColor="{StaticResource HeroSurface}" StrokeThickness="0" Padding="20">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="SERBEST PARA" Style="{StaticResource Eyebrow}" TextColor="{StaticResource PrimaryDeep}" />
+                        <Label Text="{Binding CurrentAvailable}" Style="{StaticResource HeroNumber}" TextColor="{StaticResource PrimaryDeep}" />
+                        <Label Text="{Binding CurrentPeriodText}" Style="{StaticResource MutedText}" />
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="10" Margin="0,6,0,0">
+                            <VerticalStackLayout>
+                                <Label Text="MAAŞA" Style="{StaticResource Eyebrow}" />
+                                <Label Text="{Binding DaysRemaining}" FontFamily="OpenSansSemibold" FontSize="22" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Column="1">
+                                <Label Text="DAILY REWARD" Style="{StaticResource Eyebrow}" />
+                                <Label Text="{Binding DailyReward}" FontFamily="OpenSansSemibold" FontSize="22" />
+                            </VerticalStackLayout>
+                        </Grid>
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                            <VerticalStackLayout>
+                                <Label Text="SÜRDÜRÜLEBİLİR COIN" Style="{StaticResource Eyebrow}" />
+                                <Label Text="{Binding SustainableDaily}" FontFamily="OpenSansSemibold" FontSize="20" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Column="1">
+                                <Label Text="COIN HAVUZU" Style="{StaticResource Eyebrow}" />
+                                <Label Text="{Binding CoinPool}" FontFamily="OpenSansSemibold" FontSize="20" />
+                            </VerticalStackLayout>
+                        </Grid>
+                        <Label Text="{Binding Encouragement}" TextColor="{StaticResource InkSoft}" FontSize="13" />
+                        <ProgressBar Progress="{Binding Progress}" />
+                    </VerticalStackLayout>
+                </Border>
 
+                <Border BackgroundColor="{StaticResource SoftSky}" StrokeThickness="0">
+                    <VerticalStackLayout Spacing="8">
+                        <Label Text="Serbest bakiyeyi düzelt" Style="{StaticResource SectionTitle}" />
+                        <Label Text="Bu tarih itibarıyla zorunlu ödemeler ayrıldıktan sonra gerçekten harcayabileceğin tutar." Style="{StaticResource MutedText}" />
+                        <Entry Text="{Binding CorrectionAmount}" Placeholder="Şu an harcanabilir para" Keyboard="Numeric" />
+                        <DatePicker Date="{Binding CorrectionDate}" Format="dd.MM.yyyy" />
+                        <Entry Text="{Binding CorrectionNote}" Placeholder="Not (opsiyonel)" />
+                        <Button Text="Serbest bakiyeyi kaydet" Command="{Binding CorrectBalanceCommand}" Style="{StaticResource SecondaryButton}" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <Label Text="SONRAKİ MAAŞ DÖNEMİ" Style="{StaticResource Eyebrow}" Margin="0,8,0,0" />
                 <Border>
-                    <VerticalStackLayout Spacing="12">
-                        <Label Text="Dönem görünümü" Style="{StaticResource SectionTitle}" />
-                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="10">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="{Binding NextPeriodText}" Style="{StaticResource SectionTitle}" />
+                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="9">
                             <Label Text="Maaş" Style="{StaticResource MutedText}" />
-                            <Label Grid.Column="1" Text="{Binding Salary}" FontFamily="OpenSansSemibold" />
-                            <Label Grid.Row="1" Text="Zorunlu ödemeler" Style="{StaticResource MutedText}" />
-                            <Label Grid.Row="1" Grid.Column="1" Text="{Binding Obligations}" FontFamily="OpenSansSemibold" />
-                            <Label Grid.Row="2" Text="Dönem bütçesi" Style="{StaticResource MutedText}" />
-                            <Label Grid.Row="2" Grid.Column="1" Text="{Binding PeriodBudget}" FontFamily="OpenSansSemibold" />
-                            <Label Grid.Row="3" Text="Bugüne kadar harcama" Style="{StaticResource MutedText}" />
-                            <Label Grid.Row="3" Grid.Column="1" Text="{Binding Spent}" FontFamily="OpenSansSemibold" />
-                            <Label Grid.Row="4" Text="Kalan" Style="{StaticResource MutedText}" />
-                            <Label Grid.Row="4" Grid.Column="1" Text="{Binding Remaining}" FontFamily="OpenSansSemibold" TextColor="{StaticResource MintStrong}" />
+                            <Label Grid.Column="1" Text="{Binding NextSalary}" FontFamily="OpenSansSemibold" />
+                            <Label Grid.Row="1" Text="Beklenen zorunlu ödemeler" Style="{StaticResource MutedText}" />
+                            <Label Grid.Row="1" Grid.Column="1" Text="{Binding NextObligations}" FontFamily="OpenSansSemibold" />
+                            <Label Grid.Row="2" Text="Tahmini serbest bütçe" Style="{StaticResource MutedText}" />
+                            <Label Grid.Row="2" Grid.Column="1" Text="{Binding NextBudget}" FontFamily="OpenSansSemibold" TextColor="{StaticResource MintStrong}" />
+                            <Label Grid.Row="3" Text="Tahmini başlangıç Daily Coin" Style="{StaticResource MutedText}" />
+                            <Label Grid.Row="3" Grid.Column="1" Text="{Binding NextDailyCoin}" FontFamily="OpenSansSemibold" />
                         </Grid>
                     </VerticalStackLayout>
                 </Border>
@@ -62,9 +81,17 @@
                     <VerticalStackLayout Spacing="7">
                         <Label Text="ACİL DURUM TAMPONU" Style="{StaticResource Eyebrow}" />
                         <Label Text="{Binding EmergencyFund}" FontFamily="OpenSansSemibold" FontSize="18" />
-                        <Label Text="Tampon günlük harcama bütçesine dahil edilmez." Style="{StaticResource MutedText}" />
+                        <Label Text="Planlanan katkı zorunlu ödemede bir kez rezerve edilir." Style="{StaticResource MutedText}" />
                     </VerticalStackLayout>
                 </Border>
+
+                <Border IsVisible="{Binding IsDevelopment}" BackgroundColor="{StaticResource SoftLavender}" StrokeThickness="0">
+                    <VerticalStackLayout Spacing="7">
+                        <Label Text="HESAP DETAYLARI • DEVELOPMENT" Style="{StaticResource Eyebrow}" />
+                        <Label Text="{Binding CalculationDetails}" FontSize="12" />
+                    </VerticalStackLayout>
+                </Border>
+
                 <Label Text="{Binding StatusMessage}" TextColor="{StaticResource Error}" IsVisible="{Binding HasStatus}" />
             </VerticalStackLayout>
         </ScrollView>

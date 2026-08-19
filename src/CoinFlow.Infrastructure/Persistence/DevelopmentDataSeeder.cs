@@ -36,7 +36,7 @@ internal static class DevelopmentDataSeeder
         }
 
         var cardId = Guid.NewGuid();
-        var cardInstallments = new[]
+        var cardCharges = new[]
         {
             (new DateOnly(2026, 9, 28), 15_538.36m),
             (new DateOnly(2026, 10, 30), 9_102.90m),
@@ -50,25 +50,33 @@ internal static class DevelopmentDataSeeder
             Name = "Axess",
             Bank = "Akbank",
             Limit = 200_000m,
-            CurrentTotalDebt = statementRemaining + cycleSpending + cardInstallments.Sum(x => x.Item2),
-            LastStatementDebt = statementRemaining,
-            LastStatementRemaining = statementRemaining,
-            CurrentCycleSpending = cycleSpending,
+            CurrentTotalDebt = statementRemaining + cycleSpending + cardCharges.Sum(x => x.Item2),
+            CarriedBalance = statementRemaining,
+            UnbilledSpending = cycleSpending,
+            BalanceAsOfDate = new DateOnly(2026, 8, 19),
             StatementClosingDay = 25,
             PaymentDueDay = 5,
-            MinimumPaymentRate = 0.40m,
-            PaymentMode = CreditCardPaymentMode.Minimum
+            MinimumPaymentRate = 0.40m
         };
         await database.InsertAsync(SqliteCoinFlowStore.ToRow(card));
-        foreach (var (date, amount) in cardInstallments)
+        foreach (var (date, amount) in cardCharges)
         {
-            await database.InsertAsync(SqliteCoinFlowStore.ToRow(new CardInstallment
+            await database.InsertAsync(SqliteCoinFlowStore.ToRow(new CardCharge
             {
                 CreditCardId = cardId,
                 Description = "Gelecek dönem taksiti",
-                DueDate = date,
+                PostingDate = date,
                 Amount = amount
             }));
         }
+
+        await database.InsertAsync(SqliteCoinFlowStore.ToRow(new SpendableBalanceSnapshot
+        {
+            Amount = 11_000m,
+            SnapshotDate = new DateOnly(2026, 8, 19),
+            SalaryPeriodStart = new DateOnly(2026, 8, 10),
+            CreatedAtUtc = new DateTimeOffset(2026, 8, 19, 12, 0, 0, TimeSpan.Zero),
+            Note = "Development current actual örneği"
+        }));
     }
 }

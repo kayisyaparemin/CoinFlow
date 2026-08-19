@@ -44,8 +44,7 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
     [ObservableProperty] private string closingDay = "25";
     [ObservableProperty] private string dueDay = "5";
     [ObservableProperty] private string minimumRate = "40";
-    [ObservableProperty] private bool useManualPayment;
-    [ObservableProperty] private string manualPayment = string.Empty;
+    [ObservableProperty] private string manualPaymentPlans = string.Empty;
     [ObservableProperty] private string futureCardInstallments = string.Empty;
 
     public async Task LoadAsync()
@@ -76,7 +75,11 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
         }
         foreach (var card in data.CreditCards)
         {
-            Items.Add(new SummaryLine($"{card.Bank} {card.Name}".Trim(), $"Son ödeme: ayın {card.PaymentDueDay}. günü", Money(card.CurrentTotalDebt), card.PaymentMode == CreditCardPaymentMode.Minimum ? $"%{card.MinimumPaymentRate * 100:N0} asgari" : "Manuel"));
+            Items.Add(new SummaryLine(
+                $"{card.Bank} {card.Name}".Trim(),
+                $"Kesim {card.StatementClosingDay} • Son ödeme {card.PaymentDueDay}",
+                Money(card.CurrentTotalDebt),
+                $"%{card.MinimumPaymentRate * 100:N0} asgari • faiz/vergiler hariç"));
         }
     }
 
@@ -175,7 +178,15 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
     {
         var cardId = Guid.NewGuid();
         var future = ParseDatedAmounts(FutureCardInstallments, allowEmpty: true)
-            .Select(x => new CardInstallment { CreditCardId = cardId, Description = "Kart taksiti", DueDate = x.Date, Amount = x.Amount })
+            .Select(x => new CardCharge { CreditCardId = cardId, Description = "Kart taksiti", PostingDate = x.Date, Amount = x.Amount })
+            .ToArray();
+        var manualPayments = ParseDatedAmounts(ManualPaymentPlans, allowEmpty: true)
+            .Select(x => new CreditCardPaymentPlan
+            {
+                CreditCardId = cardId,
+                DueDate = x.Date,
+                PlannedPaymentAmount = x.Amount
+            })
             .ToArray();
         var rate = ParseMoney(MinimumRate, "Asgari oran") / 100m;
         if (rate is < 0m or > 1m)
@@ -197,15 +208,13 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
             Bank = Bank.Trim(),
             Limit = RequirePositive(ParseMoney(CardLimit, "Kart limiti"), "Kart limiti"),
             CurrentTotalDebt = 0m,
-            LastStatementDebt = 0m,
-            LastStatementRemaining = statementRemaining,
-            CurrentCycleSpending = cycleSpending,
+            CarriedBalance = statementRemaining,
+            UnbilledSpending = cycleSpending,
             StatementClosingDay = ParseDay(ClosingDay, "Kesim günü"),
             PaymentDueDay = ParseDay(DueDay, "Son ödeme günü"),
             MinimumPaymentRate = rate,
-            PaymentMode = UseManualPayment ? CreditCardPaymentMode.Manual : CreditCardPaymentMode.Minimum,
-            ManualPaymentAmount = UseManualPayment ? RequirePositive(ParseMoney(ManualPayment, "Manuel ödeme"), "Manuel ödeme") : null,
-            FutureInstallments = future
+            Charges = future,
+            PaymentPlans = manualPayments
         });
     }
 
@@ -230,8 +239,7 @@ public partial class CommitmentsViewModel(CoinFlowService service) : ViewModelBa
         ClosingDay = "25";
         DueDay = "5";
         MinimumRate = "40";
-        UseManualPayment = false;
-        ManualPayment = string.Empty;
+        ManualPaymentPlans = string.Empty;
         FutureCardInstallments = string.Empty;
     }
 

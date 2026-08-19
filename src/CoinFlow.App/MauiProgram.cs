@@ -30,10 +30,19 @@ public static class MauiProgram
 #endif
         var databasePath = Path.Combine(FileSystem.AppDataDirectory, "coinflow.db3");
         builder.Services.AddSingleton<ICoinFlowStore>(
-            _ => new SqliteCoinFlowStore(databasePath, seedDevelopmentData));
+            services => new SqliteCoinFlowStore(
+                databasePath,
+                seedDevelopmentData,
+                services.GetRequiredService<IClock>().Today));
         builder.Services.AddSingleton<SalaryPeriodCalculator>();
+        builder.Services.AddSingleton<LoanScheduleCalculator>();
+        builder.Services.AddSingleton<InstallmentScheduleCalculator>();
+        builder.Services.AddSingleton<SpendableBalanceCalculator>();
         builder.Services.AddSingleton<DailyCoinCalculator>();
         builder.Services.AddSingleton<CreditCardProjectionCalculator>();
+        builder.Services.AddSingleton<MandatoryPaymentCalculator>();
+        builder.Services.AddSingleton<EmergencyFundCalculator>();
+        builder.Services.AddSingleton<FinancialProjectionService>();
         builder.Services.AddSingleton<PurchaseSimulationCalculator>();
         builder.Services.AddSingleton<CoinFlowService>();
 
