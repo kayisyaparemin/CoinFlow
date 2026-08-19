@@ -7,17 +7,24 @@ public sealed class AppShell : Shell
     public AppShell(IServiceProvider services)
     {
         FlyoutBehavior = FlyoutBehavior.Flyout;
-        FlyoutHeaderBehavior = FlyoutHeaderBehavior.CollapseOnScroll;
         Shell.SetNavBarIsVisible(this, true);
 
-        FlyoutHeader = CreateFlyoutHeader();
+        var menuItems = new[]
+        {
+            (Title: "Özet", ColorKey: "SoftPink", Item: CreateFlyoutItem("Özet", "dashboard", () => services.GetRequiredService<MainPage>())),
+            (Title: "Harcama ekle", ColorKey: "SoftPeach", Item: CreateFlyoutItem("Harcama ekle", "expense", () => services.GetRequiredService<ExpensePage>())),
+            (Title: "Planlar ve borçlar", ColorKey: "SoftYellow", Item: CreateFlyoutItem("Planlar ve borçlar", "commitments", () => services.GetRequiredService<CommitmentsPage>())),
+            (Title: "Önündeki 12 ay", ColorKey: "SoftSky", Item: CreateFlyoutItem("Önündeki 12 ay", "future-months", () => services.GetRequiredService<FutureMonthsPage>())),
+            (Title: "Simülasyon", ColorKey: "SoftLavender", Item: CreateFlyoutItem("Simülasyon", "simulation", () => services.GetRequiredService<SimulationPage>())),
+            (Title: "Ayarlar", ColorKey: "SoftPink", Item: CreateFlyoutItem("Ayarlar", "settings", () => services.GetRequiredService<SettingsPage>()))
+        };
 
-        Items.Add(CreateFlyoutItem("Özet", "dashboard", () => services.GetRequiredService<MainPage>()));
-        Items.Add(CreateFlyoutItem("Harcama ekle", "expense", () => services.GetRequiredService<ExpensePage>()));
-        Items.Add(CreateFlyoutItem("Planlar ve borçlar", "commitments", () => services.GetRequiredService<CommitmentsPage>()));
-        Items.Add(CreateFlyoutItem("Önündeki 12 ay", "future-months", () => services.GetRequiredService<FutureMonthsPage>()));
-        Items.Add(CreateFlyoutItem("Simülasyon", "simulation", () => services.GetRequiredService<SimulationPage>()));
-        Items.Add(CreateFlyoutItem("Ayarlar", "settings", () => services.GetRequiredService<SettingsPage>()));
+        foreach (var menuItem in menuItems)
+        {
+            Items.Add(menuItem.Item);
+        }
+
+        FlyoutContent = CreateFlyoutContent(menuItems);
     }
 
     private static FlyoutItem CreateFlyoutItem(string title, string route, Func<Page> factory)
@@ -39,7 +46,8 @@ public sealed class AppShell : Shell
         return item;
     }
 
-    private static View CreateFlyoutHeader()
+    private View CreateFlyoutContent(
+        IEnumerable<(string Title, string ColorKey, FlyoutItem Item)> menuItems)
     {
         var title = new Label
         {
@@ -57,14 +65,62 @@ public sealed class AppShell : Shell
         };
         subtitle.SetDynamicResource(Label.TextColorProperty, "Muted");
 
-        var content = new VerticalStackLayout
+        var header = new VerticalStackLayout
         {
-            Padding = new Thickness(22, 36, 22, 20),
+            Padding = new Thickness(22, 34, 22, 22),
             Spacing = 3,
             Children = { title, subtitle }
         };
-        content.SetDynamicResource(VisualElement.BackgroundColorProperty, "FlyoutHeaderSurface");
+        header.SetDynamicResource(VisualElement.BackgroundColorProperty, "SoftPink");
 
-        return content;
+        var menu = new VerticalStackLayout
+        {
+            Padding = new Thickness(18, 20),
+            Spacing = 10
+        };
+
+        foreach (var menuItem in menuItems)
+        {
+            var button = new Button
+            {
+                Text = menuItem.Title,
+                FontFamily = "OpenSansSemibold",
+                FontSize = 15,
+                CornerRadius = 16,
+                MinimumHeightRequest = 54,
+                HorizontalOptions = LayoutOptions.Fill
+            };
+            button.SetDynamicResource(Button.BackgroundColorProperty, menuItem.ColorKey);
+            button.SetDynamicResource(Button.TextColorProperty, "Ink");
+            button.Clicked += (_, _) =>
+            {
+                CurrentItem = menuItem.Item;
+                FlyoutIsPresented = false;
+            };
+            menu.Children.Add(button);
+        }
+
+        var offlineNote = new Label
+        {
+            Text = "Tamamen çevrimdışı • Veriler cihazında",
+            FontFamily = "OpenSansRegular",
+            FontSize = 11,
+            HorizontalTextAlignment = TextAlignment.Center,
+            Margin = new Thickness(0, 8, 0, 0)
+        };
+        offlineNote.SetDynamicResource(Label.TextColorProperty, "Muted");
+        menu.Children.Add(offlineNote);
+
+        var root = new Grid();
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Star });
+        root.SetDynamicResource(VisualElement.BackgroundColorProperty, "SoftYellow");
+        root.Children.Add(header);
+
+        var scrollView = new ScrollView { Content = menu };
+        Grid.SetRow(scrollView, 1);
+        root.Children.Add(scrollView);
+
+        return root;
     }
 }

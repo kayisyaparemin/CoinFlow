@@ -2,20 +2,29 @@
 <?xaml-comp compile="true" ?>
 <ResourceDictionary xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml">
-    <Color x:Key="Ink">#2F3D38</Color>
-    <Color x:Key="InkSoft">#53635D</Color>
-    <Color x:Key="Canvas">#F7F8F6</Color>
-    <Color x:Key="Surface">#FFFFFF</Color>
-    <Color x:Key="HeroSurface">#E8F0EC</Color>
-    <Color x:Key="FlyoutHeaderSurface">#F1F5F2</Color>
-    <Color x:Key="Mint">#DCEBE3</Color>
-    <Color x:Key="MintStrong">#527F6B</Color>
-    <Color x:Key="PrimaryDeep">#365D4D</Color>
-    <Color x:Key="Lime">#EEF3DF</Color>
-    <Color x:Key="Sun">#F6E9CC</Color>
-    <Color x:Key="SoftBlue">#E8EEF3</Color>
-    <Color x:Key="Line">#E2E7E4</Color>
-    <Color x:Key="Muted">#707D78</Color>
-    <Color x:Key="Error">#A95353</Color>
-    <Color x:Key="White">#FFFFFF</Color>
+    <!-- Gönderilen görseldeki SOFT paleti -->
+    <Color x:Key="SoftPink">#FFCABF</Color>
+    <Color x:Key="SoftPeach">#FFE4BF</Color>
+    <Color x:Key="SoftYellow">#FFFACF</Color>
+    <Color x:Key="SoftSky">#BFEAFF</Color>
+    <Color x:Key="SoftLavender">#BFCFFF</Color>
+
+    <!-- Saf siyah kullanılmadan okunabilir metin tonları -->
+    <Color x:Key="Ink">#585762</Color>
+    <Color x:Key="InkSoft">#716F79</Color>
+    <Color x:Key="Muted">#7E7A83</Color>
+    <Color x:Key="Error">#936E76</Color>
+
+    <Color x:Key="Canvas">#FFFACF</Color>
+    <Color x:Key="Surface">#FFE4BF</Color>
+    <Color x:Key="HeroSurface">#BFCFFF</Color>
+    <Color x:Key="FlyoutHeaderSurface">#FFCABF</Color>
+    <Color x:Key="Mint">#BFEAFF</Color>
+    <Color x:Key="MintStrong">#6C6B78</Color>
+    <Color x:Key="PrimaryDeep">#585762</Color>
+    <Color x:Key="Lime">#FFCABF</Color>
+    <Color x:Key="Sun">#FFE4BF</Color>
+    <Color x:Key="SoftBlue">#BFEAFF</Color>
+    <Color x:Key="Line">#BFCFFF</Color>
+    <Color x:Key="White">#FFFACF</Color>
 </ResourceDictionary>

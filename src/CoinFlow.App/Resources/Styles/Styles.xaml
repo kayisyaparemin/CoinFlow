@@ -47,29 +47,29 @@
         <Setter Property="StrokeShape" Value="RoundRectangle 18" />
     </Style>
     <Style TargetType="Entry">
-        <Setter Property="BackgroundColor" Value="{StaticResource Surface}" />
+        <Setter Property="BackgroundColor" Value="{StaticResource SoftYellow}" />
         <Setter Property="TextColor" Value="{StaticResource Ink}" />
         <Setter Property="PlaceholderColor" Value="{StaticResource Muted}" />
         <Setter Property="MinimumHeightRequest" Value="48" />
     </Style>
     <Style TargetType="Editor">
-        <Setter Property="BackgroundColor" Value="{StaticResource Surface}" />
+        <Setter Property="BackgroundColor" Value="{StaticResource SoftYellow}" />
         <Setter Property="TextColor" Value="{StaticResource Ink}" />
         <Setter Property="PlaceholderColor" Value="{StaticResource Muted}" />
     </Style>
     <Style TargetType="Picker">
-        <Setter Property="BackgroundColor" Value="{StaticResource Surface}" />
+        <Setter Property="BackgroundColor" Value="{StaticResource SoftYellow}" />
         <Setter Property="TextColor" Value="{StaticResource Ink}" />
         <Setter Property="TitleColor" Value="{StaticResource Muted}" />
         <Setter Property="MinimumHeightRequest" Value="48" />
     </Style>
     <Style TargetType="DatePicker">
-        <Setter Property="BackgroundColor" Value="{StaticResource Surface}" />
+        <Setter Property="BackgroundColor" Value="{StaticResource SoftYellow}" />
         <Setter Property="TextColor" Value="{StaticResource Ink}" />
         <Setter Property="MinimumHeightRequest" Value="48" />
     </Style>
     <Style TargetType="Button">
-        <Setter Property="BackgroundColor" Value="{StaticResource Mint}" />
+        <Setter Property="BackgroundColor" Value="{StaticResource SoftLavender}" />
         <Setter Property="TextColor" Value="{StaticResource PrimaryDeep}" />
         <Setter Property="FontFamily" Value="OpenSansSemibold" />
         <Setter Property="CornerRadius" Value="14" />
@@ -77,26 +77,26 @@
         <Setter Property="Padding" Value="18,12" />
     </Style>
     <Style x:Key="SecondaryButton" TargetType="Button">
-        <Setter Property="BackgroundColor" Value="{StaticResource SoftBlue}" />
+        <Setter Property="BackgroundColor" Value="{StaticResource SoftSky}" />
         <Setter Property="TextColor" Value="{StaticResource Ink}" />
     </Style>
     <Style TargetType="Switch">
-        <Setter Property="OnColor" Value="{StaticResource MintStrong}" />
-        <Setter Property="ThumbColor" Value="{StaticResource White}" />
+        <Setter Property="OnColor" Value="{StaticResource SoftLavender}" />
+        <Setter Property="ThumbColor" Value="{StaticResource SoftYellow}" />
     </Style>
     <Style TargetType="ProgressBar">
-        <Setter Property="ProgressColor" Value="{StaticResource MintStrong}" />
-        <Setter Property="BackgroundColor" Value="{StaticResource Line}" />
+        <Setter Property="ProgressColor" Value="{StaticResource SoftPink}" />
+        <Setter Property="BackgroundColor" Value="{StaticResource SoftPeach}" />
         <Setter Property="HeightRequest" Value="8" />
     </Style>
     <Style TargetType="ActivityIndicator">
-        <Setter Property="Color" Value="{StaticResource MintStrong}" />
+        <Setter Property="Color" Value="{StaticResource InkSoft}" />
     </Style>
     <Style TargetType="Shell">
-        <Setter Property="Shell.BackgroundColor" Value="{StaticResource Surface}" />
+        <Setter Property="Shell.BackgroundColor" Value="{StaticResource SoftPink}" />
         <Setter Property="Shell.ForegroundColor" Value="{StaticResource PrimaryDeep}" />
         <Setter Property="Shell.TitleColor" Value="{StaticResource Ink}" />
         <Setter Property="Shell.UnselectedColor" Value="{StaticResource Muted}" />
-        <Setter Property="Shell.FlyoutBackgroundColor" Value="{StaticResource Surface}" />
+        <Setter Property="Shell.FlyoutBackgroundColor" Value="{StaticResource SoftYellow}" />
     </Style>
 </ResourceDictionary>
