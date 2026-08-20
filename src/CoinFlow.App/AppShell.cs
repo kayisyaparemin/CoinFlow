@@ -4,8 +4,13 @@ namespace CoinFlow.App;
 
 public sealed class AppShell : Shell
 {
+    public const string PeriodDetailRoute = "salary-period-detail";
+
     public AppShell(IServiceProvider services)
     {
+        Routing.RegisterRoute(
+            PeriodDetailRoute,
+            typeof(SalaryPeriodDetailPage));
         FlyoutBehavior = FlyoutBehavior.Flyout;
         Shell.SetNavBarIsVisible(this, true);
 

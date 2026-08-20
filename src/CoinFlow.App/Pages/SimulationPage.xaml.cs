@@ -16,7 +16,10 @@ public partial class SimulationPage : ContentPage
     protected override async void OnAppearing()
     {
         base.OnAppearing();
-        await _viewModel.LoadAsync();
+        if (!_viewModel.ConsumeDetailReturn())
+        {
+            await _viewModel.LoadAsync();
+        }
     }
 
     private async void OnApplyPlanClicked(object? sender, EventArgs eventArgs)

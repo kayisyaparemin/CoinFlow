@@ -39,6 +39,7 @@ public partial class SimulationViewModel(
 
     private SimulationRequest? _lastRequest;
     private readonly SemaphoreSlim _applyLock = new(1, 1);
+    private bool _preserveOnNextAppearance;
 
     [ObservableProperty] private string name = "Beyaz eşya";
     [ObservableProperty] private string amount = "120000";
@@ -168,6 +169,37 @@ public partial class SimulationViewModel(
     [RelayCommand]
     private Task OpenCommitmentsAsync() =>
         Shell.Current.GoToAsync("//commitments/commitments-content");
+
+    [RelayCommand]
+    private async Task OpenPeriodDetailAsync(SimulationLine? line)
+    {
+        if (line is null)
+        {
+            return;
+        }
+
+        await Shell.Current.GoToAsync(
+            AppShell.PeriodDetailRoute,
+            new ShellNavigationQueryParameters
+            {
+                [SalaryPeriodDetailViewModel.DetailQueryKey] =
+                    new SalaryPeriodDetailRequest(
+                        line.Impact.Scenario,
+                        line.Impact.Baseline)
+            });
+        _preserveOnNextAppearance = true;
+    }
+
+    public bool ConsumeDetailReturn()
+    {
+        if (!_preserveOnNextAppearance)
+        {
+            return false;
+        }
+
+        _preserveOnNextAppearance = false;
+        return true;
+    }
 
     partial void OnSelectedScenarioTypeChanged(
         SelectionOption<SimulationScenarioType>? value)
@@ -466,19 +498,15 @@ public partial class SimulationViewModel(
         foreach (var row in result.Rows)
         {
             Results.Add(new SimulationLine(
+                row,
                 SalaryText(row.Scenario.PeriodStart),
+                AssignmentText(row.Scenario),
                 Money(row.Baseline.EndingProjectedSavings),
                 Money(row.Scenario.EndingProjectedSavings),
-                Money(row.ProjectedSavingsDifference),
-                Money(row.Scenario.AvailableAfterMandatory),
-                Money(-row.Scenario.CarryOverDeficit),
-                Money(row.Scenario.AvailableAfterCarryOverDeficit),
-                row.Scenario.HasCarryOverDeficit,
-                Money(row.Scenario.EstimatedSavingsCapacity),
-                Money(row.Scenario.CardInterestGenerated),
-                Money(row.Scenario.DeficitFinancingInterest),
-                Money(row.Scenario.TotalInterestGenerated),
-                row.Scenario.TotalInterestGenerated > 0m));
+                SignedMoney(row.ProjectedSavingsDifference),
+                row.ProjectedSavingsDifference < 0m,
+                SignedMoney(row.InterestDifference),
+                row.InterestDifference != 0m));
         }
     }
 
@@ -489,4 +517,20 @@ public partial class SimulationViewModel(
         mode == PaymentAssignmentMode.PreviousPeriod
             ? "Maaş kullanımı: Geçmiş dönemi kapatırım"
             : "Maaş kullanımı: Gelecek dönemi karşılarım";
+
+    private static string AssignmentText(SalaryPeriodProjection row)
+    {
+        var action = row.PaymentAssignmentMode ==
+                     PaymentAssignmentMode.PreviousPeriod
+            ? "ödemelerini kapatır"
+            : "ödemelerini karşılar";
+        return $"{row.PaymentWindowStart.ToString("dd MMM", TurkishCulture)}–" +
+               $"{row.PaymentWindowEnd.ToString("dd MMM", TurkishCulture)} {action}";
+    }
+
+    private static string SignedMoney(decimal value)
+    {
+        var formatted = Money(value);
+        return value > 0m ? $"+{formatted}" : formatted;
+    }
 }

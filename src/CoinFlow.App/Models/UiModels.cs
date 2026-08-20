@@ -1,6 +1,5 @@
 using System.Globalization;
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
+using CoinFlow.Domain.Calculations;
 using CoinFlow.Domain.Models;
 
 namespace CoinFlow.App.Models;
@@ -82,76 +81,45 @@ public sealed record StrategyHistoryLine(
     string Note,
     bool IsFuture);
 
-public partial class ProjectionLine(
+public sealed class ProjectionLine(
+    SalaryPeriodProjection projection,
     string period,
     string assignment,
     string availableAfterMandatory,
     string carryOverDeficit,
-    string availableAfterCarryOverDeficit,
     bool hasCarryOverDeficit,
-    string livingBudget,
-    string plannedLargeCashExpenses,
-    bool hasPlannedLargeCashExpenses,
     string estimatedSavings,
-    string endingBeforeDeficitInterest,
-    string cardInterest,
-    string deficitInterest,
     string totalInterest,
-    string interestLabel,
     bool hasInterest,
     string endingProjectedSavings,
-    string carryOverMessage,
-    string breakdown,
-    string notice,
-    bool hasNotice) : ObservableObject
+    string beforeSalaryWarning,
+    bool hasBeforeSalaryWarning,
+    bool hasEstimatedPayment,
+    bool hasUndeterminedPayment)
 {
+    public SalaryPeriodProjection Projection { get; } = projection;
     public string Period { get; } = period;
     public string Assignment { get; } = assignment;
     public string AvailableAfterMandatory { get; } = availableAfterMandatory;
     public string CarryOverDeficit { get; } = carryOverDeficit;
-    public string AvailableAfterCarryOverDeficit { get; } =
-        availableAfterCarryOverDeficit;
     public bool HasCarryOverDeficit { get; } = hasCarryOverDeficit;
-    public string LivingBudget { get; } = livingBudget;
-    public string PlannedLargeCashExpenses { get; } =
-        plannedLargeCashExpenses;
-    public bool HasPlannedLargeCashExpenses { get; } =
-        hasPlannedLargeCashExpenses;
     public string EstimatedSavings { get; } = estimatedSavings;
-    public string EndingBeforeDeficitInterest { get; } =
-        endingBeforeDeficitInterest;
-    public string CardInterest { get; } = cardInterest;
-    public string DeficitInterest { get; } = deficitInterest;
     public string TotalInterest { get; } = totalInterest;
-    public string InterestLabel { get; } = interestLabel;
     public bool HasInterest { get; } = hasInterest;
     public string EndingProjectedSavings { get; } = endingProjectedSavings;
-    public string CarryOverMessage { get; } = carryOverMessage;
-    public string Breakdown { get; } = breakdown;
-    public string Notice { get; } = notice;
-    public bool HasNotice { get; } = hasNotice;
-
-    [ObservableProperty] private bool isExpanded;
-    public bool IsCollapsed => !IsExpanded;
-
-    partial void OnIsExpandedChanged(bool value) =>
-        OnPropertyChanged(nameof(IsCollapsed));
-
-    [RelayCommand]
-    private void Toggle() => IsExpanded = !IsExpanded;
+    public string BeforeSalaryWarning { get; } = beforeSalaryWarning;
+    public bool HasBeforeSalaryWarning { get; } = hasBeforeSalaryWarning;
+    public bool HasEstimatedPayment { get; } = hasEstimatedPayment;
+    public bool HasUndeterminedPayment { get; } = hasUndeterminedPayment;
 }
 
 public sealed record SimulationLine(
+    SimulationImpactRow Impact,
     string Period,
+    string Assignment,
     string BaselineSavings,
     string ScenarioSavings,
     string Difference,
-    string AvailableAfterMandatory,
-    string CarryOverDeficit,
-    string AvailableAfterCarryOverDeficit,
-    bool HasCarryOverDeficit,
-    string SavingsCapacity,
-    string CardInterest,
-    string DeficitInterest,
-    string TotalInterest,
-    bool HasInterest);
+    bool DifferenceIsNegative,
+    string InterestDifference,
+    bool HasInterestDifference);

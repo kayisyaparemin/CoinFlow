@@ -6,7 +6,7 @@ Ortam: Windows, .NET SDK 8.0.424, JDK 17.0.20, Android SDK/Build Tools 34
 
 ## Sonuçlar
 
-- Test paketi: 105/105 başarılı; 0 başarısız, 0 atlanan
+- Test paketi: 110/110 başarılı; 0 başarısız, 0 atlanan
 - Fresh development/production SQLite başlangıcı: otomatik seed yok, boş plan geçerli
 - İlk maaş → anchor → tek initial strategy onboarding regresyonu: başarılı
 - Clear data ve açık/idempotent canonical seed entegrasyon testleri: başarılı
@@ -15,6 +15,7 @@ Ortam: Windows, .NET SDK 8.0.424, JDK 17.0.20, Android SDK/Build Tools 34
 - Kart carry faizi: asgari ödeme, tam ödeme, zero-rate, aylık compound ve exact iki hane yuvarlama regresyonları başarılı
 - Finansman açığı faizi: negatif principal, compound, recovery ve kart faiziyle ayrı toplam regresyonları başarılı
 - 12 dönem faiz özeti ve simulator baseline/scenario faiz artışı/tasarrufu regresyonları başarılı
+- Ortak Dönem Detayı presenter mapping, zero-row filtreleme, dört bağımsız ödeme satırı, deficit/interest görünürlüğü, transition filtreleme ve simulator delta regresyonları başarılı
 - Simulator apply canonical mapping, idempotency, transaction rollback, yeni baseline ve gerçek SQLite restart persistence regresyonları: başarılı
 - Android development Release build: başarılı; 0 warning, 0 error
 - Package ID: `com.coinflow.mobile`
@@ -23,6 +24,7 @@ Ortam: Windows, .NET SDK 8.0.424, JDK 17.0.20, Android SDK/Build Tools 34
 - APK imzası: v1/v2/v3 doğrulandı; development debug certificate
 - APK zip alignment: başarılı
 - Shell Flyout Android XAML/C# derlemesi: başarılı; bottom TabBar kaldırıldı
+- 12 Aylık / Simulator compact kart → ortak full-screen Dönem Detayı route ve Android XAML binding derlemesi: başarılı
 - Git diff whitespace kontrolü: başarılı
 - GitHub Actions development/stable workflow dosyaları değiştirilmedi
 

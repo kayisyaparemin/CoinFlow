@@ -38,8 +38,8 @@ Maaş, tek seferlik gelir, kredi, kart harcaması, kart vadesi, geçici ödeme v
 Sol üstteki native Shell hamburger menüsü beş kök bölüm içerir; bottom TabBar yoktur:
 
 1. **Ana Sayfa:** Aktif maaş dönemi özeti, yaklaşan ödemeler, 12 dönem özeti ve en sıkışık dönem.
-2. **12 Aylık:** Her dönem için gelir, zorunlu ödeme, yaşam bütçesi, faiz maliyeti, birikim kapasitesi ve dönem sonu birikim; satıra dokununca exact breakdown.
-3. **Simülatör:** Nakit alışveriş, tek çekim/taksitli kart, kart ekstresini tam kapatma, finansman, nakit borç, ileri tarihli tek/tekrarlı ödeme, gelecek gelir, maaş ve maaş kullanım düzeni değişimi senaryoları; baseline ve scenario faiz yükünü karşılaştırır.
+2. **12 Aylık:** Compact dönem kartları 12 maaşı hızlı taratır. Karta dokununca ortak full-screen **Dönem Detayı** açılır; summary, finansal akış, açık, zorunlu kırılımı, faiz ve her exact ödeme ayrı görsel satırda gösterilir.
+3. **Simülatör:** Nakit alışveriş, tek çekim/taksitli kart, kart ekstresini tam kapatma, finansman, nakit borç, ileri tarihli tek/tekrarlı ödeme, gelecek gelir, maaş ve maaş kullanım düzeni değişimi senaryoları; baseline ve scenario faiz yükünü karşılaştırır. Dönem kartı aynı Dönem Detayı sayfasını baseline/senaryo/delta modu ile kullanır.
 4. **Gelir & Ödemeler:** Maaş, diğer gelir, kredi, kredi kartı, geçici/taksitli ödeme ve büyük gider yönetimi.
 5. **Ayarlar:** Maaş günü, bütçe, kart carry/açık faiz varsayımları, read-only düzen geçmişi ve development araçları.
 

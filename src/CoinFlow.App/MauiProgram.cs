@@ -46,6 +46,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<MandatoryPaymentCalculator>();
         builder.Services.AddSingleton<FinancialProjectionCalculator>();
         builder.Services.AddSingleton<FinancialProjectionService>();
+        builder.Services.AddSingleton<SalaryPeriodDetailPresenter>();
         builder.Services.AddSingleton<SimulationCalculator>();
         builder.Services.AddSingleton<TargetAmountCalculator>();
         builder.Services.AddSingleton<CoinFlowService>();
@@ -54,11 +55,13 @@ public static class MauiProgram
         builder.Services.AddTransient<CommitmentsViewModel>();
         builder.Services.AddTransient<FutureMonthsViewModel>();
         builder.Services.AddTransient<SimulationViewModel>();
+        builder.Services.AddTransient<SalaryPeriodDetailViewModel>();
         builder.Services.AddTransient<SettingsViewModel>();
         builder.Services.AddTransient<MainPage>();
         builder.Services.AddTransient<CommitmentsPage>();
         builder.Services.AddTransient<FutureMonthsPage>();
         builder.Services.AddTransient<SimulationPage>();
+        builder.Services.AddTransient<SalaryPeriodDetailPage>();
         builder.Services.AddTransient<SettingsPage>();
 
 #if DEBUG

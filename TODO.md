@@ -21,3 +21,5 @@
 - [x] Assignment mode persistence ve legacy settings migration testlerini ekle
 - [x] Kart carry faizi ile finansman açığı faizini ayrı state olarak hesapla
 - [x] Persistent `%5` faiz varsayımları, 12 aylık özet ve simulator faiz karşılaştırmasını ekle
+- [x] 12 Aylık ve Simulator inline detaylarını ortak full-screen dönem detayına taşı
+- [x] Summary/flow/deficit/faiz/transition/payment gruplarını ve zero-row filtrelemeyi ekle

@@ -2,6 +2,7 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="CoinFlow.App.Pages.FutureMonthsPage"
+             x:Name="PageRoot"
              Title="12 Aylık">
     <Grid RowDefinitions="Auto,*" Padding="20,18,20,12" RowSpacing="14">
         <VerticalStackLayout Spacing="10">
@@ -59,12 +60,16 @@
                 <DataTemplate>
                     <Border Margin="0,0,0,10">
                         <Border.GestureRecognizers>
-                            <TapGestureRecognizer Command="{Binding ToggleCommand}" />
+                            <TapGestureRecognizer
+                                Command="{Binding Source={x:Reference PageRoot}, Path=BindingContext.OpenPeriodDetailCommand}"
+                                CommandParameter="{Binding .}" />
                         </Border.GestureRecognizers>
-                        <VerticalStackLayout Spacing="9">
-                            <Label Text="{Binding Period}" FontFamily="OpenSansSemibold" FontSize="17" />
+                        <VerticalStackLayout Spacing="11">
+                            <Label Text="{Binding Period}"
+                                   FontFamily="OpenSansSemibold"
+                                   FontSize="18" />
                             <Label Text="{Binding Assignment}" Style="{StaticResource MutedText}" />
-                            <VerticalStackLayout Spacing="6">
+                            <VerticalStackLayout Spacing="7">
                                 <Grid ColumnDefinitions="*,Auto">
                                     <Label Text="Zorunlular sonrası" Style="{StaticResource MutedText}" />
                                     <Label Grid.Column="1" Text="{Binding AvailableAfterMandatory}" FontFamily="OpenSansSemibold" />
@@ -73,37 +78,64 @@
                                     <Label Text="Devreden açık" TextColor="{StaticResource Error}" />
                                     <Label Grid.Column="1" Text="{Binding CarryOverDeficit}" TextColor="{StaticResource Error}" FontFamily="OpenSansSemibold" />
                                 </Grid>
-                                <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding HasCarryOverDeficit}">
-                                    <Label Text="Açık sonrası kullanılabilir" Style="{StaticResource MutedText}" />
-                                    <Label Grid.Column="1" Text="{Binding AvailableAfterCarryOverDeficit}" FontFamily="OpenSansSemibold" />
-                                </Grid>
                                 <Grid ColumnDefinitions="*,Auto">
-                                    <Label Text="Tahmini yaşam" Style="{StaticResource MutedText}" />
-                                    <Label Grid.Column="1" Text="{Binding LivingBudget}" />
-                                </Grid>
-                                <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding HasPlannedLargeCashExpenses}">
-                                    <Label Text="Büyük planlı ödeme" Style="{StaticResource MutedText}" />
-                                    <Label Grid.Column="1" Text="{Binding PlannedLargeCashExpenses}" />
-                                </Grid>
-                                <Grid ColumnDefinitions="*,Auto">
-                                    <Label Text="Bu dönemin tahmini tasarrufu" Style="{StaticResource MutedText}" />
+                                    <Label Text="Bu dönemin tasarrufu" Style="{StaticResource MutedText}" />
                                     <Label Grid.Column="1" Text="{Binding EstimatedSavings}" FontFamily="OpenSansSemibold" />
                                 </Grid>
-                                <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding HasInterest}">
-                                    <Label Text="{Binding InterestLabel}" TextColor="{StaticResource Error}" />
-                                    <Label Grid.Column="1" Text="{Binding TotalInterest}" TextColor="{StaticResource Error}" />
-                                </Grid>
                                 <Grid ColumnDefinitions="*,Auto">
-                                    <Label Text="Dönem sonu tahmini birikim" Style="{StaticResource MutedText}" />
-                                    <Label Grid.Column="1" Text="{Binding EndingProjectedSavings}" FontFamily="OpenSansSemibold" />
+                                    <Label Text="Dönem sonu birikim" Style="{StaticResource MutedText}" />
+                                    <Label Grid.Column="1"
+                                           Text="{Binding EndingProjectedSavings}"
+                                           FontFamily="OpenSansSemibold"
+                                           FontSize="16" />
                                 </Grid>
                             </VerticalStackLayout>
-                            <Label Text="{Binding CarryOverMessage}"
-                                   IsVisible="{Binding HasCarryOverDeficit}"
-                                   Style="{StaticResource MutedText}" />
-                            <Label Text="{Binding Notice}" IsVisible="{Binding HasNotice}" TextColor="{StaticResource Error}" FontSize="12" />
-                            <Label Text="Detay için dokun" Style="{StaticResource MutedText}" IsVisible="{Binding IsCollapsed}" />
-                            <Label Text="{Binding Breakdown}" IsVisible="{Binding IsExpanded}" FontSize="12" />
+                            <FlexLayout Wrap="Wrap" Direction="Row">
+                                <Border Padding="9,4"
+                                        Margin="0,0,6,5"
+                                        IsVisible="{Binding HasBeforeSalaryWarning}"
+                                        BackgroundColor="{StaticResource WarningSurface}">
+                                    <Label Text="{Binding BeforeSalaryWarning}"
+                                           FontSize="11"
+                                           TextColor="{StaticResource WarningText}" />
+                                </Border>
+                                <Border Padding="9,4"
+                                        Margin="0,0,6,5"
+                                        IsVisible="{Binding HasInterest}"
+                                        BackgroundColor="{StaticResource InterestSurface}">
+                                    <Label Text="{Binding TotalInterest, StringFormat='Faiz: {0}'}"
+                                           FontSize="11"
+                                           TextColor="{StaticResource InterestText}" />
+                                </Border>
+                                <Border Padding="9,4"
+                                        Margin="0,0,6,5"
+                                        IsVisible="{Binding HasEstimatedPayment}"
+                                        BackgroundColor="{StaticResource ProjectionSurface}">
+                                    <Label Text="Tahmini kart ödemesi"
+                                           FontSize="11"
+                                           TextColor="{StaticResource ProjectionText}" />
+                                </Border>
+                                <Border Padding="9,4"
+                                        Margin="0,0,6,5"
+                                        IsVisible="{Binding HasUndeterminedPayment}"
+                                        BackgroundColor="{StaticResource WarningSurface}">
+                                    <Label Text="Kart ödemesi belirlenmedi"
+                                           FontSize="11"
+                                           TextColor="{StaticResource WarningText}" />
+                                </Border>
+                            </FlexLayout>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <Label Text="Detayı Gör"
+                                       HorizontalOptions="End"
+                                       FontFamily="OpenSansSemibold"
+                                       TextColor="{StaticResource ProjectionText}" />
+                                <Label Grid.Column="1"
+                                       Text="›"
+                                       Margin="8,0,0,0"
+                                       FontSize="21"
+                                       VerticalTextAlignment="Center"
+                                       TextColor="{StaticResource ProjectionText}" />
+                            </Grid>
                         </VerticalStackLayout>
                     </Border>
                 </DataTemplate>

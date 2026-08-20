@@ -15,6 +15,22 @@
     <Color x:Key="Muted">#7E7A83</Color>
     <Color x:Key="Error">#936E76</Color>
 
+    <!-- Dönem detayı için düşük doygunluklu semantik tonlar -->
+    <Color x:Key="PositiveSurface">#DDEDE4</Color>
+    <Color x:Key="PositiveText">#355F50</Color>
+    <Color x:Key="DebtSurface">#F3DCD6</Color>
+    <Color x:Key="DebtText">#7B4A44</Color>
+    <Color x:Key="DeficitSurface">#F3D9DD</Color>
+    <Color x:Key="DeficitText">#7D4550</Color>
+    <Color x:Key="InterestSurface">#F5E2CF</Color>
+    <Color x:Key="InterestText">#76502F</Color>
+    <Color x:Key="ExpenseSurface">#F6E7CF</Color>
+    <Color x:Key="ExpenseText">#72582F</Color>
+    <Color x:Key="ProjectionSurface">#E1E5F5</Color>
+    <Color x:Key="ProjectionText">#4D567E</Color>
+    <Color x:Key="WarningSurface">#F6E8C9</Color>
+    <Color x:Key="WarningText">#6F5727</Color>
+
     <Color x:Key="Canvas">#FFFACF</Color>
     <Color x:Key="Surface">#FFE4BF</Color>
     <Color x:Key="HeroSurface">#BFCFFF</Color>

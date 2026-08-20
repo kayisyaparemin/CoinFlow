@@ -34,12 +34,16 @@ public sealed record SimulationImpactRow(
     SalaryPeriodProjection Baseline,
     SalaryPeriodProjection Scenario)
 {
+    public decimal MandatoryOutflowDifference =>
+        Scenario.MandatoryOutflow - Baseline.MandatoryOutflow;
     public decimal AvailableDifference =>
         Scenario.AvailableAfterMandatory - Baseline.AvailableAfterMandatory;
     public decimal SavingsCapacityDifference =>
         Scenario.EstimatedSavingsCapacity - Baseline.EstimatedSavingsCapacity;
     public decimal ProjectedSavingsDifference =>
         Scenario.EndingProjectedSavings - Baseline.EndingProjectedSavings;
+    public decimal InterestDifference =>
+        Scenario.TotalInterestGenerated - Baseline.TotalInterestGenerated;
 }
 
 public sealed record SimulationRiskSummary(
