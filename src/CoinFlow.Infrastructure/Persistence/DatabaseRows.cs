@@ -119,6 +119,8 @@ internal sealed class SettingsRow
     public int SalaryDay { get; set; }
     public decimal MonthlyLivingBudget { get; set; }
     public decimal ProjectionStartingSavings { get; set; }
+    public string? ProjectionAnchorDate { get; set; }
+    // Legacy v5 source used only to bootstrap strategy history once.
     public int PaymentAssignmentMode { get; set; }
     public int SchemaVersion { get; set; }
     public int DevelopmentSeedVersion { get; set; }
@@ -128,4 +130,15 @@ internal sealed class SettingsRow
     public bool LegacyRemovedFeatureFlag { get; set; }
     public bool DevelopmentSeedEnabled { get; set; }
     public string? TrackingStartedDate { get; set; }
+}
+
+[Table("payment_assignment_strategies")]
+internal sealed class PaymentAssignmentStrategyRow
+{
+    [PrimaryKey] public string Id { get; set; } = string.Empty;
+    public int Mode { get; set; }
+    [Indexed(Unique = true)]
+    public string EffectiveFromSalaryDate { get; set; } = string.Empty;
+    public string CreatedAt { get; set; } = string.Empty;
+    public string Note { get; set; } = string.Empty;
 }

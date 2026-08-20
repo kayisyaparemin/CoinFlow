@@ -73,6 +73,13 @@ public sealed record UpcomingPaymentLine(
     string Amount,
     string Detail);
 
+public sealed record StrategyHistoryLine(
+    Guid Id,
+    string EffectiveDate,
+    string Mode,
+    string Note,
+    bool IsFuture);
+
 public partial class ProjectionLine(
     string period,
     string assignment,

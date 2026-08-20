@@ -19,21 +19,71 @@
 
             <Border>
                 <VerticalStackLayout Spacing="10">
-                    <Label Text="Maaş Kullanım Şekli" Style="{StaticResource SectionTitle}" />
-                    <RadioButton Content="Geçmiş dönemi kapatırım"
-                                 GroupName="PaymentAssignmentMode"
-                                 IsChecked="{Binding IsPreviousPeriod, Mode=TwoWay}" />
-                    <Label Text="{Binding PreviousPeriodDescription}"
-                           Margin="34,-8,0,2"
+                    <Label Text="Maaş Kullanım Düzeni" Style="{StaticResource SectionTitle}" />
+                    <Label Text="Mevcut düzen" Style="{StaticResource MutedText}" />
+                    <Label Text="{Binding CurrentStrategyText}" FontFamily="OpenSansSemibold" FontSize="17" />
+                    <Label Text="{Binding CurrentStrategySinceText}" Style="{StaticResource MutedText}" />
+                    <VerticalStackLayout IsVisible="{Binding HasPendingStrategy}" Spacing="3">
+                        <Label Text="Planlanan değişiklik" Style="{StaticResource MutedText}" />
+                        <Label Text="{Binding PendingStrategyText}" FontFamily="OpenSansSemibold" />
+                        <Button Text="Planlanan değişikliği sil"
+                                Clicked="OnDeletePendingStrategyClicked" />
+                    </VerticalStackLayout>
+                    <Button Text="Düzeni Değiştir"
+                            Command="{Binding ShowStrategyEditorCommand}" />
+                    <VerticalStackLayout IsVisible="{Binding IsStrategyEditorVisible}" Spacing="8">
+                        <Label Text="Yeni düzen" Style="{StaticResource FieldLabel}" />
+                        <Picker ItemsSource="{Binding StrategyModes}"
+                                SelectedItem="{Binding SelectedStrategyMode}" />
+                        <Label Text="Geçerli olacağı maaş" Style="{StaticResource FieldLabel}" />
+                        <Picker ItemsSource="{Binding EffectiveSalaryDates}"
+                                SelectedItem="{Binding SelectedEffectiveSalary}" />
+                        <Label Text="Not" Style="{StaticResource FieldLabel}" />
+                        <Entry Text="{Binding StrategyNote}" />
+                        <Button Text="Geçişi Önizle"
+                                Command="{Binding PreviewStrategyCommand}" />
+                        <Border IsVisible="{Binding HasPreview}" BackgroundColor="{StaticResource SoftSky}">
+                            <VerticalStackLayout Spacing="8">
+                                <Label Text="Geçiş Önizlemesi" Style="{StaticResource SectionTitle}" />
+                                <Label Text="{Binding PreviewText}" />
+                                <Button Text="Bu Düzeni Planla"
+                                        Clicked="OnApplyStrategyClicked" />
+                            </VerticalStackLayout>
+                        </Border>
+                    </VerticalStackLayout>
+                    <Label Text="Gerçek kredi, kart ve ödeme vadeleri değişmez; yeni kayıt yalnız seçilen maaştan sonraki bütçe atamalarını etkiler."
                            Style="{StaticResource MutedText}" />
-                    <RadioButton Content="Gelecek dönemi karşılarım"
-                                 GroupName="PaymentAssignmentMode"
-                                 IsChecked="{Binding IsUpcomingPeriod, Mode=TwoWay}" />
-                    <Label Text="{Binding UpcomingPeriodDescription}"
-                           Margin="34,-8,0,0"
+                </VerticalStackLayout>
+            </Border>
+
+            <Border>
+                <VerticalStackLayout Spacing="9">
+                    <Label Text="Düzen Geçmişi" Style="{StaticResource SectionTitle}" />
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding StrategyHistory}" Spacing="8">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate>
+                                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
+                                    <Label Text="{Binding EffectiveDate}" FontFamily="OpenSansSemibold" />
+                                    <Label Grid.Column="1" Text="Planlandı" IsVisible="{Binding IsFuture}" Style="{StaticResource MutedText}" />
+                                    <Label Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding Mode}" />
+                                    <Label Grid.Row="2" Grid.ColumnSpan="2" Text="{Binding Note}" Style="{StaticResource MutedText}" />
+                                </Grid>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                    <Label Text="Geçmiş kayıt düzeltmeleri eski projection sonuçlarını değiştirir; normal düzen değiştirme akışı geçmişi değiştirmez."
                            Style="{StaticResource MutedText}" />
-                    <Label Text="Gerçek kredi, kart ve ödeme vadeleri değişmez; yalnız hangi maaş bütçesinde gösterildikleri değişir."
-                           Style="{StaticResource MutedText}" />
+                    <Button Text="Geçmiş Kaydı Düzelt • Gelişmiş"
+                            Command="{Binding ShowHistoricalEditorCommand}"
+                            Style="{StaticResource SecondaryButton}" />
+                    <VerticalStackLayout IsVisible="{Binding IsHistoricalEditorVisible}" Spacing="8">
+                        <Picker ItemsSource="{Binding HistoricalStrategyOptions}"
+                                SelectedItem="{Binding SelectedHistoricalStrategy}" />
+                        <Picker ItemsSource="{Binding StrategyModes}"
+                                SelectedItem="{Binding SelectedHistoricalMode}" />
+                        <Button Text="Onayla ve Geçmiş Kaydı Düzelt"
+                                Clicked="OnCorrectHistoricalStrategyClicked" />
+                    </VerticalStackLayout>
                 </VerticalStackLayout>
             </Border>
 
@@ -52,6 +102,9 @@
                     <Label Text="Projeksiyon başlangıç birikimi" Style="{StaticResource FieldLabel}" />
                     <Entry Text="{Binding ProjectionStartingSavings}" Keyboard="Numeric" />
                     <Label Text="Bu tutar yalnızca gelecek tahminlerinin başlangıç noktasıdır; gerçek banka bakiyesi olarak takip edilmez." Style="{StaticResource MutedText}" />
+                    <Label Text="Planlama başlangıç tarihi" Style="{StaticResource FieldLabel}" />
+                    <Label Text="{Binding ProjectionAnchorText}" FontFamily="OpenSansSemibold" />
+                    <Label Text="Bu kalıcı snapshot sınırıdır; banka bakiyesi veya günlük harcama takibi değildir." Style="{StaticResource MutedText}" />
                     <Button Text="Ayarları Kaydet" Command="{Binding SaveCommand}" />
                 </VerticalStackLayout>
             </Border>

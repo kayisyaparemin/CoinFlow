@@ -8,12 +8,14 @@ Uygulama mikro harcama takibi yapmaz. Ana kavramlar maaş dönemi, toplam gelir,
 
 Her maaş dönemi `[başlangıç, sonraki maaş günü)` aralığıdır. Dönem başlangıcı dahildir, sonraki maaş günü dahil değildir.
 
-Kullanıcı, ödemelerin maaş bütçesine nasıl atanacağını global olarak seçebilir:
+Kullanıcının ödemeleri maaş bütçesine atama düzeni effective-dated bir geçmiş olarak tutulur:
 
 - **Gelecek dönemi karşılarım:** Maaş tarihi dahil, sonraki maaş tarihi hariç ödemeler aynı maaşa atanır.
 - **Geçmiş dönemi kapatırım:** Önceki maaş tarihinden sonraki ödemeler mevcut maaşa atanır; maaş günündeki ödeme geriye kaymaz.
 
-Kredi, kart ve planların gerçek ödeme tarihleri bu tercihten etkilenmez. `PaymentAssignmentResolver` yalnız bütçe atamasını yapar; maaştan önce vadesi gelen ödemeler ayrıca uyarı olarak gösterilir.
+Kredi, kart ve planların gerçek ödeme tarihleri bu tercihten etkilenmez. `PaymentAssignmentStrategyResolver` her maaş için o tarihte yürürlükteki kaydı seçer; `SalaryFundingPlanner` coverage frontier ile geçiş boşluğu veya mükerrer atama üretmeden yalnız bütçe atamasını yapar. Maaştan önce vadesi gelen ödemeler ayrıca uyarı olarak gösterilir.
+
+Kalıcı `ProjectionAnchorDate`, günlük hayatın projection dışında kabul edildiği snapshot sınırıdır; banka bakiyesi değildir. Projection bu sınırdaki veya sonrasındaki ilk maaştan başlar. İlk düzen `UpcomingPeriod` ise anchor ile ilk maaş arasındaki exact yükümlülükler dashboard'da “Sonraki Maaştan Önce” bölümünde ayrı gösterilir.
 
 ```text
 Toplam Gelir = Maaş + Döneme denk gelen diğer gelirler
@@ -31,10 +33,10 @@ Alt navigasyon tam olarak dört ana bölüm içerir:
 
 1. **Ana Sayfa:** Aktif maaş dönemi özeti, yaklaşan ödemeler, 12 dönem özeti ve en sıkışık dönem.
 2. **12 Aylık:** Her dönem için gelir, zorunlu ödeme, yaşam bütçesi, birikim kapasitesi ve dönem sonu birikim; satıra dokununca exact breakdown.
-3. **Simülatör:** Nakit alışveriş, tek çekim/taksitli kart, finansman, nakit borç, ileri tarihli tek/tekrarlı ödeme, gelecek gelir ve maaş değişimi senaryoları.
+3. **Simülatör:** Nakit alışveriş, tek çekim/taksitli kart, finansman, nakit borç, ileri tarihli tek/tekrarlı ödeme, gelecek gelir, maaş ve maaş kullanım düzeni değişimi senaryoları.
 4. **Gelir & Ödemeler:** Maaş, diğer gelir, kredi, kredi kartı, geçici/taksitli ödeme ve büyük gider yönetimi.
 
-Ayarlar, ikincil bir rota olarak maaş günü, maaş kullanım şekli, aylık yaşam bütçesi ve başlangıç birikimini düzenler. Development build'de kanonik veriyi yeniden yükleme seçeneği bulunur.
+Ayarlar, ikincil bir rota olarak düzen geçmişini, planlanan future değişikliği, geçiş önizlemesini, maaş gününü, aylık yaşam bütçesini ve başlangıç birikimini yönetir. Başlamamış kayıtlar değiştirilebilir/silinebilir; geçmiş kayıt düzeltmesi ayrı ve açık onaylıdır. Development build'de kanonik veriyi yeniden yükleme seçeneği bulunur.
 
 ## Mimari
 
@@ -59,6 +61,8 @@ Boş development veritabanı deterministik olarak şu kanonik planla açılır:
 - Eminevim: 20.09.2026 28.167,40 TL; 20.10.2026 28.167,40 TL; 20.11.2026 55.492,20 TL
 - Axess: limit 607.350 TL; devreden 35.201,77 TL; dönem içi 61.283,91 TL; exact future charges
 - Yaşam bütçesi: 30.000 TL; başlangıç birikimi: 0 TL
+- Projection anchor: 20.08.2026; ilk projection maaşı: 10.09.2026
+- İlk maaş kullanım düzeni: `UpcomingPeriod`
 
 Seed yalnızca development ortamında ve boş veritabanında çalışır; tekrar açılışta kayıt çoğaltmaz. Production boş veritabanı otomatik demo veri almaz.
 
@@ -83,7 +87,7 @@ dotnet publish src/CoinFlow.App/CoinFlow.App.csproj -f net8.0-android -c Release
 
 ## Migration
 
-SQLite şema sürümü 5'tir. Mevcut kullanıcı verisi yerinde yükseltilir; eski kart aggregate alanları yeni kart modeline aktarılır ve ödeme atama tercihi olmayan kurulumlar bir kez `UpcomingPeriod` varsayılanını alır. Kaldırılan mikro harcama, snapshot ve acil fon tabloları upgrade sırasında düşürülür. Development verisini kanonik duruma getirmek için ayarlardaki açık onaylı sıfırlama kullanılabilir.
+SQLite şema sürümü 6'dır. Mevcut kullanıcı verisi yerinde yükseltilir; eski global ödeme atama değeri bir kez ilk strategy history kaydına dönüştürülür ve runtime source of truth olmaktan çıkar. Eksik projection anchor upgrade tarihinde bir kez oluşturulur ve sonraki açılışlarda ilerletilmez. Eski kart aggregate alanları yeni kart modeline aktarılır. Kaldırılan mikro harcama, balance snapshot ve acil fon tabloları upgrade sırasında düşürülür.
 
 ## CI/CD
 

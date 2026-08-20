@@ -11,13 +11,20 @@ public sealed class FinancialProjectionService(
         FinancialPlan plan,
         DateOnly asOf)
     {
-        var periods = projectionCalculator.Calculate(plan, asOf, 12);
+        var projection = projectionCalculator.CalculatePlan(plan, asOf, 12);
+        var periods = projection.Periods;
         var current = periods[0];
-        var upcoming = periods
-            .SelectMany(x => x.MandatoryItems)
+        var preFirst = projection.FundingPlan.PreFirstSalaryObligations
             .Where(x => x.DueDate >= asOf)
             .OrderBy(x => x.DueDate)
             .ThenByDescending(x => x.Amount)
+            .ToArray();
+        var upcoming = preFirst
+            .Concat(periods
+            .SelectMany(x => x.MandatoryItems)
+            .Where(x => x.DueDate >= asOf)
+            .OrderBy(x => x.DueDate)
+            .ThenByDescending(x => x.Amount))
             .Take(5)
             .ToArray();
         var tightest = periods
@@ -25,12 +32,25 @@ public sealed class FinancialProjectionService(
             .ThenBy(x => x.PeriodStart)
             .First();
 
+        var orderedStrategies = plan.PaymentAssignmentStrategies
+            .OrderBy(x => x.EffectiveFromSalaryDate)
+            .ToArray();
+        var currentStrategy = orderedStrategies
+            .Where(x => x.EffectiveFromSalaryDate <= current.PeriodStart)
+            .Last();
+        var pending = orderedStrategies.FirstOrDefault(x =>
+            x.EffectiveFromSalaryDate > current.PeriodStart);
+
         return new DashboardSnapshot(
             current,
+            preFirst,
             upcoming,
             periods[^1].EndingProjectedSavings,
             tightest,
-            periods.Any(x => x.HasUndeterminedCardPayment));
+            periods.Any(x => x.HasUndeterminedCardPayment),
+            currentStrategy,
+            pending,
+            plan.Settings.ProjectionAnchorDate);
     }
 
     public IReadOnlyList<SalaryPeriodProjection> BuildFuturePeriods(

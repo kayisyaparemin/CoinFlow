@@ -20,9 +20,14 @@ public sealed class PersistenceAndSeedTests
             Assert.Equal(10, plan.Settings.SalaryDay);
             Assert.Equal(30_000m, plan.Settings.MonthlyLivingBudget);
             Assert.Equal(0m, plan.Settings.ProjectionStartingSavings);
+            Assert.Equal(Today, plan.Settings.ProjectionAnchorDate);
             Assert.Equal(
                 PaymentAssignmentMode.UpcomingPeriod,
-                plan.Settings.PaymentAssignmentMode);
+                Assert.Single(plan.PaymentAssignmentStrategies).Mode);
+            Assert.Equal(
+                new DateOnly(2026, 9, 10),
+                plan.PaymentAssignmentStrategies[0]
+                    .EffectiveFromSalaryDate);
             Assert.Equal(
                 [115_000m, 132_250m],
                 plan.Salaries.Select(x => x.Amount).ToArray());
@@ -96,6 +101,34 @@ public sealed class PersistenceAndSeedTests
     }
 
     [Fact]
+    public async Task ProjectionAnchor_IsInitializedOnceAndDoesNotMoveOnReopen()
+    {
+        var path = TempPath();
+        try
+        {
+            await using (var first = new SqliteCoinFlowStore(
+                             path, false, Today))
+            {
+                Assert.Equal(
+                    Today,
+                    (await first.GetSettingsAsync()).ProjectionAnchorDate);
+            }
+
+            await using var second = new SqliteCoinFlowStore(
+                path,
+                false,
+                Today.AddDays(45));
+            Assert.Equal(
+                Today,
+                (await second.GetSettingsAsync()).ProjectionAnchorDate);
+        }
+        finally
+        {
+            DeleteDatabase(path);
+        }
+    }
+
+    [Fact]
     public async Task DevelopmentReset_ReloadsCanonicalSeed()
     {
         await WithStore(true, async store =>
@@ -104,11 +137,12 @@ public sealed class PersistenceAndSeedTests
             var salary = (await service.GetFinancialPlanAsync())
                 .Salaries[0];
             await service.DeleteSalaryAsync(salary.Id);
-            var settings = (await service.GetFinancialPlanAsync()).Settings;
-            await service.SaveSettingsAsync(settings with
+            var strategy = Assert.Single(
+                (await service.GetFinancialPlanAsync())
+                .PaymentAssignmentStrategies);
+            await service.SavePaymentAssignmentStrategyAsync(strategy with
             {
-                PaymentAssignmentMode =
-                    PaymentAssignmentMode.PreviousPeriod
+                Mode = PaymentAssignmentMode.PreviousPeriod
             });
 
             await service.ResetDevelopmentDataAsync();
@@ -119,7 +153,7 @@ public sealed class PersistenceAndSeedTests
             Assert.Equal(30_000m, reset.Settings.MonthlyLivingBudget);
             Assert.Equal(
                 PaymentAssignmentMode.UpcomingPeriod,
-                reset.Settings.PaymentAssignmentMode);
+                Assert.Single(reset.PaymentAssignmentStrategies).Mode);
         });
     }
 
@@ -138,12 +172,12 @@ public sealed class PersistenceAndSeedTests
             Assert.Equal(0m, plan.Settings.MonthlyLivingBudget);
             Assert.Equal(
                 PaymentAssignmentMode.UpcomingPeriod,
-                plan.Settings.PaymentAssignmentMode);
+                Assert.Single(plan.PaymentAssignmentStrategies).Mode);
         });
     }
 
     [Fact]
-    public async Task PaymentAssignmentMode_PersistsAcrossReopen()
+    public async Task PaymentAssignmentStrategy_PersistsAcrossReopen()
     {
         var path = TempPath();
         try
@@ -152,28 +186,93 @@ public sealed class PersistenceAndSeedTests
                              path, false, Today))
             {
                 var service = TestFactory.Service(first);
-                var settings = (await service.GetFinancialPlanAsync())
-                    .Settings;
-                await service.SaveSettingsAsync(settings with
+                var strategy = Assert.Single(
+                    (await service.GetFinancialPlanAsync())
+                    .PaymentAssignmentStrategies);
+                await service.SavePaymentAssignmentStrategyAsync(strategy with
                 {
-                    PaymentAssignmentMode =
-                        PaymentAssignmentMode.PreviousPeriod
+                    Mode = PaymentAssignmentMode.PreviousPeriod
                 });
             }
 
             await using var second = new SqliteCoinFlowStore(
                 path, false, Today);
-            var reopened = (await TestFactory.Service(second)
-                .GetFinancialPlanAsync()).Settings;
+            var reopened = Assert.Single(
+                (await TestFactory.Service(second)
+                    .GetFinancialPlanAsync())
+                .PaymentAssignmentStrategies);
 
             Assert.Equal(
                 PaymentAssignmentMode.PreviousPeriod,
-                reopened.PaymentAssignmentMode);
+                reopened.Mode);
         }
         finally
         {
             DeleteDatabase(path);
         }
+    }
+
+    [Fact]
+    public async Task StrategyPreview_DoesNotMutateHistory_AndFutureRecordCanBeDeleted()
+    {
+        await WithStore(true, async store =>
+        {
+            var service = TestFactory.Service(store);
+            var before = await service.GetFinancialPlanAsync();
+
+            var preview = await service.PreviewPaymentAssignmentStrategyAsync(
+                PaymentAssignmentMode.PreviousPeriod,
+                new DateOnly(2026, 12, 10));
+            var afterPreview = await service.GetFinancialPlanAsync();
+
+            Assert.Single(before.PaymentAssignmentStrategies);
+            Assert.Single(afterPreview.PaymentAssignmentStrategies);
+            Assert.Equal(new DateOnly(2026, 12, 10),
+                preview.EffectiveSalaryDate);
+
+            var future = new PaymentAssignmentStrategy
+            {
+                Mode = PaymentAssignmentMode.PreviousPeriod,
+                EffectiveFromSalaryDate = new DateOnly(2026, 12, 10),
+                Note = "Planlı değişiklik"
+            };
+            await service.SavePaymentAssignmentStrategyAsync(future);
+            Assert.Equal(2, (await service.GetFinancialPlanAsync())
+                .PaymentAssignmentStrategies.Count);
+
+            await service.DeletePaymentAssignmentStrategyAsync(future.Id);
+            Assert.Single((await service.GetFinancialPlanAsync())
+                .PaymentAssignmentStrategies);
+        });
+    }
+
+    [Fact]
+    public async Task HistoricalStrategyCorrection_RequiresExplicitConfirmation()
+    {
+        await WithStore(true, async store =>
+        {
+            var service = TestFactory.Service(
+                store,
+                new DateOnly(2026, 9, 20));
+            var initial = Assert.Single(
+                (await service.GetFinancialPlanAsync())
+                .PaymentAssignmentStrategies);
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                service.SavePaymentAssignmentStrategyAsync(initial with
+                {
+                    Mode = PaymentAssignmentMode.PreviousPeriod
+                }));
+
+            await service.SavePaymentAssignmentStrategyAsync(initial with
+            {
+                Mode = PaymentAssignmentMode.PreviousPeriod
+            }, confirmedHistoricalCorrection: true);
+            Assert.Equal(
+                PaymentAssignmentMode.PreviousPeriod,
+                Assert.Single((await service.GetFinancialPlanAsync())
+                    .PaymentAssignmentStrategies).Mode);
+        });
     }
 
     [Fact]
@@ -189,6 +288,7 @@ public sealed class PersistenceAndSeedTests
                 SalaryDay INTEGER NOT NULL,
                 MonthlyLivingBudget DECIMAL NOT NULL,
                 ProjectionStartingSavings DECIMAL NOT NULL,
+                PaymentAssignmentMode INTEGER NOT NULL,
                 SchemaVersion INTEGER NOT NULL,
                 DevelopmentSeedVersion INTEGER NOT NULL,
                 GamificationEnabled INTEGER NOT NULL,
@@ -197,7 +297,7 @@ public sealed class PersistenceAndSeedTests
             )
             """);
         await legacy.ExecuteAsync(
-            "INSERT INTO settings VALUES (1, 15, 42000, 123000, 4, 1, 0, 0, NULL)");
+            "INSERT INTO settings VALUES (1, 15, 42000, 123000, 1, 5, 1, 0, 0, NULL)");
         await legacy.CloseAsync();
 
         try
@@ -210,9 +310,16 @@ public sealed class PersistenceAndSeedTests
             Assert.Equal(15, settings.SalaryDay);
             Assert.Equal(42_000m, settings.MonthlyLivingBudget);
             Assert.Equal(123_000m, settings.ProjectionStartingSavings);
+            Assert.Equal(Today, settings.ProjectionAnchorDate);
+            var strategy = Assert.Single(
+                (await TestFactory.Service(store)
+                    .GetFinancialPlanAsync())
+                .PaymentAssignmentStrategies);
             Assert.Equal(
-                PaymentAssignmentMode.UpcomingPeriod,
-                settings.PaymentAssignmentMode);
+                PaymentAssignmentMode.PreviousPeriod,
+                strategy.Mode);
+            Assert.Equal(new DateOnly(2026, 9, 15),
+                strategy.EffectiveFromSalaryDate);
         }
         finally
         {

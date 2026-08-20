@@ -7,13 +7,16 @@ CoinFlow'un merkezi çıktısı `SalaryPeriodProjection` modelidir. Dashboard, 1
 ```text
 FinancialPlan
    ├─ SalaryPeriodCalculator
-   ├─ PaymentAssignmentResolver
+   ├─ ProjectionAnchorDate filter
+   ├─ PaymentAssignmentStrategyResolver (effective-dated history)
    ├─ SalaryResolver + IncomeProjectionCalculator
    ├─ LoanScheduleCalculator
    ├─ CreditCardStatementCalculator
    └─ ScheduledPaymentCalculator
             ↓
- FinancialProjectionCalculator (seçili maaş kullanım şekli)
+ SalaryFundingPlanner (coverage frontier)
+            ↓
+ FinancialProjectionCalculator (maaş bazında aktif düzen)
             ↓
  Dashboard / 12 Aylık / Simulator baseline + scenario
 ```
@@ -24,7 +27,7 @@ FinancialPlan
 |---|---|
 | `CoinFlow.Domain` | Saf modeller, tarih kuralları, projection ve simulation motorları |
 | `CoinFlow.Application` | Kullanım senaryoları, CRUD, açık onaylı scenario apply ve store sözleşmesi |
-| `CoinFlow.Infrastructure` | SQLite şema v4, legacy upgrade ve deterministik development seed |
+| `CoinFlow.Infrastructure` | SQLite şema v6, legacy upgrade ve deterministik development seed |
 | `CoinFlow.App` | .NET MAUI Android görünümü ve servis sonuçlarını sunan MVVM katmanı |
 | `CoinFlow.Tests` | Domain regression, kanonik veri ve SQLite entegrasyon testleri |
 
@@ -33,7 +36,9 @@ Bağımlılık yönü `App → Application → Domain`; `Infrastructure → Appl
 ## Tarih ve para kuralları
 
 - Maaş dönemi `[başlangıç, bitiş)` semantiğine sahiptir.
-- `PaymentAssignmentResolver`, gerçek ödeme tarihini değiştirmeden ödemeyi `UpcomingPeriod` veya `PreviousPeriod` maaş bütçesine atar.
+- `ProjectionAnchorDate`, anchor öncesini plan dışı sayar ve ilk projection maaşını anchor'daki veya anchor sonrasındaki ilk maaş olarak belirler.
+- `PaymentAssignmentStrategyResolver`, her maaşta effective tarihi o maaştan büyük olmayan en yeni history kaydını seçer.
+- `SalaryFundingPlanner`, son kapsanan günü izler; her maaşta yalnız yeni coverage aralığını atar. `Previous → Upcoming` geçişinde gap'i catch-up olarak dahil eder, `Upcoming → Previous` geçişinde daha önce fonlanan günleri tekrar saymaz.
 - `PreviousPeriod` penceresi `(önceki maaş, mevcut maaş]` olduğundan maaş günü ödemesi hiçbir zaman bir ay geriye kaymaz.
 - Maaş günü kısa ayda ayın son gününe kırpılır; aynı kural kredi ve tekrarlı ödeme tarihlerinde kullanılır.
 - Dönem maaşı, dönem başlangıcında yürürlükteki son maaş kaydıdır.
@@ -49,10 +54,10 @@ Kart başına gerçek ödeme stratejisi (`AskEachStatement`, asgari, tam ekstre,
 
 ## Simülatör
 
-`SimulationCalculator` önce mevcut `FinancialPlan` ile baseline hesaplar, sonra yalnız bellekte scenario planı kurup aynı projection motorunu yeniden çalıştırır. Bu sayede baseline ve scenario kolonları aynı tarih, kart ve birikim kurallarına tabidir.
+`SimulationCalculator` önce mevcut `FinancialPlan` ile baseline hesaplar, sonra yalnız bellekte scenario planı kurup aynı projection motorunu yeniden çalıştırır. Payment strategy senaryosu history kopyasına future effective kayıt ekler; önizleme veritabanına yazmaz. Bu sayede baseline ve scenario kolonları aynı anchor, coverage, tarih, kart ve birikim kurallarına tabidir.
 
 Senaryoyu kaydetmek ayrı bir işlemdir. `CoinFlowService.ApplySimulationAsync` açık `confirmed=true` olmadan kalıcı değişiklik yapmaz. Aynı tarihli maaş değişimi uygulanırken önceki kayıt kaldırıldığı için tekrar apply çoğaltma üretmez.
 
 ## Veri ve migration
 
-Store tüm entity'leri exact-date alanlarıyla round-trip eder. Şema v5, global `PaymentAssignmentMode` ayarını kalıcılaştırır; eski kurulumların diğer ayarlarını değiştirmeden eksik alanı `UpcomingPeriod` olarak ekler. Şema upgrade'i eski kart sütunlarını yeni devreden/dönem içi borç modeline taşır ve kaldırılmış özelliklerin tablolarını temizler. Seed sabit GUID'ler kullanır, yalnız boş development veritabanına uygulanır ve transaction içinde tamamlanır.
+Store tüm entity'leri exact-date alanlarıyla round-trip eder. Şema v6, eski global `PaymentAssignmentMode` değerini history boşsa ilk projection maaşında başlayan strategy kaydına taşır. `ProjectionAnchorDate` eksikse upgrade gününde bir kez oluşturulur. Global sütun yalnız migration bootstrap uyumluluğu için kalır; runtime hesaplaması onu okumaz. Şema upgrade'i eski kart sütunlarını yeni devreden/dönem içi borç modeline taşır ve kaldırılmış özelliklerin tablolarını temizler. Seed sabit GUID'ler kullanır, yalnız boş development veritabanına uygulanır ve transaction içinde tamamlanır.

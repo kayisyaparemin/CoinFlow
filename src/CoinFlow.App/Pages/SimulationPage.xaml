@@ -18,10 +18,21 @@
                     <Label Text="{Binding ScenarioDescription}" Style="{StaticResource MutedText}" />
                     <Label Text="Plan adı" Style="{StaticResource FieldLabel}" />
                     <Entry Text="{Binding Name}" Placeholder="Örn. Beyaz eşya" />
-                    <Label Text="Tutar" Style="{StaticResource FieldLabel}" />
-                    <Entry Text="{Binding Amount}" Keyboard="Numeric" />
-                    <Label Text="Başlangıç / işlem tarihi" Style="{StaticResource FieldLabel}" />
-                    <DatePicker Date="{Binding StartDate}" />
+                    <VerticalStackLayout IsVisible="{Binding IsRegularScenario}" Spacing="7">
+                        <Label Text="Tutar" Style="{StaticResource FieldLabel}" />
+                        <Entry Text="{Binding Amount}" Keyboard="Numeric" />
+                        <Label Text="Başlangıç / işlem tarihi" Style="{StaticResource FieldLabel}" />
+                        <DatePicker Date="{Binding StartDate}" />
+                    </VerticalStackLayout>
+
+                    <VerticalStackLayout IsVisible="{Binding IsStrategyChange}" Spacing="7">
+                        <Label Text="Yeni düzen" Style="{StaticResource FieldLabel}" />
+                        <Picker ItemsSource="{Binding StrategyModes}"
+                                SelectedItem="{Binding SelectedStrategyMode}" />
+                        <Label Text="Geçerli olacağı maaş" Style="{StaticResource FieldLabel}" />
+                        <Picker ItemsSource="{Binding StrategySalaryDates}"
+                                SelectedItem="{Binding SelectedStrategySalaryDate}" />
+                    </VerticalStackLayout>
 
                     <VerticalStackLayout IsVisible="{Binding IsCard}" Spacing="7">
                         <Label Text="Kredi kartı" Style="{StaticResource FieldLabel}" />
@@ -69,6 +80,13 @@
                             <Label Text="Finansman maliyeti" Style="{StaticResource MutedText}" />
                             <Label Grid.Column="1" Text="{Binding FinancingCost}" />
                         </Grid>
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border IsVisible="{Binding HasStrategyTransitionSummary}" BackgroundColor="{StaticResource SoftPink}">
+                    <VerticalStackLayout Spacing="8">
+                        <Label Text="Düzen Değişikliği Geçiş Yükü" Style="{StaticResource SectionTitle}" />
+                        <Label Text="{Binding StrategyTransitionSummary}" />
                     </VerticalStackLayout>
                 </Border>
 

@@ -22,11 +22,18 @@ public partial class SimulationViewModel(
         new("Gelecek toplu ödeme", SimulationScenarioType.FutureOneTimePayment),
         new("Dönemsel ödeme", SimulationScenarioType.RecurringPayment),
         new("Gelecek gelir", SimulationScenarioType.FutureIncome),
-        new("Maaş değişikliği", SimulationScenarioType.SalaryChange)
+        new("Maaş değişikliği", SimulationScenarioType.SalaryChange),
+        new("Maaş kullanım düzeni değişikliği", SimulationScenarioType.PaymentStrategyChange)
     ];
 
     public ObservableCollection<SelectionOption<Guid>> CreditCards { get; } = [];
     public ObservableCollection<SimulationLine> Results { get; } = [];
+    public ObservableCollection<SelectionOption<DateOnly>> StrategySalaryDates { get; } = [];
+    public IReadOnlyList<SelectionOption<PaymentAssignmentMode>> StrategyModes { get; } =
+    [
+        new("Geçmiş dönemi kapatırım", PaymentAssignmentMode.PreviousPeriod),
+        new("Gelecek dönemi karşılarım", PaymentAssignmentMode.UpcomingPeriod)
+    ];
 
     private SimulationRequest? _lastRequest;
 
@@ -42,6 +49,10 @@ public partial class SimulationViewModel(
     [ObservableProperty] private bool needsPaymentCount;
     [ObservableProperty] private bool needsFirstPayment;
     [ObservableProperty] private bool isFinancing;
+    [ObservableProperty] private bool isStrategyChange;
+    [ObservableProperty] private bool isRegularScenario = true;
+    [ObservableProperty] private SelectionOption<PaymentAssignmentMode>? selectedStrategyMode;
+    [ObservableProperty] private SelectionOption<DateOnly>? selectedStrategySalaryDate;
     [ObservableProperty] private string scenarioDescription = string.Empty;
     [ObservableProperty] private bool hasResults;
     [ObservableProperty] private string baselineEnding = "—";
@@ -57,10 +68,13 @@ public partial class SimulationViewModel(
     [ObservableProperty] private bool hasFinancingCost;
     [ObservableProperty] private string friendlySummary = string.Empty;
     [ObservableProperty] private string assignmentModeText = string.Empty;
+    [ObservableProperty] private bool hasStrategyTransitionSummary;
+    [ObservableProperty] private string strategyTransitionSummary = string.Empty;
 
     public async Task LoadAsync()
     {
         var plan = await service.GetFinancialPlanAsync();
+        var overview = await service.GetPaymentAssignmentStrategyOverviewAsync();
         CreditCards.Clear();
         foreach (var card in plan.CreditCards)
         {
@@ -69,8 +83,17 @@ public partial class SimulationViewModel(
                 card.Id));
         }
 
-        AssignmentModeText = AssignmentModeLabel(
-            plan.Settings.PaymentAssignmentMode);
+        AssignmentModeText = AssignmentModeLabel(overview.Current.Mode);
+        StrategySalaryDates.Clear();
+        foreach (var date in overview.AvailableEffectiveSalaryDates)
+        {
+            StrategySalaryDates.Add(new SelectionOption<DateOnly>(
+                $"{date.ToString("dd MMMM yyyy", TurkishCulture)} maaşı",
+                date));
+        }
+        SelectedStrategySalaryDate ??= StrategySalaryDates.FirstOrDefault();
+        SelectedStrategyMode ??= StrategyModes.First(x =>
+            x.Value != overview.Current.Mode);
 
         SelectedScenarioType ??= ScenarioTypes[0];
         SelectedCreditCard ??= CreditCards.FirstOrDefault();
@@ -93,6 +116,8 @@ public partial class SimulationViewModel(
             SimulationScenarioType.CashDebt or
             SimulationScenarioType.RecurringPayment;
         IsFinancing = type == SimulationScenarioType.FinancingLoan;
+        IsStrategyChange = type == SimulationScenarioType.PaymentStrategyChange;
+        IsRegularScenario = !IsStrategyChange;
         ScenarioDescription = type switch
         {
             SimulationScenarioType.CashPurchase =>
@@ -113,6 +138,8 @@ public partial class SimulationViewModel(
                 "Gelir exact tarihinde ilgili maaş dönemine eklenir.",
             SimulationScenarioType.SalaryChange =>
                 "Yeni maaş, effective date dönem başlangıcına ulaştığında geçerli olur.",
+            SimulationScenarioType.PaymentStrategyChange =>
+                "Yeni düzen yalnız seçilen maaştan itibaren history'ye eklenmiş gibi hesaplanır; simülasyon veritabanını değiştirmez.",
             _ => string.Empty
         };
         HasResults = false;
@@ -185,8 +212,12 @@ public partial class SimulationViewModel(
         return new SimulationRequest(
             type,
             Name,
-            ParseMoney(Amount, "Tutar"),
-            DateOnly.FromDateTime(StartDate),
+            IsStrategyChange ? 0m : ParseMoney(Amount, "Tutar"),
+            IsStrategyChange
+                ? SelectedStrategySalaryDate?.Value ??
+                  throw new InvalidOperationException(
+                      "Geçerli maaş tarihi seçilmelidir.")
+                : DateOnly.FromDateTime(StartDate),
             count,
             NeedsFirstPayment
                 ? DateOnly.FromDateTime(FirstPaymentDate)
@@ -195,7 +226,9 @@ public partial class SimulationViewModel(
                 ? SelectedCreditCard?.Value ??
                   throw new InvalidOperationException("Kredi kartı seçilmelidir.")
                 : null,
-            repayment);
+            repayment,
+            IsStrategyChange ? SelectedStrategyMode?.Value : null,
+            IsStrategyChange ? SelectedStrategySalaryDate?.Value : null);
     }
 
     private void Populate(SimulationResult result)
@@ -223,6 +256,19 @@ public partial class SimulationViewModel(
             ? Money(cost)
             : string.Empty;
         FriendlySummary = result.FriendlySummary;
+        var transition = result.Scenario.FirstOrDefault(x =>
+            x.IsStrategyTransition);
+        HasStrategyTransitionSummary = transition is not null;
+        StrategyTransitionSummary = transition is null
+            ? string.Empty
+            : string.Join(Environment.NewLine,
+                $"Geçiş maaşı: {SalaryText(transition.PeriodStart)}",
+                $"Normal zorunlu yük: {Money(result.Baseline.Single(x => x.PeriodStart == transition.PeriodStart).MandatoryOutflow)}",
+                $"Geçmiş düzenden kapanacak: {Money(transition.TransitionCatchUpAmount)}",
+                $"İleri dönem için ayrılacak: {Money(transition.ForwardFundedAmount)}",
+                $"Toplam geçiş yükü: {Money(transition.MandatoryOutflow)}",
+                $"Tahmini tasarruf: {Money(transition.EstimatedSavingsCapacity)}",
+                $"Tahmini birikim: {Money(transition.EndingProjectedSavings)}");
 
         Results.Clear();
         foreach (var row in result.Rows)

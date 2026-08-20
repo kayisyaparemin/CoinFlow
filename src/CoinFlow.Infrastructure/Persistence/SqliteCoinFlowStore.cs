@@ -9,7 +9,9 @@ namespace CoinFlow.Infrastructure.Persistence;
 public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
 {
     private const string DateFormat = "yyyy-MM-dd";
-    private const int CurrentSchemaVersion = 5;
+    private const int CurrentSchemaVersion = 6;
+    private static readonly Guid InitialAssignmentStrategyId =
+        Guid.Parse("50000000-0000-0000-0000-000000000001");
     private readonly SQLiteAsyncConnection _database;
     private readonly bool _seedDevelopmentData;
     private readonly DateOnly _migrationDate;
@@ -65,6 +67,7 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
             await _database.CreateTableAsync<CreditCardPaymentPlanRow>();
             await _database.CreateTableAsync<PlannedLargeExpenseRow>();
             await _database.CreateTableAsync<SettingsRow>();
+            await _database.CreateTableAsync<PaymentAssignmentStrategyRow>();
 
             await MigrateLegacyCreditCardsAsync();
             await RemoveObsoleteDailyTrackingTablesAsync();
@@ -94,6 +97,13 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
                 settings.DevelopmentSeedVersion =
                     DevelopmentDataSeeder.CurrentSeedVersion;
             }
+
+            if (string.IsNullOrWhiteSpace(settings.ProjectionAnchorDate))
+            {
+                settings.ProjectionAnchorDate = FormatDate(_migrationDate);
+            }
+
+            await EnsureInitialPaymentAssignmentStrategyAsync(settings);
 
             settings.SchemaVersion = CurrentSchemaVersion;
             settings.DevelopmentSeedEnabled = _seedDevelopmentData;
@@ -125,6 +135,7 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
             connection.DeleteAll<OtherIncomeRow>();
             connection.DeleteAll<SalaryRow>();
             connection.DeleteAll<LoanRow>();
+            connection.DeleteAll<PaymentAssignmentStrategyRow>();
             connection.DeleteAll<SettingsRow>();
             connection.Insert(DefaultSettingsRow());
         });
@@ -141,6 +152,9 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
                 DevelopmentDataSeeder.CurrentSeedVersion;
             await _database.UpdateAsync(settings);
         }
+
+        await EnsureInitialPaymentAssignmentStrategyAsync(
+            await _database.Table<SettingsRow>().FirstAsync());
     }
 
     public async Task<UserSettings> GetSettingsAsync(
@@ -153,8 +167,8 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
             SalaryDay = row.SalaryDay,
             MonthlyLivingBudget = row.MonthlyLivingBudget,
             ProjectionStartingSavings = row.ProjectionStartingSavings,
-            PaymentAssignmentMode =
-                (PaymentAssignmentMode)row.PaymentAssignmentMode
+            ProjectionAnchorDate = ParseDate(
+                row.ProjectionAnchorDate ?? FormatDate(_migrationDate))
         };
     }
 
@@ -168,9 +182,39 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         row.MonthlyLivingBudget = settings.MonthlyLivingBudget;
         row.ProjectionStartingSavings =
             settings.ProjectionStartingSavings;
-        row.PaymentAssignmentMode =
-            (int)settings.PaymentAssignmentMode;
+        row.ProjectionAnchorDate =
+            FormatDate(settings.ProjectionAnchorDate);
         await _database.UpdateAsync(row);
+    }
+
+    public async Task<IReadOnlyList<PaymentAssignmentStrategy>>
+        GetPaymentAssignmentStrategiesAsync(
+            CancellationToken cancellationToken = default)
+    {
+        await InitializeAsync(cancellationToken);
+        return (await _database
+                .Table<PaymentAssignmentStrategyRow>()
+                .OrderBy(x => x.EffectiveFromSalaryDate)
+                .ToListAsync())
+            .Select(FromRow)
+            .ToArray();
+    }
+
+    public async Task UpsertPaymentAssignmentStrategyAsync(
+        PaymentAssignmentStrategy strategy,
+        CancellationToken cancellationToken = default)
+    {
+        await InitializeAsync(cancellationToken);
+        await _database.InsertOrReplaceAsync(ToRow(strategy));
+    }
+
+    public async Task DeletePaymentAssignmentStrategyAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        await InitializeAsync(cancellationToken);
+        await _database.DeleteAsync<PaymentAssignmentStrategyRow>(
+            Key(id));
     }
 
     public async Task<IReadOnlyList<SalaryScheduleEntry>>
@@ -432,6 +476,30 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
     private static string Key(Guid id) => id.ToString("D");
     private static Guid ParseKey(string value) => Guid.Parse(value);
 
+    private static PaymentAssignmentStrategyRow ToRow(
+        PaymentAssignmentStrategy value) => new()
+    {
+        Id = Key(value.Id),
+        Mode = (int)value.Mode,
+        EffectiveFromSalaryDate =
+            FormatDate(value.EffectiveFromSalaryDate),
+        CreatedAt = value.CreatedAt.ToString("O", CultureInfo.InvariantCulture),
+        Note = value.Note
+    };
+
+    private static PaymentAssignmentStrategy FromRow(
+        PaymentAssignmentStrategyRow row) => new()
+    {
+        Id = ParseKey(row.Id),
+        Mode = (PaymentAssignmentMode)row.Mode,
+        EffectiveFromSalaryDate =
+            ParseDate(row.EffectiveFromSalaryDate),
+        CreatedAt = DateTimeOffset.Parse(
+            row.CreatedAt,
+            CultureInfo.InvariantCulture),
+        Note = row.Note
+    };
+
     internal static SalaryRow ToRow(SalaryScheduleEntry value) => new()
     {
         Id = Key(value.Id),
@@ -640,6 +708,7 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         SalaryDay = 10,
         MonthlyLivingBudget = _seedDevelopmentData ? 30_000m : 0m,
         ProjectionStartingSavings = 0m,
+        ProjectionAnchorDate = FormatDate(_migrationDate),
         PaymentAssignmentMode =
             (int)PaymentAssignmentMode.UpcomingPeriod,
         SchemaVersion = CurrentSchemaVersion,
@@ -648,6 +717,38 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         LegacyRemovedFeatureFlag = false,
         TrackingStartedDate = null
     };
+
+    private async Task EnsureInitialPaymentAssignmentStrategyAsync(
+        SettingsRow settings)
+    {
+        if (await _database
+                .Table<PaymentAssignmentStrategyRow>()
+                .CountAsync() > 0)
+        {
+            return;
+        }
+
+        var anchor = ParseDate(
+            settings.ProjectionAnchorDate ?? FormatDate(_migrationDate));
+        var firstSalary = new SalaryPeriodCalculator()
+            .GetFirstSalaryOnOrAfter(anchor, settings.SalaryDay);
+        var legacyMode = Enum.IsDefined(
+            typeof(PaymentAssignmentMode),
+            settings.PaymentAssignmentMode)
+            ? (PaymentAssignmentMode)settings.PaymentAssignmentMode
+            : PaymentAssignmentMode.UpcomingPeriod;
+        await _database.InsertAsync(ToRow(
+            new PaymentAssignmentStrategy
+            {
+                Id = InitialAssignmentStrategyId,
+                Mode = legacyMode,
+                EffectiveFromSalaryDate = firstSalary,
+                CreatedAt = new DateTimeOffset(
+                    _migrationDate.ToDateTime(TimeOnly.MinValue),
+                    TimeSpan.Zero),
+                Note = "İlk maaş kullanım düzeni"
+            }));
+    }
 
     private async Task<bool> IsFinancialPlanEmptyAsync() =>
         await _database.Table<SalaryRow>().CountAsync() == 0 &&

@@ -44,6 +44,16 @@ public enum PaymentAssignmentMode
     PreviousPeriod = 1
 }
 
+public sealed record PaymentAssignmentStrategy
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public PaymentAssignmentMode Mode { get; init; } =
+        PaymentAssignmentMode.UpcomingPeriod;
+    public DateOnly EffectiveFromSalaryDate { get; init; }
+    public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.UtcNow;
+    public string Note { get; init; } = string.Empty;
+}
+
 public sealed record SalaryScheduleEntry
 {
     public Guid Id { get; init; } = Guid.NewGuid();
@@ -146,8 +156,7 @@ public sealed record UserSettings
     public int SalaryDay { get; init; } = 10;
     public decimal MonthlyLivingBudget { get; init; }
     public decimal ProjectionStartingSavings { get; init; }
-    public PaymentAssignmentMode PaymentAssignmentMode { get; init; } =
-        PaymentAssignmentMode.UpcomingPeriod;
+    public DateOnly ProjectionAnchorDate { get; init; }
 }
 
 public sealed record FinancialPlan
@@ -159,4 +168,6 @@ public sealed record FinancialPlan
     public IReadOnlyList<TemporaryPaymentPlan> PaymentPlans { get; init; } = [];
     public IReadOnlyList<CreditCard> CreditCards { get; init; } = [];
     public IReadOnlyList<PlannedLargeExpense> PlannedLargeExpenses { get; init; } = [];
+    public IReadOnlyList<PaymentAssignmentStrategy>
+        PaymentAssignmentStrategies { get; init; } = [];
 }

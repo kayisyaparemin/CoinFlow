@@ -86,6 +86,9 @@ public partial class FutureMonthsViewModel(
             $"Taksit / finansman: {Money(row.InstallmentPayments)}",
             $"Diğer planlı: {Money(row.OtherScheduledPayments)}",
             $"Zorunlu toplam: {Money(row.MandatoryOutflow)}",
+            $"Normal zorunlu yük: {Money(row.NormalMandatoryAmount)}",
+            $"Geçmiş düzenden kapanacak: {Money(row.TransitionCatchUpAmount)}",
+            $"İleri dönem için ayrılacak: {Money(row.ForwardFundedAmount)}",
             $"Tahmini yaşam gideri: {Money(row.LivingBudget)}",
             $"Büyük planlı ödeme: {Money(row.PlannedLargeCashExpenses)}"
         };
@@ -124,6 +127,17 @@ public partial class FutureMonthsViewModel(
                 $"Yaşam bütçesi sonrası {Money(Math.Abs(row.EstimatedSavingsCapacity))} açık.");
         }
 
+        if (row.IsStrategyTransition)
+        {
+            notices.Add(
+                $"Düzen değişikliği dönemi • ek geçiş yükü {Money(row.TransitionCatchUpAmount)}.");
+        }
+
+        if (row.IsInitialSnapshotPeriod)
+        {
+            notices.Add("Geçiş / snapshot sonrası ilk dönem.");
+        }
+
         if (row.MandatoryItems.Any(x => x.PaymentBeforeSalary) ||
             row.CardPaymentStatuses.Any(x => x.PaymentBeforeSalary))
         {
@@ -141,6 +155,13 @@ public partial class FutureMonthsViewModel(
 
     private static string AssignmentText(SalaryPeriodProjection row)
     {
+        if (row.IsStrategyTransition)
+        {
+            return $"Düzen değişikliği dönemi • " +
+                   $"{row.PaymentWindowStart.ToString("dd MMM", TurkishCulture)}–" +
+                   $"{row.PaymentWindowEnd.ToString("dd MMM", TurkishCulture)}";
+        }
+
         var action = row.PaymentAssignmentMode ==
                      CoinFlow.Domain.Models.PaymentAssignmentMode.PreviousPeriod
             ? "ödemelerini kapatır"

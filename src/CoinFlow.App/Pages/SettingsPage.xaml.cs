@@ -40,4 +40,49 @@ public partial class SettingsPage : ContentPage
                 "Tamam");
         }
     }
+
+    private async void OnApplyStrategyClicked(
+        object? sender,
+        EventArgs eventArgs)
+    {
+        var confirmed = await DisplayAlert(
+            "Düzen değişikliğini planla",
+            "Önizlemedeki düzen seçilen maaş tarihinde başlayacak. Geçmiş kayıtlar değiştirilmeyecek.",
+            "Planla",
+            "Vazgeç");
+        if (confirmed)
+        {
+            await _viewModel.ApplyStrategyAsync();
+        }
+    }
+
+    private async void OnDeletePendingStrategyClicked(
+        object? sender,
+        EventArgs eventArgs)
+    {
+        var confirmed = await DisplayAlert(
+            "Planlanan değişikliği sil",
+            "Henüz başlamamış düzen değişikliği silinsin mi?",
+            "Sil",
+            "Vazgeç");
+        if (confirmed)
+        {
+            await _viewModel.DeletePendingStrategyAsync();
+        }
+    }
+
+    private async void OnCorrectHistoricalStrategyClicked(
+        object? sender,
+        EventArgs eventArgs)
+    {
+        var confirmed = await DisplayAlert(
+            "Geçmiş kaydı düzelt",
+            "Bu işlem geçmiş projection sonuçlarını değiştirebilir. Seçilen geçmiş düzen kaydı düzeltilecek. Devam edilsin mi?",
+            "Geçmişi düzelt",
+            "Vazgeç");
+        if (confirmed)
+        {
+            await _viewModel.CorrectHistoricalStrategyAsync();
+        }
+    }
 }

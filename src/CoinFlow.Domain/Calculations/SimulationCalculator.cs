@@ -12,7 +12,8 @@ public enum SimulationScenarioType
     FutureOneTimePayment,
     RecurringPayment,
     FutureIncome,
-    SalaryChange
+    SalaryChange,
+    PaymentStrategyChange
 }
 
 public sealed record SimulationRequest(
@@ -23,7 +24,9 @@ public sealed record SimulationRequest(
     int PaymentCount = 1,
     DateOnly? FirstPaymentDate = null,
     Guid? CreditCardId = null,
-    decimal? TotalRepaymentAmount = null);
+    decimal? TotalRepaymentAmount = null,
+    PaymentAssignmentMode? NewPaymentAssignmentMode = null,
+    DateOnly? EffectiveSalaryDate = null);
 
 public sealed record SimulationImpactRow(
     SalaryPeriodProjection Baseline,
@@ -63,21 +66,18 @@ public sealed class SimulationCalculator(
         FinancialPlan currentPlan,
         DateOnly asOf,
         SimulationRequest request,
-        int periodCount = 12,
-        PaymentAssignmentMode? assignmentModeOverride = null)
+        int periodCount = 12)
     {
         Validate(request);
         var baseline = projectionCalculator.Calculate(
             currentPlan,
             asOf,
-            periodCount,
-            assignmentModeOverride);
+            periodCount);
         var scenarioPlan = BuildScenarioPlan(currentPlan, request);
         var scenario = projectionCalculator.Calculate(
             scenarioPlan,
             asOf,
-            periodCount,
-            assignmentModeOverride);
+            periodCount);
         var rows = baseline
             .Zip(scenario, (current, planned) =>
                 new SimulationImpactRow(current, planned))
@@ -167,7 +167,41 @@ public sealed class SimulationCalculator(
                         })
                         .ToArray()
                 },
+            SimulationScenarioType.PaymentStrategyChange =>
+                AddPaymentStrategy(plan, request),
             _ => throw new ArgumentOutOfRangeException(nameof(request.Type))
+        };
+    }
+
+    private static FinancialPlan AddPaymentStrategy(
+        FinancialPlan plan,
+        SimulationRequest request)
+    {
+        var effectiveDate = request.EffectiveSalaryDate ?? request.StartDate;
+        if (CalendarRules.ResolveDay(
+                effectiveDate.Year,
+                effectiveDate.Month,
+                plan.Settings.SalaryDay) != effectiveDate)
+        {
+            throw new InvalidOperationException(
+                "Düzen değişikliği yalnızca bir maaş tarihinde başlayabilir.");
+        }
+
+        var mode = request.NewPaymentAssignmentMode ??
+                   throw new InvalidOperationException(
+                       "Yeni maaş kullanım düzeni seçilmelidir.");
+        return plan with
+        {
+            PaymentAssignmentStrategies = plan.PaymentAssignmentStrategies
+                .Where(x => x.EffectiveFromSalaryDate != effectiveDate)
+                .Append(new PaymentAssignmentStrategy
+                {
+                    Mode = mode,
+                    EffectiveFromSalaryDate = effectiveDate,
+                    Note = request.Name.Trim()
+                })
+                .OrderBy(x => x.EffectiveFromSalaryDate)
+                .ToArray()
         };
     }
 
@@ -308,7 +342,8 @@ public sealed class SimulationCalculator(
         request.Type switch
         {
             SimulationScenarioType.FutureIncome or
-                SimulationScenarioType.SalaryChange => 0m,
+                SimulationScenarioType.SalaryChange or
+                SimulationScenarioType.PaymentStrategyChange => 0m,
             SimulationScenarioType.FinancingLoan =>
                 request.TotalRepaymentAmount ?? request.Amount,
             SimulationScenarioType.RecurringPayment =>
@@ -338,11 +373,20 @@ public sealed class SimulationCalculator(
             throw new InvalidOperationException("Senaryo adı gereklidir.");
         }
 
-        if (request.Amount <= 0m)
+        if (request.Type != SimulationScenarioType.PaymentStrategyChange &&
+            request.Amount <= 0m)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(request),
                 "Senaryo tutarı sıfırdan büyük olmalıdır.");
+        }
+
+        if (request.Type == SimulationScenarioType.PaymentStrategyChange &&
+            (request.NewPaymentAssignmentMode is null ||
+             request.EffectiveSalaryDate is null))
+        {
+            throw new InvalidOperationException(
+                "Yeni düzen ve geçerli maaş tarihi seçilmelidir.");
         }
 
         var needsCount = request.Type is

@@ -10,20 +10,20 @@ internal static class TestFactory
     public static FinancialProjectionCalculator ProjectionCalculator()
     {
         var salaryPeriods = new SalaryPeriodCalculator();
-        var assignment = new PaymentAssignmentResolver(salaryPeriods);
+        var strategyResolver = new PaymentAssignmentStrategyResolver(
+            salaryPeriods);
+        var fundingPlanner = new SalaryFundingPlanner(strategyResolver);
         var income = new IncomeProjectionCalculator(new SalaryResolver());
         var loans = new LoanScheduleCalculator();
         var scheduled = new ScheduledPaymentCalculator();
-        var mandatory = new MandatoryPaymentCalculator(
-            loans,
-            scheduled,
-            assignment);
+        var mandatory = new MandatoryPaymentCalculator(loans, scheduled);
         return new FinancialProjectionCalculator(
             salaryPeriods,
             income,
             new CreditCardStatementCalculator(),
             mandatory,
-            assignment);
+            fundingPlanner,
+            strategyResolver);
     }
 
     public static CoinFlowService Service(
@@ -44,7 +44,10 @@ internal static class TestFactory
             new SimulationCalculator(
                 projectionCalculator,
                 installments),
-            new TargetAmountCalculator());
+            new TargetAmountCalculator(),
+            new PaymentAssignmentStrategyResolver(
+                new SalaryPeriodCalculator()),
+            new SalaryPeriodCalculator());
     }
 
     public static FinancialPlan CanonicalPlan() => new()
@@ -54,7 +57,7 @@ internal static class TestFactory
             SalaryDay = 10,
             MonthlyLivingBudget = 30_000m,
             ProjectionStartingSavings = 0m,
-            PaymentAssignmentMode = PaymentAssignmentMode.UpcomingPeriod
+            ProjectionAnchorDate = new DateOnly(2026, 8, 20)
         },
         Salaries =
         [
@@ -93,7 +96,19 @@ internal static class TestFactory
             }
         ],
         PaymentPlans = [EminevimPlan()],
-        CreditCards = [AxessCard()]
+        CreditCards = [AxessCard()],
+        PaymentAssignmentStrategies =
+        [
+            new PaymentAssignmentStrategy
+            {
+                Id = Guid.Parse("50000000-0000-0000-0000-000000000001"),
+                Mode = PaymentAssignmentMode.UpcomingPeriod,
+                EffectiveFromSalaryDate = new DateOnly(2026, 9, 10),
+                CreatedAt = new DateTimeOffset(
+                    2026, 8, 20, 0, 0, 0, TimeSpan.Zero),
+                Note = "İlk maaş kullanım düzeni"
+            }
+        ]
     };
 
     public static TemporaryPaymentPlan EminevimPlan()

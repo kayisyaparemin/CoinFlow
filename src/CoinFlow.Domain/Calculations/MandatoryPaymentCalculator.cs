@@ -8,7 +8,18 @@ public enum ObligationType
     CreditCard,
     TemporaryPayment,
     InstallmentPayment,
-    OtherScheduledPayment
+    OtherScheduledPayment,
+    PlannedLargeExpense
+}
+
+public enum PaymentAssignmentReason
+{
+    NormalPrevious,
+    NormalUpcoming,
+    TransitionCatchUp,
+    TransitionForward,
+    InitialSnapshotCatchUp,
+    PreFirstSalaryUpcoming
 }
 
 public sealed record ObligationItem(
@@ -20,7 +31,13 @@ public sealed record ObligationItem(
     bool IsEstimate = false,
     string Detail = "",
     DateOnly AssignedSalaryDate = default,
-    bool PaymentBeforeSalary = false);
+    bool PaymentBeforeSalary = false,
+    Guid PaymentId = default,
+    PaymentAssignmentMode? ActiveMode = null,
+    PaymentAssignmentReason? AssignmentReason = null,
+    bool IsTransitionCatchUp = false,
+    bool IsForwardFunded = false,
+    bool IsPreFirstSalaryObligation = false);
 
 public sealed record MandatoryPaymentSummary(
     IReadOnlyList<ObligationItem> Items,
@@ -33,16 +50,12 @@ public sealed record MandatoryPaymentSummary(
 
 public sealed class MandatoryPaymentCalculator(
     LoanScheduleCalculator loanScheduleCalculator,
-    ScheduledPaymentCalculator scheduledPaymentCalculator,
-    PaymentAssignmentResolver assignmentResolver)
+    ScheduledPaymentCalculator scheduledPaymentCalculator)
 {
-    public MandatoryPaymentSummary Calculate(
-        SalaryPeriod period,
+    public IReadOnlyList<ObligationItem> BuildObligations(
         IEnumerable<Loan> loans,
         IEnumerable<TemporaryPaymentPlan> plans,
-        IEnumerable<ObligationItem> creditCardPayments,
-        int salaryDay,
-        PaymentAssignmentMode assignmentMode)
+        IEnumerable<ObligationItem> creditCardPayments)
     {
         var items = new List<ObligationItem>();
 
@@ -56,15 +69,24 @@ public sealed class MandatoryPaymentCalculator(
                     ObligationType.Loan,
                     date,
                     loan.MonthlyPayment,
-                    date == finalDate)));
+                    date == finalDate,
+                    PaymentId: loan.Id)));
         }
 
         items.AddRange(scheduledPaymentCalculator.GetItems(plans));
         items.AddRange(creditCardPayments);
 
-        var ordered = items
-            .Select(item => Assign(item, salaryDay, assignmentMode))
-            .Where(item => item.AssignedSalaryDate == period.Start)
+        return items
+            .OrderBy(x => x.DueDate)
+            .ThenBy(x => x.Name)
+            .ToArray();
+    }
+
+    public MandatoryPaymentSummary Summarize(
+        IEnumerable<ObligationItem> assignedItems)
+    {
+        var ordered = assignedItems
+            .Where(x => x.Type != ObligationType.PlannedLargeExpense)
             .OrderBy(x => x.DueDate)
             .ThenBy(x => x.Name)
             .ToArray();
@@ -85,21 +107,5 @@ public sealed class MandatoryPaymentCalculator(
             otherPayments,
             loanPayments + cardPayments + temporaryPayments +
             installmentPayments + otherPayments);
-    }
-
-    private ObligationItem Assign(
-        ObligationItem item,
-        int salaryDay,
-        PaymentAssignmentMode assignmentMode)
-    {
-        var salaryDate = assignmentResolver.ResolveFundingSalaryDate(
-            item.DueDate,
-            salaryDay,
-            assignmentMode);
-        return item with
-        {
-            AssignedSalaryDate = salaryDate,
-            PaymentBeforeSalary = item.DueDate < salaryDate
-        };
     }
 }

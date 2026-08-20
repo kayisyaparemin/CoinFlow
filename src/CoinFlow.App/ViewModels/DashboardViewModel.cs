@@ -13,6 +13,8 @@ public partial class DashboardViewModel(
 {
     public ObservableCollection<UpcomingPaymentLine>
         UpcomingPayments { get; } = [];
+    public ObservableCollection<UpcomingPaymentLine>
+        PreFirstSalaryPayments { get; } = [];
 
     [ObservableProperty] private string currentPeriodText = "—";
     [ObservableProperty] private string assignmentModeText = "—";
@@ -30,8 +32,12 @@ public partial class DashboardViewModel(
     [ObservableProperty] private bool hasDeficit;
     [ObservableProperty] private bool hasUpcomingPayments;
     [ObservableProperty] private bool hasNoUpcomingPayments = true;
+    [ObservableProperty] private bool hasPreFirstSalaryPayments;
     [ObservableProperty] private bool hasUndeterminedCardPayment;
     [ObservableProperty] private string calculationDetails = string.Empty;
+    [ObservableProperty] private string strategyStatusText = "—";
+    [ObservableProperty] private string pendingStrategyText = string.Empty;
+    [ObservableProperty] private bool hasPendingStrategy;
 
     public bool IsDevelopment => BuildInfo.IsDevelopment;
 
@@ -76,9 +82,25 @@ public partial class DashboardViewModel(
                 : $"Bu dönemin tahmini tasarruf kapasitesi {Money(current.EstimatedSavingsCapacity)}.";
             HasUndeterminedCardPayment =
                 dashboard.HasUndeterminedCardPayments;
+            StrategyStatusText = AssignmentModeText;
+            HasPendingStrategy = dashboard.PendingStrategy is not null;
+            PendingStrategyText = dashboard.PendingStrategy is null
+                ? string.Empty
+                : $"{dashboard.PendingStrategy.EffectiveFromSalaryDate.ToString("dd MMMM yyyy", TurkishCulture)} maaşından itibaren " +
+                  ModeText(dashboard.PendingStrategy.Mode);
+
+            PreFirstSalaryPayments.Clear();
+            foreach (var payment in dashboard.PreFirstSalaryObligations)
+            {
+                PreFirstSalaryPayments.Add(ToLine(
+                    payment,
+                    "Sonraki maaştan önce vadesi geliyor"));
+            }
+            HasPreFirstSalaryPayments = PreFirstSalaryPayments.Count > 0;
 
             UpcomingPayments.Clear();
-            foreach (var payment in dashboard.UpcomingPayments)
+            foreach (var payment in dashboard.UpcomingPayments.Where(x =>
+                         !x.IsPreFirstSalaryObligation))
             {
                 var category = payment.IsEstimate
                     ? "Kart projeksiyonu • tahmini"
@@ -143,6 +165,20 @@ public partial class DashboardViewModel(
                 .Append($"Tahmini yaşam: {Money(row.LivingBudget, 2)}")
                 .Append($"Tahmini tasarruf: {Money(row.EstimatedSavingsCapacity, 2)}"));
     }
+
+    private static UpcomingPaymentLine ToLine(
+        ObligationItem payment,
+        string detail) => new(
+        payment.DueDate.ToString("dd MMM", TurkishCulture),
+        payment.Name,
+        Money(payment.Amount),
+        detail);
+
+    private static string ModeText(
+        CoinFlow.Domain.Models.PaymentAssignmentMode mode) =>
+        mode == CoinFlow.Domain.Models.PaymentAssignmentMode.PreviousPeriod
+            ? "Geçmiş dönemi kapatırım"
+            : "Gelecek dönemi karşılarım";
 
     private static string PeriodText(SalaryPeriod period) =>
         $"{period.Start.ToString("dd MMM", TurkishCulture)} → {period.End.ToString("dd MMM yyyy", TurkishCulture)}";

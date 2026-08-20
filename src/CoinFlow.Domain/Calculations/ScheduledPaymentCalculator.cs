@@ -29,7 +29,8 @@ public sealed class ScheduledPaymentCalculator
                     type,
                     x.DueDate,
                     x.Amount,
-                    x.DueDate == finalDate)));
+                    x.DueDate == finalDate,
+                    PaymentId: x.Id)));
         }
 
         return items;

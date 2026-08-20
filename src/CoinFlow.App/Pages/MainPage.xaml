@@ -22,7 +22,7 @@
 
             <Border BackgroundColor="{StaticResource HeroSurface}">
                 <VerticalStackLayout Spacing="10">
-                    <Label Text="BU MAAŞ DÖNEMİ" Style="{StaticResource Eyebrow}" />
+                    <Label Text="SONRAKİ MAAŞ PLANI" Style="{StaticResource Eyebrow}" />
                     <Label Text="{Binding CurrentPeriodText}" Style="{StaticResource SectionTitle}" />
                     <Label Text="{Binding AssignmentModeText}" FontFamily="OpenSansSemibold" />
                     <Label Text="{Binding PaymentWindowText}" Style="{StaticResource MutedText}" />
@@ -45,12 +45,39 @@
                 </VerticalStackLayout>
             </Border>
 
+            <Border IsVisible="{Binding HasPreFirstSalaryPayments}" BackgroundColor="{StaticResource SoftPink}">
+                <VerticalStackLayout Spacing="9">
+                    <Label Text="Sonraki Maaştan Önce" Style="{StaticResource SectionTitle}" />
+                    <Label Text="Bu exact-date ödemeler ilk maaş bütçesine eklenmez; maaştan önce yaklaşan yükümlülüklerdir." Style="{StaticResource MutedText}" />
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding PreFirstSalaryPayments}" Spacing="7">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate>
+                                <Grid ColumnDefinitions="70,*,Auto" RowDefinitions="Auto,Auto">
+                                    <Label Text="{Binding Date}" FontFamily="OpenSansSemibold" />
+                                    <Label Grid.Column="1" Text="{Binding Name}" />
+                                    <Label Grid.Column="2" Text="{Binding Amount}" FontFamily="OpenSansSemibold" />
+                                    <Label Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding Detail}" Style="{StaticResource MutedText}" />
+                                </Grid>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </Border>
+
+            <Border>
+                <VerticalStackLayout Spacing="6">
+                    <Label Text="Maaş Kullanım Düzeni" Style="{StaticResource SectionTitle}" />
+                    <Label Text="{Binding StrategyStatusText}" FontFamily="OpenSansSemibold" />
+                    <Label Text="{Binding PendingStrategyText}" IsVisible="{Binding HasPendingStrategy}" Style="{StaticResource MutedText}" />
+                </VerticalStackLayout>
+            </Border>
+
             <Border IsVisible="{Binding HasUndeterminedCardPayment}" BackgroundColor="{StaticResource SoftPink}">
                 <Label Text="Bazı kart ödemeleri henüz seçilmedi. Bu dönemlerin projeksiyonu eksik olabilir." />
             </Border>
 
             <VerticalStackLayout Spacing="10">
-                <Label Text="Yaklaşan Büyük Ödemeler" Style="{StaticResource SectionTitle}" />
+                <Label Text="Sonraki Maaş Planındaki Ödemeler" Style="{StaticResource SectionTitle}" />
                 <Label Text="Yaklaşan exact-date ödeme bulunmuyor."
                        Style="{StaticResource MutedText}"
                        IsVisible="{Binding HasNoUpcomingPayments}" />

@@ -12,6 +12,16 @@ public interface ICoinFlowStore
         UserSettings settings,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<PaymentAssignmentStrategy>>
+        GetPaymentAssignmentStrategiesAsync(
+            CancellationToken cancellationToken = default);
+    Task UpsertPaymentAssignmentStrategyAsync(
+        PaymentAssignmentStrategy strategy,
+        CancellationToken cancellationToken = default);
+    Task DeletePaymentAssignmentStrategyAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<SalaryScheduleEntry>> GetSalaryScheduleAsync(
         CancellationToken cancellationToken = default);
     Task UpsertSalaryAsync(

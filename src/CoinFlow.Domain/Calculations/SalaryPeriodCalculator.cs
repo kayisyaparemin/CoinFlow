@@ -42,4 +42,14 @@ public sealed class SalaryPeriodCalculator
             })
             .ToArray();
     }
+
+    public DateOnly GetFirstSalaryOnOrAfter(
+        DateOnly anchorDate,
+        int salaryDay)
+    {
+        var containingPeriod = GetPeriod(anchorDate, salaryDay);
+        return anchorDate == containingPeriod.Start
+            ? containingPeriod.Start
+            : containingPeriod.End;
+    }
 }

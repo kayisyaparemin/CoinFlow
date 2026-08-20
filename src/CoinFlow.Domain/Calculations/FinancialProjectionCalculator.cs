@@ -7,63 +7,81 @@ public sealed class FinancialProjectionCalculator(
     IncomeProjectionCalculator incomeProjectionCalculator,
     CreditCardStatementCalculator cardStatementCalculator,
     MandatoryPaymentCalculator mandatoryPaymentCalculator,
-    PaymentAssignmentResolver assignmentResolver)
+    SalaryFundingPlanner fundingPlanner,
+    PaymentAssignmentStrategyResolver strategyResolver)
 {
     public IReadOnlyList<SalaryPeriodProjection> Calculate(
         FinancialPlan plan,
         DateOnly asOf,
-        int periodCount = 12,
-        PaymentAssignmentMode? assignmentModeOverride = null)
+        int periodCount = 12) =>
+        CalculatePlan(plan, asOf, periodCount).Periods;
+
+    public FinancialProjectionResult CalculatePlan(
+        FinancialPlan plan,
+        DateOnly asOf,
+        int periodCount = 12)
     {
         Validate(plan);
-        var assignmentMode = assignmentModeOverride ??
-                             plan.Settings.PaymentAssignmentMode;
-        var periods = salaryPeriodCalculator.GetPeriods(
-            asOf,
+        var anchor = plan.Settings.ProjectionAnchorDate == default
+            ? asOf
+            : plan.Settings.ProjectionAnchorDate;
+        var firstSalary = salaryPeriodCalculator.GetFirstSalaryOnOrAfter(
+            anchor,
+            plan.Settings.SalaryDay);
+        var periods = BuildPeriods(
+            firstSalary,
             plan.Settings.SalaryDay,
             periodCount);
+        strategyResolver.ValidateHistory(
+            plan.PaymentAssignmentStrategies,
+            plan.Settings.SalaryDay,
+            firstSalary);
+
         var cardBundle = BuildCardPayments(
             plan.CreditCards,
-            periods[^1].End,
+            periods[^1].End);
+        var obligations = mandatoryPaymentCalculator
+            .BuildObligations(
+                plan.Loans,
+                plan.PaymentPlans,
+                cardBundle.Obligations)
+            .Concat(BuildLargeExpenseObligations(plan.PlannedLargeExpenses))
+            .ToArray();
+        var fundingPlan = fundingPlanner.Plan(
+            periods,
+            obligations,
+            anchor,
             plan.Settings.SalaryDay,
-            assignmentMode);
+            plan.PaymentAssignmentStrategies);
+        var statuses = AssignCardStatuses(cardBundle.Statuses, fundingPlan);
         var result = new List<SalaryPeriodProjection>(periods.Count);
         var openingSavings = plan.Settings.ProjectionStartingSavings;
 
         foreach (var period in periods)
         {
+            var budget = fundingPlan.Budgets.Single(x =>
+                x.SalaryDate == period.Start);
             var income = incomeProjectionCalculator.Calculate(
                 period,
                 plan.Salaries,
                 plan.OtherIncomes);
-            var mandatory = mandatoryPaymentCalculator.Calculate(
-                period,
-                plan.Loans,
-                plan.PaymentPlans,
-                cardBundle.Obligations,
-                plan.Settings.SalaryDay,
-                assignmentMode);
+            var mandatory = mandatoryPaymentCalculator.Summarize(budget.Items);
             var availableAfterMandatory = income.TotalIncome - mandatory.Total;
             var estimatedSavings = availableAfterMandatory -
                                    plan.Settings.MonthlyLivingBudget;
-            var largeExpenses = plan.PlannedLargeExpenses
-                .Where(x => x.Status == PlannedExpenseStatus.Planned)
-                .Where(x => assignmentResolver.ResolveFundingSalaryDate(
-                    x.ExactDate,
-                    plan.Settings.SalaryDay,
-                    assignmentMode) == period.Start)
+            var largeExpenses = budget.Items
+                .Where(x => x.Type == ObligationType.PlannedLargeExpense)
+                .Select(item => plan.PlannedLargeExpenses.Single(x =>
+                    x.Id == item.PaymentId))
                 .OrderBy(x => x.ExactDate)
                 .ThenBy(x => x.Name)
                 .ToArray();
             var largeExpenseTotal = largeExpenses.Sum(x => x.Amount);
-            var endingSavings = openingSavings + estimatedSavings - largeExpenseTotal;
-            var statuses = cardBundle.Statuses
+            var endingSavings = openingSavings + estimatedSavings -
+                                largeExpenseTotal;
+            var periodStatuses = statuses
                 .Where(x => x.AssignedSalaryDate == period.Start)
                 .ToArray();
-            var paymentWindow = assignmentResolver.ResolveWindow(
-                period.Start,
-                plan.Settings.SalaryDay,
-                assignmentMode);
 
             result.Add(new SalaryPeriodProjection(
                 period.Start,
@@ -83,30 +101,54 @@ public sealed class FinancialProjectionCalculator(
                 largeExpenseTotal,
                 openingSavings,
                 endingSavings,
-                statuses.Any(x =>
+                periodStatuses.Any(x =>
                     x.Resolution == CreditCardPaymentResolution.ProjectionFallback),
-                statuses.Any(x =>
+                periodStatuses.Any(x =>
                     x.Resolution == CreditCardPaymentResolution.Undetermined),
                 availableAfterMandatory < 0m || estimatedSavings < 0m,
                 income.Items,
                 mandatory.Items,
                 largeExpenses,
-                statuses,
-                assignmentMode,
-                paymentWindow.StartInclusive,
-                paymentWindow.EndInclusive));
-
+                periodStatuses,
+                budget.Mode,
+                budget.CoverageStart,
+                budget.CoverageEnd,
+                budget.IsStrategyTransition,
+                budget.IsInitialSnapshotPeriod,
+                budget.NormalMandatoryAmount,
+                budget.TransitionCatchUpAmount,
+                budget.ForwardFundedAmount,
+                anchor));
             openingSavings = endingSavings;
         }
 
-        return result;
+        return new FinancialProjectionResult(result, fundingPlan);
+    }
+
+    private static IReadOnlyList<SalaryPeriod> BuildPeriods(
+        DateOnly firstSalary,
+        int salaryDay,
+        int count)
+    {
+        if (count is < 1 or > 60)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(count),
+                "Dönem sayısı 1 ile 60 arasında olmalıdır.");
+        }
+
+        return Enumerable.Range(0, count)
+            .Select(index => new SalaryPeriod(
+                CalendarRules.AddMonthsKeepingDay(
+                    firstSalary, index, salaryDay),
+                CalendarRules.AddMonthsKeepingDay(
+                    firstSalary, index + 1, salaryDay)))
+            .ToArray();
     }
 
     private CardPaymentBundle BuildCardPayments(
         IEnumerable<CreditCard> cards,
-        DateOnly horizonEnd,
-        int salaryDay,
-        PaymentAssignmentMode assignmentMode)
+        DateOnly horizonEnd)
     {
         var obligations = new List<ObligationItem>();
         var statuses = new List<CreditCardPaymentProjectionStatus>();
@@ -126,11 +168,6 @@ public sealed class FinancialProjectionCalculator(
                          .Project(card, statementCount, useProjectionFallback: true)
                          .Where(x => x.PaymentDueDate < horizonEnd))
             {
-                var assignedSalaryDate = assignmentResolver
-                    .ResolveFundingSalaryDate(
-                        statement.PaymentDueDate,
-                        salaryDay,
-                        assignmentMode);
                 statuses.Add(new CreditCardPaymentProjectionStatus(
                     card.Id,
                     cardName,
@@ -140,9 +177,7 @@ public sealed class FinancialProjectionCalculator(
                     statement.MinimumPayment,
                     statement.Payment,
                     statement.PaymentResolution,
-                    statement.AppliedPaymentType,
-                    assignedSalaryDate,
-                    statement.PaymentDueDate < assignedSalaryDate));
+                    statement.AppliedPaymentType));
 
                 if (statement.Payment is decimal payment)
                 {
@@ -160,7 +195,8 @@ public sealed class FinancialProjectionCalculator(
                             CreditCardPaymentResolution.DueDateOverride =>
                                 "Due-date ödeme planı",
                             _ => "Kart ödeme stratejisi"
-                        }));
+                        },
+                        PaymentId: card.Id));
                 }
             }
         }
@@ -168,14 +204,55 @@ public sealed class FinancialProjectionCalculator(
         return new CardPaymentBundle(obligations, statuses);
     }
 
+    private static IEnumerable<ObligationItem> BuildLargeExpenseObligations(
+        IEnumerable<PlannedLargeExpense> expenses) => expenses
+        .Where(x => x.Status == PlannedExpenseStatus.Planned)
+        .Select(x => new ObligationItem(
+            x.Name,
+            ObligationType.PlannedLargeExpense,
+            x.ExactDate,
+            x.Amount,
+            Detail: x.Note,
+            PaymentId: x.Id));
+
+    private static IReadOnlyList<CreditCardPaymentProjectionStatus>
+        AssignCardStatuses(
+            IEnumerable<CreditCardPaymentProjectionStatus> statuses,
+            SalaryFundingPlan fundingPlan) => statuses
+        .Select(status =>
+        {
+            var budget = fundingPlan.FindBudget(status.PaymentDueDate);
+            if (budget is not null)
+            {
+                return status with
+                {
+                    AssignedSalaryDate = budget.SalaryDate,
+                    PaymentBeforeSalary =
+                        status.PaymentDueDate < budget.SalaryDate,
+                    ActiveMode = budget.Mode,
+                    AssignmentReason = budget.ResolveReason(
+                        status.PaymentDueDate)
+                };
+            }
+
+            var isPreFirst = fundingPlan.IsPreFirstSalaryDate(
+                status.PaymentDueDate);
+            return status with
+            {
+                ActiveMode = isPreFirst
+                    ? fundingPlan.Budgets[0].Mode
+                    : null,
+                AssignmentReason = isPreFirst
+                    ? PaymentAssignmentReason.PreFirstSalaryUpcoming
+                    : null,
+                IsPreFirstSalaryObligation = isPreFirst
+            };
+        })
+        .ToArray();
+
     private static void Validate(FinancialPlan plan)
     {
         CalendarRules.ValidateDay(plan.Settings.SalaryDay);
-        if (!Enum.IsDefined(plan.Settings.PaymentAssignmentMode))
-        {
-            throw new InvalidOperationException(
-                "Maaş kullanım şekli geçersiz.");
-        }
         if (plan.Settings.MonthlyLivingBudget < 0m)
         {
             throw new InvalidOperationException(

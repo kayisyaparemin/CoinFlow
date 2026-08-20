@@ -17,22 +17,38 @@ public sealed class FinancialProjectionTests
             4);
 
         AssertRow(
-            rows[0], 115_000m, 14_501.23m, 38_594.27m, 0m,
-            53_095.50m, 61_904.50m, 30_000m, 31_904.50m);
-        AssertRow(
-            rows[1], 115_000m, 21_875.82m, 23_156.56m, 28_167.40m,
+            rows[0], 115_000m, 21_875.82m, 23_156.56m, 28_167.40m,
             73_199.78m, 41_800.22m, 30_000m, 11_800.22m);
         AssertRow(
-            rows[2], 115_000m, 21_875.82m, 20_109.28m, 28_167.40m,
+            rows[1], 115_000m, 21_875.82m, 20_109.28m, 28_167.40m,
             70_152.50m, 44_847.50m, 30_000m, 14_847.50m);
         AssertRow(
-            rows[3], 115_000m, 21_875.82m, 15_706.73m, 55_492.20m,
+            rows[2], 115_000m, 21_875.82m, 15_706.73m, 55_492.20m,
             93_074.75m, 21_925.25m, 30_000m, -8_074.75m);
 
-        Assert.Equal(31_904.50m, rows[0].EndingProjectedSavings);
-        Assert.Equal(43_704.72m, rows[1].EndingProjectedSavings);
-        Assert.Equal(58_552.22m, rows[2].EndingProjectedSavings);
-        Assert.Equal(50_477.47m, rows[3].EndingProjectedSavings);
+        Assert.Equal(11_800.22m, rows[0].EndingProjectedSavings);
+        Assert.Equal(26_647.72m, rows[1].EndingProjectedSavings);
+        Assert.Equal(18_572.97m, rows[2].EndingProjectedSavings);
+        Assert.Equal(new DateOnly(2026, 12, 10), rows[3].PeriodStart);
+    }
+
+    [Fact]
+    public void CanonicalUpcomingPlan_ExposesPreSalaryObligationsSeparately()
+    {
+        var result = _calculator.CalculatePlan(
+            TestFactory.CanonicalPlan(),
+            new DateOnly(2026, 8, 20),
+            12);
+
+        Assert.Equal(2, result.FundingPlan.PreFirstSalaryObligations.Count);
+        Assert.Equal(
+            53_095.50m,
+            result.FundingPlan.PreFirstSalaryObligations.Sum(x => x.Amount));
+        Assert.Equal(
+            result.FundingPlan.EligiblePaymentCount,
+            result.FundingPlan.AssignedExactlyOnceCount);
+        Assert.Equal(0, result.FundingPlan.UnassignedPaymentCount);
+        Assert.Equal(0, result.FundingPlan.DuplicateAssignedCount);
     }
 
     [Fact]
@@ -45,8 +61,8 @@ public sealed class FinancialProjectionTests
                 new Loan
                 {
                     MonthlyPayment = 500m,
-                    PaymentDay = 7,
-                    NextPaymentDate = new DateOnly(2026, 9, 7),
+                    PaymentDay = 18,
+                    NextPaymentDate = new DateOnly(2026, 9, 18),
                     RemainingInstallmentCount = 1
                 }
             ]
@@ -135,11 +151,10 @@ public sealed class FinancialProjectionTests
         var scenarioRows = _calculator.Calculate(
             scenario, new DateOnly(2026, 8, 20), 3);
 
-        Assert.Equal(0m, scenarioRows[0].PlannedLargeCashExpenses);
-        Assert.Equal(350_000m, scenarioRows[1].PlannedLargeCashExpenses);
+        Assert.Equal(350_000m, scenarioRows[0].PlannedLargeCashExpenses);
         Assert.Equal(
-            baselineRows[1].EndingProjectedSavings - 350_000m,
-            scenarioRows[1].EndingProjectedSavings);
+            baselineRows[0].EndingProjectedSavings - 350_000m,
+            scenarioRows[0].EndingProjectedSavings);
         Assert.Equal(
             baselineRows[2].EndingProjectedSavings - 350_000m,
             scenarioRows[2].EndingProjectedSavings);
@@ -151,10 +166,14 @@ public sealed class FinancialProjectionTests
         var rows = _calculator.Calculate(
             TestFactory.CanonicalPlan(),
             new DateOnly(2026, 12, 10),
-            2);
+            5);
 
-        Assert.Equal(115_000m, rows[0].SalaryIncome);
-        Assert.Equal(132_250m, rows[1].SalaryIncome);
+        var december = rows.Single(x =>
+            x.PeriodStart == new DateOnly(2026, 12, 10));
+        var january = rows.Single(x =>
+            x.PeriodStart == new DateOnly(2027, 1, 10));
+        Assert.Equal(115_000m, december.SalaryIncome);
+        Assert.Equal(132_250m, january.SalaryIncome);
     }
 
     [Fact]
@@ -175,8 +194,8 @@ public sealed class FinancialProjectionTests
         var rows = _calculator.Calculate(
             plan, new DateOnly(2026, 8, 20), 3);
 
-        Assert.Equal(0m, rows[0].OtherIncome);
-        Assert.Equal(50_000m, rows[1].OtherIncome);
+        Assert.Equal(50_000m, rows[0].OtherIncome);
+        Assert.Equal(0m, rows[1].OtherIncome);
         Assert.Equal(0m, rows[2].OtherIncome);
     }
 
@@ -188,7 +207,7 @@ public sealed class FinancialProjectionTests
             new DateOnly(2026, 8, 20),
             1));
 
-        Assert.Equal(38_594.27m, row.CreditCardPayments);
+        Assert.Equal(23_156.56m, row.CreditCardPayments);
         Assert.True(row.IsEstimatedCardPayment);
         Assert.False(row.HasUndeterminedCardPayment);
     }
@@ -219,13 +238,25 @@ public sealed class FinancialProjectionTests
 
     private static FinancialPlan BasicPlan(decimal salary) => new()
     {
-        Settings = new UserSettings { SalaryDay = 10 },
+        Settings = new UserSettings
+        {
+            SalaryDay = 10,
+            ProjectionAnchorDate = new DateOnly(2026, 8, 20)
+        },
         Salaries =
         [
             new SalaryScheduleEntry
             {
                 Amount = salary,
                 EffectiveDate = new DateOnly(2026, 1, 1)
+            }
+        ],
+        PaymentAssignmentStrategies =
+        [
+            new PaymentAssignmentStrategy
+            {
+                Mode = PaymentAssignmentMode.UpcomingPeriod,
+                EffectiveFromSalaryDate = new DateOnly(2026, 9, 10)
             }
         ]
     };
@@ -251,4 +282,3 @@ public sealed class FinancialProjectionTests
         Assert.Equal(savings, row.EstimatedSavingsCapacity);
     }
 }
-

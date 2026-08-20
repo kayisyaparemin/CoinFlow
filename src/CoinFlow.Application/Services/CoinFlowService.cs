@@ -10,7 +10,9 @@ public sealed class CoinFlowService(
     IClock clock,
     FinancialProjectionService projectionService,
     SimulationCalculator simulationCalculator,
-    TargetAmountCalculator targetAmountCalculator)
+    TargetAmountCalculator targetAmountCalculator,
+    PaymentAssignmentStrategyResolver strategyResolver,
+    SalaryPeriodCalculator salaryPeriodCalculator)
 {
     public Task InitializeAsync(CancellationToken cancellationToken = default) =>
         store.InitializeAsync(cancellationToken);
@@ -31,6 +33,8 @@ public sealed class CoinFlowService(
         var cardsTask = store.GetCreditCardsAsync(cancellationToken);
         var largeExpensesTask =
             store.GetPlannedLargeExpensesAsync(cancellationToken);
+        var strategiesTask =
+            store.GetPaymentAssignmentStrategiesAsync(cancellationToken);
 
         await Task.WhenAll(
             settingsTask,
@@ -39,7 +43,8 @@ public sealed class CoinFlowService(
             loansTask,
             plansTask,
             cardsTask,
-            largeExpensesTask);
+            largeExpensesTask,
+            strategiesTask);
 
         return new FinancialPlan
         {
@@ -49,7 +54,8 @@ public sealed class CoinFlowService(
             Loans = await loansTask,
             PaymentPlans = await plansTask,
             CreditCards = await cardsTask,
-            PlannedLargeExpenses = await largeExpensesTask
+            PlannedLargeExpenses = await largeExpensesTask,
+            PaymentAssignmentStrategies = await strategiesTask
         };
     }
 
@@ -150,6 +156,14 @@ public sealed class CoinFlowService(
                 await store.UpsertSalaryAsync(
                     scenario.Salaries.Single(x =>
                         current.Salaries.All(existing => existing.Id != x.Id)),
+                    cancellationToken);
+                break;
+            case SimulationScenarioType.PaymentStrategyChange:
+                await SavePaymentAssignmentStrategyAsync(
+                    scenario.PaymentAssignmentStrategies.Single(x =>
+                        current.PaymentAssignmentStrategies.All(existing =>
+                            existing.Id != x.Id)),
+                    confirmedHistoricalCorrection: false,
                     cancellationToken);
                 break;
             default:
@@ -326,7 +340,7 @@ public sealed class CoinFlowService(
         }, cancellationToken);
     }
 
-    public Task SaveSettingsAsync(
+    public async Task SaveSettingsAsync(
         UserSettings settings,
         CancellationToken cancellationToken = default)
     {
@@ -337,13 +351,234 @@ public sealed class CoinFlowService(
                 "Tahmini yaşam bütçesi negatif olamaz.");
         }
 
-        if (!Enum.IsDefined(settings.PaymentAssignmentMode))
+        var normalized = settings with
         {
-            throw new InvalidOperationException(
-                "Maaş kullanım şekli geçersiz.");
+            ProjectionAnchorDate = settings.ProjectionAnchorDate == default
+                ? clock.Today
+                : settings.ProjectionAnchorDate
+        };
+        var plan = await GetFinancialPlanAsync(cancellationToken);
+        await store.SaveSettingsAsync(normalized, cancellationToken);
+        if (settings.SalaryDay != plan.Settings.SalaryDay)
+        {
+            foreach (var strategy in plan.PaymentAssignmentStrategies)
+            {
+                var oldDate = strategy.EffectiveFromSalaryDate;
+                await store.UpsertPaymentAssignmentStrategyAsync(
+                    strategy with
+                    {
+                        EffectiveFromSalaryDate = CalendarRules.ResolveDay(
+                            oldDate.Year,
+                            oldDate.Month,
+                            settings.SalaryDay)
+                    },
+                    cancellationToken);
+            }
+        }
+    }
+
+    public async Task<PaymentAssignmentStrategyOverview>
+        GetPaymentAssignmentStrategyOverviewAsync(
+            CancellationToken cancellationToken = default)
+    {
+        var plan = await GetFinancialPlanAsync(cancellationToken);
+        var history = plan.PaymentAssignmentStrategies
+            .OrderBy(x => x.EffectiveFromSalaryDate)
+            .ThenBy(x => x.CreatedAt)
+            .ToArray();
+        var firstProjectionSalary = salaryPeriodCalculator
+            .GetFirstSalaryOnOrAfter(
+                plan.Settings.ProjectionAnchorDate,
+                plan.Settings.SalaryDay);
+        var referenceSalary = salaryPeriodCalculator
+            .GetPeriod(clock.Today, plan.Settings.SalaryDay)
+            .Start;
+        var current = history
+            .Where(x => x.EffectiveFromSalaryDate <= referenceSalary)
+            .LastOrDefault() ?? history[0];
+        var pending = history.FirstOrDefault(x =>
+            x.EffectiveFromSalaryDate >
+            DateOnly.FromDayNumber(Math.Max(
+                referenceSalary.DayNumber,
+                current.EffectiveFromSalaryDate.DayNumber)));
+        var firstChoice = salaryPeriodCalculator.GetFirstSalaryOnOrAfter(
+            clock.Today,
+            plan.Settings.SalaryDay);
+        if (firstChoice < firstProjectionSalary)
+        {
+            firstChoice = firstProjectionSalary;
         }
 
-        return store.SaveSettingsAsync(settings, cancellationToken);
+        var choices = Enumerable.Range(0, 18)
+            .Select(index => CalendarRules.AddMonthsKeepingDay(
+                firstChoice,
+                index,
+                plan.Settings.SalaryDay))
+            .ToArray();
+        return new PaymentAssignmentStrategyOverview(
+            current,
+            pending,
+            history,
+            choices);
+    }
+
+    public async Task<PaymentStrategyChangePreview>
+        PreviewPaymentAssignmentStrategyAsync(
+            PaymentAssignmentMode newMode,
+            DateOnly effectiveSalaryDate,
+            CancellationToken cancellationToken = default)
+    {
+        var plan = await GetFinancialPlanAsync(cancellationToken);
+        ValidateStrategyDate(plan, effectiveSalaryDate);
+        var currentMode = ResolveModeBeforeChange(plan, effectiveSalaryDate);
+        var request = CreateStrategySimulationRequest(
+            newMode,
+            effectiveSalaryDate,
+            "Maaş kullanım düzeni önizlemesi");
+        var firstSalary = salaryPeriodCalculator.GetFirstSalaryOnOrAfter(
+            plan.Settings.ProjectionAnchorDate,
+            plan.Settings.SalaryDay);
+        var effectiveIndex = Math.Max(
+            0,
+            ((effectiveSalaryDate.Year - firstSalary.Year) * 12) +
+            effectiveSalaryDate.Month - firstSalary.Month);
+        var result = simulationCalculator.Calculate(
+            plan,
+            clock.Today,
+            request,
+            Math.Min(60, Math.Max(12, effectiveIndex + 1)));
+        var row = result.Rows.Single(x =>
+            x.Scenario.PeriodStart == effectiveSalaryDate);
+        return new PaymentStrategyChangePreview(
+            effectiveSalaryDate,
+            currentMode,
+            newMode,
+            row.Baseline,
+            row.Scenario);
+    }
+
+    public async Task SavePaymentAssignmentStrategyAsync(
+        PaymentAssignmentStrategy strategy,
+        bool confirmedHistoricalCorrection = false,
+        CancellationToken cancellationToken = default)
+    {
+        var plan = await GetFinancialPlanAsync(cancellationToken);
+        ValidateStrategyDate(plan, strategy.EffectiveFromSalaryDate);
+        if (!Enum.IsDefined(strategy.Mode))
+        {
+            throw new InvalidOperationException(
+                "Maaş kullanım düzeni geçersiz.");
+        }
+
+        var existing = plan.PaymentAssignmentStrategies
+            .FirstOrDefault(x => x.Id == strategy.Id);
+        var isHistoricalCorrection = existing is not null &&
+                                     existing.EffectiveFromSalaryDate <=
+                                     clock.Today;
+        if (isHistoricalCorrection && !confirmedHistoricalCorrection)
+        {
+            throw new InvalidOperationException(
+                "Geçmiş kayıt düzeltmesi projection geçmişini değiştirir ve ayrı onay gerektirir.");
+        }
+
+        var conflicting = plan.PaymentAssignmentStrategies.FirstOrDefault(x =>
+            x.EffectiveFromSalaryDate == strategy.EffectiveFromSalaryDate &&
+            x.Id != strategy.Id);
+        if (conflicting is not null)
+        {
+            if (conflicting.EffectiveFromSalaryDate <= clock.Today &&
+                !confirmedHistoricalCorrection)
+            {
+                throw new InvalidOperationException(
+                    "Bu maaş tarihindeki geçmiş kayıt yalnızca onaylı düzeltme ile değiştirilebilir.");
+            }
+
+            await store.DeletePaymentAssignmentStrategyAsync(
+                conflicting.Id,
+                cancellationToken);
+        }
+
+        await store.UpsertPaymentAssignmentStrategyAsync(
+            strategy with
+            {
+                CreatedAt = existing?.CreatedAt ?? clock.UtcNow
+            },
+            cancellationToken);
+    }
+
+    public async Task DeletePaymentAssignmentStrategyAsync(
+        Guid id,
+        bool confirmedHistoricalCorrection = false,
+        CancellationToken cancellationToken = default)
+    {
+        var plan = await GetFinancialPlanAsync(cancellationToken);
+        var strategy = plan.PaymentAssignmentStrategies
+            .SingleOrDefault(x => x.Id == id)
+            ?? throw new InvalidOperationException("Düzen kaydı bulunamadı.");
+        if (plan.PaymentAssignmentStrategies.Count == 1)
+        {
+            throw new InvalidOperationException("İlk düzen kaydı silinemez.");
+        }
+
+        if (strategy.EffectiveFromSalaryDate <= clock.Today &&
+            !confirmedHistoricalCorrection)
+        {
+            throw new InvalidOperationException(
+                "Geçmiş düzen kaydını silmek ayrı onay gerektirir.");
+        }
+
+        var remaining = plan.PaymentAssignmentStrategies
+            .Where(x => x.Id != id)
+            .ToArray();
+        var firstSalary = salaryPeriodCalculator.GetFirstSalaryOnOrAfter(
+            plan.Settings.ProjectionAnchorDate,
+            plan.Settings.SalaryDay);
+        strategyResolver.ValidateHistory(
+            remaining,
+            plan.Settings.SalaryDay,
+            firstSalary);
+        await store.DeletePaymentAssignmentStrategyAsync(id, cancellationToken);
+    }
+
+    private static SimulationRequest CreateStrategySimulationRequest(
+        PaymentAssignmentMode mode,
+        DateOnly effectiveSalaryDate,
+        string note) => new(
+            SimulationScenarioType.PaymentStrategyChange,
+            note,
+            0m,
+            effectiveSalaryDate,
+            NewPaymentAssignmentMode: mode,
+            EffectiveSalaryDate: effectiveSalaryDate);
+
+    private void ValidateStrategyDate(
+        FinancialPlan plan,
+        DateOnly effectiveSalaryDate)
+    {
+        if (!strategyResolver.IsSalaryDate(
+                effectiveSalaryDate,
+                plan.Settings.SalaryDay))
+        {
+            throw new InvalidOperationException(
+                "Düzen değişikliği yalnızca bir maaş tarihinde başlayabilir.");
+        }
+    }
+
+    private PaymentAssignmentMode ResolveModeBeforeChange(
+        FinancialPlan plan,
+        DateOnly effectiveSalaryDate)
+    {
+        var previousSalary = CalendarRules.AddMonthsKeepingDay(
+            effectiveSalaryDate,
+            -1,
+            plan.Settings.SalaryDay);
+        return plan.PaymentAssignmentStrategies
+            .Where(x => x.EffectiveFromSalaryDate <= previousSalary)
+            .OrderBy(x => x.EffectiveFromSalaryDate)
+            .LastOrDefault()?.Mode ??
+               plan.PaymentAssignmentStrategies
+                   .OrderBy(x => x.EffectiveFromSalaryDate)
+                   .First().Mode;
     }
 
     private static void ValidateCreditCardPaymentSettings(CreditCard card)

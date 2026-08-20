@@ -13,7 +13,10 @@ public sealed record CreditCardPaymentProjectionStatus(
     CreditCardPaymentResolution Resolution,
     CreditCardPaymentType? PaymentType,
     DateOnly AssignedSalaryDate = default,
-    bool PaymentBeforeSalary = false);
+    bool PaymentBeforeSalary = false,
+    PaymentAssignmentMode? ActiveMode = null,
+    PaymentAssignmentReason? AssignmentReason = null,
+    bool IsPreFirstSalaryObligation = false);
 
 public sealed record SalaryPeriodProjection(
     DateOnly PeriodStart,
@@ -43,7 +46,17 @@ public sealed record SalaryPeriodProjection(
     PaymentAssignmentMode PaymentAssignmentMode =
         PaymentAssignmentMode.UpcomingPeriod,
     DateOnly PaymentWindowStart = default,
-    DateOnly PaymentWindowEnd = default)
+    DateOnly PaymentWindowEnd = default,
+    bool IsStrategyTransition = false,
+    bool IsInitialSnapshotPeriod = false,
+    decimal NormalMandatoryAmount = 0m,
+    decimal TransitionCatchUpAmount = 0m,
+    decimal ForwardFundedAmount = 0m,
+    DateOnly ProjectionAnchorDate = default)
 {
     public SalaryPeriod Period => new(PeriodStart, PeriodEnd);
 }
+
+public sealed record FinancialProjectionResult(
+    IReadOnlyList<SalaryPeriodProjection> Periods,
+    SalaryFundingPlan FundingPlan);

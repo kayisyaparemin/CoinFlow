@@ -78,9 +78,6 @@ public sealed class LoanAndObligationTests
     [Fact]
     public void MandatoryPayment_CalculatesEveryCategory()
     {
-        var period = new SalaryPeriod(
-            new DateOnly(2026, 9, 10),
-            new DateOnly(2026, 10, 10));
         var planId = Guid.NewGuid();
         var plans = new[]
         {
@@ -90,12 +87,9 @@ public sealed class LoanAndObligationTests
         };
         var calculator = new MandatoryPaymentCalculator(
             new LoanScheduleCalculator(),
-            new ScheduledPaymentCalculator(),
-            new PaymentAssignmentResolver(
-                new SalaryPeriodCalculator()));
+            new ScheduledPaymentCalculator());
 
-        var result = calculator.Calculate(
-            period,
+        var obligations = calculator.BuildObligations(
             [
                 new Loan
                 {
@@ -110,9 +104,8 @@ public sealed class LoanAndObligationTests
                 new ObligationItem(
                     "Kart", ObligationType.CreditCard,
                     new DateOnly(2026, 10, 5), 5_000m)
-            ],
-            10,
-            PaymentAssignmentMode.UpcomingPeriod);
+            ]);
+        var result = calculator.Summarize(obligations);
 
         Assert.Equal(1_000m, result.LoanPayments);
         Assert.Equal(5_000m, result.CreditCardPayments);
