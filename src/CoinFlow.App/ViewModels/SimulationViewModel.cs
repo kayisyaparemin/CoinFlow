@@ -24,7 +24,8 @@ public partial class SimulationViewModel(
         new("Dönemsel ödeme", SimulationScenarioType.RecurringPayment),
         new("Gelecek gelir", SimulationScenarioType.FutureIncome),
         new("Maaş değişikliği", SimulationScenarioType.SalaryChange),
-        new("Maaş kullanım düzeni değişikliği", SimulationScenarioType.PaymentStrategyChange)
+        new("Maaş kullanım düzeni değişikliği", SimulationScenarioType.PaymentStrategyChange),
+        new("Kart ekstresini tamamen kapat", SimulationScenarioType.CreditCardFullPayment)
     ];
 
     public ObservableCollection<SelectionOption<Guid>> CreditCards { get; } = [];
@@ -52,6 +53,10 @@ public partial class SimulationViewModel(
     [ObservableProperty] private bool needsFirstPayment;
     [ObservableProperty] private bool isFinancing;
     [ObservableProperty] private bool isStrategyChange;
+    [ObservableProperty] private bool isCardPayoff;
+    [ObservableProperty] private bool needsAmount = true;
+    [ObservableProperty] private string startDateLabel =
+        "Başlangıç / işlem tarihi";
     [ObservableProperty] private bool isRegularScenario = true;
     [ObservableProperty] private SelectionOption<PaymentAssignmentMode>? selectedStrategyMode;
     [ObservableProperty] private SelectionOption<DateOnly>? selectedStrategySalaryDate;
@@ -72,6 +77,11 @@ public partial class SimulationViewModel(
     [ObservableProperty] private string totalScenarioCost = "—";
     [ObservableProperty] private string financingCost = string.Empty;
     [ObservableProperty] private bool hasFinancingCost;
+    [ObservableProperty] private string baselineInterest = "—";
+    [ObservableProperty] private string scenarioInterest = "—";
+    [ObservableProperty] private string interestDifference = "—";
+    [ObservableProperty] private string interestDifferenceTitle =
+        "Ek faiz maliyeti";
     [ObservableProperty] private string friendlySummary = string.Empty;
     [ObservableProperty] private string assignmentModeText = string.Empty;
     [ObservableProperty] private bool hasStrategyTransitionSummary;
@@ -165,7 +175,8 @@ public partial class SimulationViewModel(
         var type = value?.Value ?? SimulationScenarioType.CashPurchase;
         IsCard = type is
             SimulationScenarioType.CreditCardSinglePayment or
-            SimulationScenarioType.CreditCardInstallmentPurchase;
+            SimulationScenarioType.CreditCardInstallmentPurchase or
+            SimulationScenarioType.CreditCardFullPayment;
         NeedsPaymentCount = type is
             SimulationScenarioType.CreditCardInstallmentPurchase or
             SimulationScenarioType.FinancingLoan or
@@ -177,6 +188,11 @@ public partial class SimulationViewModel(
             SimulationScenarioType.RecurringPayment;
         IsFinancing = type == SimulationScenarioType.FinancingLoan;
         IsStrategyChange = type == SimulationScenarioType.PaymentStrategyChange;
+        IsCardPayoff = type == SimulationScenarioType.CreditCardFullPayment;
+        NeedsAmount = !IsStrategyChange && !IsCardPayoff;
+        StartDateLabel = IsCardPayoff
+            ? "Tam ödeme / son ödeme tarihi"
+            : "Başlangıç / işlem tarihi";
         IsRegularScenario = !IsStrategyChange;
         ScenarioDescription = type switch
         {
@@ -200,6 +216,8 @@ public partial class SimulationViewModel(
                 "Yeni maaş, effective date dönem başlangıcına ulaştığında geçerli olur.",
             SimulationScenarioType.PaymentStrategyChange =>
                 "Yeni düzen yalnız seçilen maaştan itibaren history'ye eklenmiş gibi hesaplanır; simülasyon veritabanını değiştirmez.",
+            SimulationScenarioType.CreditCardFullPayment =>
+                "Seçilen son ödeme tarihinde ekstre tamamı ödenir; sonraki carry faizi ve faiz tasarrufu baseline ile karşılaştırılır.",
             _ => string.Empty
         };
         HasResults = false;
@@ -314,7 +332,9 @@ public partial class SimulationViewModel(
         return new SimulationRequest(
             type,
             Name,
-            IsStrategyChange ? 0m : ParseMoney(Amount, "Tutar"),
+            IsStrategyChange || IsCardPayoff
+                ? 0m
+                : ParseMoney(Amount, "Tutar"),
             IsStrategyChange
                 ? SelectedStrategySalaryDate?.Value ??
                   throw new InvalidOperationException(
@@ -336,15 +356,19 @@ public partial class SimulationViewModel(
 
     private string BuildApplyConfirmation(SimulationRequest request)
     {
-        var summary = request.Type == SimulationScenarioType.PaymentStrategyChange
-            ? request.Name.Trim()
-            : $"{Money(request.Amount)} {request.Name.Trim()}";
+        var summary = request.Type is
+            SimulationScenarioType.PaymentStrategyChange or
+            SimulationScenarioType.CreditCardFullPayment
+                ? request.Name.Trim()
+                : $"{Money(request.Amount)} {request.Name.Trim()}";
         var detail = request.Type switch
         {
             SimulationScenarioType.CreditCardInstallmentPurchase =>
                 $"Kart: {SelectedCreditCard?.Label}\n{request.PaymentCount} taksit\nİşlem: {request.StartDate:dd MMMM yyyy}",
             SimulationScenarioType.CreditCardSinglePayment =>
                 $"Kart: {SelectedCreditCard?.Label}\nİşlem: {request.StartDate:dd MMMM yyyy}",
+            SimulationScenarioType.CreditCardFullPayment =>
+                $"Kart: {SelectedCreditCard?.Label}\nTam ödeme: {request.StartDate:dd MMMM yyyy}",
             SimulationScenarioType.FinancingLoan =>
                 $"{request.PaymentCount} taksit • toplam {Money(request.TotalRepaymentAmount.GetValueOrDefault())}\nİlk ödeme: {request.FirstPaymentDate:dd MMMM yyyy}",
             SimulationScenarioType.CashDebt or
@@ -412,6 +436,17 @@ public partial class SimulationViewModel(
         FinancingCost = result.Risk.FinancingCost is decimal cost
             ? Money(cost)
             : string.Empty;
+        BaselineInterest = Money(
+            result.BaselineInterest.TotalInterestCost);
+        ScenarioInterest = Money(
+            result.ScenarioInterest.TotalInterestCost);
+        InterestDifferenceTitle = result.AdditionalInterestCost < 0m
+            ? "Tahmini faiz tasarrufu"
+            : "Ek faiz maliyeti";
+        InterestDifference = Money(
+            result.AdditionalInterestCost < 0m
+                ? result.InterestSaving
+                : result.AdditionalInterestCost);
         FriendlySummary = result.FriendlySummary;
         var transition = result.Scenario.FirstOrDefault(x =>
             x.IsStrategyTransition);
@@ -439,7 +474,11 @@ public partial class SimulationViewModel(
                 Money(-row.Scenario.CarryOverDeficit),
                 Money(row.Scenario.AvailableAfterCarryOverDeficit),
                 row.Scenario.HasCarryOverDeficit,
-                Money(row.Scenario.EstimatedSavingsCapacity)));
+                Money(row.Scenario.EstimatedSavingsCapacity),
+                Money(row.Scenario.CardInterestGenerated),
+                Money(row.Scenario.DeficitFinancingInterest),
+                Money(row.Scenario.TotalInterestGenerated),
+                row.Scenario.TotalInterestGenerated > 0m));
         }
     }
 

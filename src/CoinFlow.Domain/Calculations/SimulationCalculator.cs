@@ -13,7 +13,8 @@ public enum SimulationScenarioType
     RecurringPayment,
     FutureIncome,
     SalaryChange,
-    PaymentStrategyChange
+    PaymentStrategyChange,
+    CreditCardFullPayment
 }
 
 public sealed record SimulationRequest(
@@ -63,7 +64,18 @@ public sealed record SimulationResult(
     IReadOnlyList<SalaryPeriodProjection> Scenario,
     IReadOnlyList<SimulationImpactRow> Rows,
     SimulationRiskSummary Risk,
-    string FriendlySummary);
+    string FriendlySummary)
+{
+    public ProjectionInterestSummary BaselineInterest =>
+        ProjectionInterestSummary.From(Baseline);
+    public ProjectionInterestSummary ScenarioInterest =>
+        ProjectionInterestSummary.From(Scenario);
+    public decimal AdditionalInterestCost =>
+        ScenarioInterest.TotalInterestCost -
+        BaselineInterest.TotalInterestCost;
+    public decimal InterestSaving =>
+        Math.Max(0m, -AdditionalInterestCost);
+}
 
 public sealed class SimulationCalculator(
     FinancialProjectionCalculator projectionCalculator,
@@ -120,12 +132,15 @@ public sealed class SimulationCalculator(
             totalCost,
             financingCost);
 
+        var interestDifference =
+            ProjectionInterestSummary.From(scenario).TotalInterestCost -
+            ProjectionInterestSummary.From(baseline).TotalInterestCost;
         return new SimulationResult(
             baseline,
             scenario,
             rows,
             risk,
-            BuildFriendlySummary(risk));
+            BuildFriendlySummary(risk, interestDifference));
     }
 
     public FinancialPlan BuildScenarioPlan(
@@ -189,6 +204,8 @@ public sealed class SimulationCalculator(
                 },
             SimulationScenarioType.PaymentStrategyChange =>
                 AddPaymentStrategy(plan, request),
+            SimulationScenarioType.CreditCardFullPayment =>
+                AddCardFullPayment(plan, request),
             _ => throw new ArgumentOutOfRangeException(nameof(request.Type))
         };
     }
@@ -286,6 +303,42 @@ public sealed class SimulationCalculator(
         {
             CreditCards = plan.CreditCards
                 .Select(x => x.Id == card.Id ? updatedCard : x)
+                .ToArray()
+        };
+    }
+
+    private static FinancialPlan AddCardFullPayment(
+        FinancialPlan plan,
+        SimulationRequest request)
+    {
+        if (request.CreditCardId is null)
+        {
+            throw new InvalidOperationException(
+                "Tam kart ödeme senaryosu için kart seçilmelidir.");
+        }
+
+        var card = plan.CreditCards.SingleOrDefault(x =>
+                       x.Id == request.CreditCardId.Value)
+                   ?? throw new InvalidOperationException(
+                       "Seçilen kredi kartı bulunamadı.");
+        var updated = card with
+        {
+            PaymentPlans = card.PaymentPlans
+                .Where(x => x.DueDate != request.StartDate)
+                .Append(new CreditCardPaymentPlan
+                {
+                    Id = request.ScenarioId,
+                    CreditCardId = card.Id,
+                    DueDate = request.StartDate,
+                    PaymentType = CreditCardPaymentType.FullStatement
+                })
+                .OrderBy(x => x.DueDate)
+                .ToArray()
+        };
+        return plan with
+        {
+            CreditCards = plan.CreditCards
+                .Select(x => x.Id == card.Id ? updated : x)
                 .ToArray()
         };
     }
@@ -397,7 +450,8 @@ public sealed class SimulationCalculator(
         {
             SimulationScenarioType.FutureIncome or
                 SimulationScenarioType.SalaryChange or
-                SimulationScenarioType.PaymentStrategyChange => 0m,
+            SimulationScenarioType.PaymentStrategyChange => 0m,
+            SimulationScenarioType.CreditCardFullPayment => 0m,
             SimulationScenarioType.FinancingLoan =>
                 request.TotalRepaymentAmount ?? request.Amount,
             SimulationScenarioType.RecurringPayment =>
@@ -405,28 +459,39 @@ public sealed class SimulationCalculator(
             _ => request.Amount
         };
 
-    private static string BuildFriendlySummary(SimulationRiskSummary risk)
+    private static string BuildFriendlySummary(
+        SimulationRiskSummary risk,
+        decimal additionalInterestCost)
     {
+        var interestMessage = additionalInterestCost switch
+        {
+            > 0m =>
+                $" Bu plan 12 aylık tahmini faiz maliyetini {additionalInterestCost:N2} TL artırıyor.",
+            < 0m =>
+                $" Bu plan 12 ayda yaklaşık {Math.Abs(additionalInterestCost):N2} TL faiz tasarrufu sağlıyor.",
+            _ => " Bu plan 12 aylık tahmini faiz yükünü değiştirmiyor."
+        };
         if (risk.FirstNegativeProjectedSavingsPeriod is SalaryPeriod negative)
         {
             var recovery = risk.RecoveryPeriod is SalaryPeriod recovered
                 ? $" Açık {recovered.Start:dd.MM.yyyy} maaş döneminde kapanıyor."
                 : " Açık gösterilen dönemlerde kapanmıyor.";
-            return $"İlk negatif tahmini birikim dönemi: {negative.Start:dd.MM.yyyy}–{negative.End:dd.MM.yyyy}.{recovery}";
+            return $"İlk negatif tahmini birikim dönemi: {negative.Start:dd.MM.yyyy}–{negative.End:dd.MM.yyyy}.{recovery}{interestMessage}";
         }
 
         if (risk.MaximumCarryOverDeficit > 0m &&
             risk.RecoveryPeriod is SalaryPeriod openingRecovery)
         {
-            return $"Devreden finansman açığı {openingRecovery.Start:dd.MM.yyyy} maaş döneminde kapanıyor.";
+            return $"Devreden finansman açığı {openingRecovery.Start:dd.MM.yyyy} maaş döneminde kapanıyor.{interestMessage}";
         }
 
         if (risk.FirstNegativeSavingsCapacityPeriod is SalaryPeriod capacity)
         {
-            return $"Bu plan {capacity.Start:dd.MM.yyyy}–{capacity.End:dd.MM.yyyy} döneminde yaşam bütçesi sonrası açık oluşturuyor.";
+            return $"Bu plan {capacity.Start:dd.MM.yyyy}–{capacity.End:dd.MM.yyyy} döneminde yaşam bütçesi sonrası açık oluşturuyor.{interestMessage}";
         }
 
-        return "Bu plan, gösterilen dönemlerde tahmini birikimi negatife düşürmüyor.";
+        return "Bu plan, gösterilen dönemlerde tahmini birikimi negatife düşürmüyor." +
+               interestMessage;
     }
 
     public static void Validate(SimulationRequest request)
@@ -436,7 +501,8 @@ public sealed class SimulationCalculator(
             throw new InvalidOperationException("Senaryo adı gereklidir.");
         }
 
-        if (request.Type != SimulationScenarioType.PaymentStrategyChange &&
+        if (request.Type is not SimulationScenarioType.PaymentStrategyChange and
+            not SimulationScenarioType.CreditCardFullPayment &&
             request.Amount <= 0m)
         {
             throw new ArgumentOutOfRangeException(
@@ -462,6 +528,13 @@ public sealed class SimulationCalculator(
             throw new ArgumentOutOfRangeException(
                 nameof(request),
                 "Ödeme sayısı 1 ile 120 arasında olmalıdır.");
+        }
+
+        if (request.Type == SimulationScenarioType.CreditCardFullPayment &&
+            request.CreditCardId is null)
+        {
+            throw new InvalidOperationException(
+                "Tam kart ödeme senaryosu için kart seçilmelidir.");
         }
 
         if (request.Type == SimulationScenarioType.FinancingLoan &&

@@ -10,6 +10,12 @@ public sealed record CreditCardPaymentProjectionStatus(
     decimal? StatementBalance,
     decimal? MinimumPayment,
     decimal? Payment,
+    decimal? OpeningCarriedBalance,
+    decimal NewCharges,
+    decimal? CarriedPrincipalAfterPayment,
+    decimal CarryInterest,
+    decimal? NextCarriedBalance,
+    decimal AppliedInterestRate,
     CreditCardPaymentResolution Resolution,
     CreditCardPaymentType? PaymentType,
     DateOnly AssignedSalaryDate = default,
@@ -52,7 +58,11 @@ public sealed record SalaryPeriodProjection(
     decimal NormalMandatoryAmount = 0m,
     decimal TransitionCatchUpAmount = 0m,
     decimal ForwardFundedAmount = 0m,
-    DateOnly ProjectionAnchorDate = default)
+    DateOnly ProjectionAnchorDate = default,
+    decimal EndingProjectedSavingsBeforeDeficitInterest = 0m,
+    decimal DeficitFinancingInterest = 0m,
+    decimal CardInterestGenerated = 0m,
+    decimal AppliedDeficitInterestRate = 0m)
 {
     public SalaryPeriod Period => new(PeriodStart, PeriodEnd);
     public decimal CarryOverDeficit => OpeningProjectedSavings < 0m
@@ -62,6 +72,14 @@ public sealed record SalaryPeriodProjection(
         AvailableAfterMandatory - CarryOverDeficit;
     public decimal CurrentPeriodNetContribution =>
         EstimatedSavingsCapacity;
+    public decimal CurrentPeriodSavingsBeforeDeficitInterest =>
+        EstimatedSavingsCapacity;
+    public decimal DeficitPrincipal =>
+        EndingProjectedSavingsBeforeDeficitInterest < 0m
+            ? Math.Abs(EndingProjectedSavingsBeforeDeficitInterest)
+            : 0m;
+    public decimal TotalInterestGenerated =>
+        CardInterestGenerated + DeficitFinancingInterest;
     public decimal DeficitCoveredThisPeriod => CarryOverDeficit == 0m
         ? 0m
         : Math.Min(
@@ -77,4 +95,29 @@ public sealed record SalaryPeriodProjection(
 
 public sealed record FinancialProjectionResult(
     IReadOnlyList<SalaryPeriodProjection> Periods,
-    SalaryFundingPlan FundingPlan);
+    SalaryFundingPlan FundingPlan)
+{
+    public decimal TotalCreditCardInterest =>
+        Periods.Sum(x => x.CardInterestGenerated);
+    public decimal TotalDeficitFinancingInterest =>
+        Periods.Sum(x => x.DeficitFinancingInterest);
+    public decimal TotalInterestCost =>
+        TotalCreditCardInterest + TotalDeficitFinancingInterest;
+}
+
+public sealed record ProjectionInterestSummary(
+    decimal CreditCardInterest,
+    decimal DeficitFinancingInterest)
+{
+    public decimal TotalInterestCost =>
+        CreditCardInterest + DeficitFinancingInterest;
+
+    public static ProjectionInterestSummary From(
+        IEnumerable<SalaryPeriodProjection> periods)
+    {
+        var rows = periods.ToArray();
+        return new ProjectionInterestSummary(
+            rows.Sum(x => x.CardInterestGenerated),
+            rows.Sum(x => x.DeficitFinancingInterest));
+    }
+}

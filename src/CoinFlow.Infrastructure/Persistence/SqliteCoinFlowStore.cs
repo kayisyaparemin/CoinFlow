@@ -9,7 +9,9 @@ namespace CoinFlow.Infrastructure.Persistence;
 public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
 {
     private const string DateFormat = "yyyy-MM-dd";
-    private const int CurrentSchemaVersion = 6;
+    private const int CurrentSchemaVersion = 7;
+    private const int CurrentCardStatementModelVersion = 6;
+    private const decimal DefaultPlanningInterestRate = 0.05m;
     private static readonly Guid LegacyInitialAssignmentStrategyId =
         Guid.Parse("50000000-0000-0000-0000-000000000001");
     private readonly SQLiteAsyncConnection _database;
@@ -96,6 +98,14 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
                 await EnsureInitialPaymentAssignmentStrategyAsync(settings);
             }
 
+            if (!isNewSettings && settings.SchemaVersion < 7)
+            {
+                settings.CreditCardCarryInterestRate =
+                    DefaultPlanningInterestRate;
+                settings.DeficitFinancingInterestRate =
+                    DefaultPlanningInterestRate;
+            }
+
             settings.SchemaVersion = CurrentSchemaVersion;
             settings.DevelopmentSeedEnabled = _developmentFeaturesEnabled;
             settings.LegacyRemovedFeatureFlag = false;
@@ -132,6 +142,10 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
             settings.MonthlyLivingBudget = 0m;
             settings.ProjectionStartingSavings = 0m;
             settings.ProjectionAnchorDate = null;
+            settings.CreditCardCarryInterestRate =
+                DefaultPlanningInterestRate;
+            settings.DeficitFinancingInterestRate =
+                DefaultPlanningInterestRate;
             settings.PaymentAssignmentMode =
                 (int)PaymentAssignmentMode.UpcomingPeriod;
             settings.DevelopmentSeedVersion = 0;
@@ -158,6 +172,10 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         settings.ProjectionStartingSavings = 0m;
         settings.ProjectionAnchorDate = FormatDate(
             new DateOnly(2026, 8, 20));
+        settings.CreditCardCarryInterestRate =
+            DefaultPlanningInterestRate;
+        settings.DeficitFinancingInterestRate =
+            DefaultPlanningInterestRate;
         settings.PaymentAssignmentMode =
             (int)PaymentAssignmentMode.UpcomingPeriod;
         settings.DevelopmentSeedVersion =
@@ -175,6 +193,10 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
             SalaryDay = row.SalaryDay,
             MonthlyLivingBudget = row.MonthlyLivingBudget,
             ProjectionStartingSavings = row.ProjectionStartingSavings,
+            CreditCardCarryInterestRate =
+                row.CreditCardCarryInterestRate,
+            DeficitFinancingInterestRate =
+                row.DeficitFinancingInterestRate,
             ProjectionAnchorDate = string.IsNullOrWhiteSpace(
                 row.ProjectionAnchorDate)
                 ? default
@@ -192,6 +214,10 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         row.MonthlyLivingBudget = settings.MonthlyLivingBudget;
         row.ProjectionStartingSavings =
             settings.ProjectionStartingSavings;
+        row.CreditCardCarryInterestRate =
+            settings.CreditCardCarryInterestRate;
+        row.DeficitFinancingInterestRate =
+            settings.DeficitFinancingInterestRate;
         row.ProjectionAnchorDate = settings.ProjectionAnchorDate == default
             ? null
             : FormatDate(settings.ProjectionAnchorDate);
@@ -622,7 +648,7 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         CarriedBalance = value.CarriedBalance,
         UnbilledSpending = value.UnbilledSpending,
         BalanceAsOfDate = FormatDate(value.BalanceAsOfDate),
-        StatementModelVersion = CurrentSchemaVersion,
+        StatementModelVersion = CurrentCardStatementModelVersion,
         PaymentStrategy = (int)value.PaymentStrategy,
         FixedPaymentAmount = value.FixedPaymentAmount,
         ProjectionFallbackStrategy =
@@ -732,6 +758,8 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         MonthlyLivingBudget = 0m,
         ProjectionStartingSavings = 0m,
         ProjectionAnchorDate = null,
+        CreditCardCarryInterestRate = DefaultPlanningInterestRate,
+        DeficitFinancingInterestRate = DefaultPlanningInterestRate,
         PaymentAssignmentMode =
             (int)PaymentAssignmentMode.UpcomingPeriod,
         SchemaVersion = CurrentSchemaVersion,
@@ -787,7 +815,8 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
     {
         var cards = await _database.Table<CreditCardRow>().ToListAsync();
         foreach (var row in cards.Where(x =>
-                     x.StatementModelVersion < CurrentSchemaVersion))
+                     x.StatementModelVersion <
+                     CurrentCardStatementModelVersion))
         {
             if (row.StatementModelVersion < 2)
             {
@@ -835,7 +864,8 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
                 row.BalanceAsOfDate = FormatDate(_migrationDate);
             }
 
-            row.StatementModelVersion = CurrentSchemaVersion;
+            row.StatementModelVersion =
+                CurrentCardStatementModelVersion;
             await _database.UpdateAsync(row);
         }
     }

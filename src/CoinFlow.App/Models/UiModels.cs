@@ -93,6 +93,12 @@ public partial class ProjectionLine(
     string plannedLargeCashExpenses,
     bool hasPlannedLargeCashExpenses,
     string estimatedSavings,
+    string endingBeforeDeficitInterest,
+    string cardInterest,
+    string deficitInterest,
+    string totalInterest,
+    string interestLabel,
+    bool hasInterest,
     string endingProjectedSavings,
     string carryOverMessage,
     string breakdown,
@@ -112,6 +118,13 @@ public partial class ProjectionLine(
     public bool HasPlannedLargeCashExpenses { get; } =
         hasPlannedLargeCashExpenses;
     public string EstimatedSavings { get; } = estimatedSavings;
+    public string EndingBeforeDeficitInterest { get; } =
+        endingBeforeDeficitInterest;
+    public string CardInterest { get; } = cardInterest;
+    public string DeficitInterest { get; } = deficitInterest;
+    public string TotalInterest { get; } = totalInterest;
+    public string InterestLabel { get; } = interestLabel;
+    public bool HasInterest { get; } = hasInterest;
     public string EndingProjectedSavings { get; } = endingProjectedSavings;
     public string CarryOverMessage { get; } = carryOverMessage;
     public string Breakdown { get; } = breakdown;
@@ -137,4 +150,8 @@ public sealed record SimulationLine(
     string CarryOverDeficit,
     string AvailableAfterCarryOverDeficit,
     bool HasCarryOverDeficit,
-    string SavingsCapacity);
+    string SavingsCapacity,
+    string CardInterest,
+    string DeficitInterest,
+    string TotalInterest,
+    bool HasInterest);

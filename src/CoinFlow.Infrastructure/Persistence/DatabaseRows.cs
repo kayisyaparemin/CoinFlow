@@ -122,6 +122,8 @@ internal sealed class SettingsRow
     public decimal MonthlyLivingBudget { get; set; }
     public decimal ProjectionStartingSavings { get; set; }
     public string? ProjectionAnchorDate { get; set; }
+    public decimal CreditCardCarryInterestRate { get; set; }
+    public decimal DeficitFinancingInterestRate { get; set; }
     // Legacy v5 source used only to bootstrap strategy history once.
     public int PaymentAssignmentMode { get; set; }
     public int SchemaVersion { get; set; }

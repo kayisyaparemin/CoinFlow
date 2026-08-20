@@ -181,6 +181,7 @@ public sealed class CoinFlowService(
                 break;
             case SimulationScenarioType.CreditCardSinglePayment:
             case SimulationScenarioType.CreditCardInstallmentPurchase:
+            case SimulationScenarioType.CreditCardFullPayment:
                 var changedCard = scenario.CreditCards.Single(x =>
                     x.Id == request.CreditCardId);
                 await store.UpsertCreditCardAsync(changedCard, cancellationToken);
@@ -268,6 +269,14 @@ public sealed class CoinFlowService(
                 AppliedResult(request, request.CreditCardId!.Value,
                     SimulationApplyDestination.CreditCard,
                     "Plan daha önce kredi kartına eklendi."),
+            SimulationScenarioType.CreditCardFullPayment
+                when plan.CreditCards.Any(card =>
+                    card.Id == request.CreditCardId &&
+                    card.PaymentPlans.Any(payment =>
+                        payment.Id == entityId)) =>
+                AppliedResult(request, request.CreditCardId!.Value,
+                    SimulationApplyDestination.CreditCard,
+                    "Tam ödeme planı daha önce kredi kartına eklendi."),
             SimulationScenarioType.FinancingLoan or
                 SimulationScenarioType.CashDebt or
                 SimulationScenarioType.FutureOneTimePayment or
@@ -542,6 +551,13 @@ public sealed class CoinFlowService(
         {
             throw new InvalidOperationException(
                 "Tahmini yaşam bütçesi negatif olamaz.");
+        }
+
+        if (settings.CreditCardCarryInterestRate is < 0m or > 1m ||
+            settings.DeficitFinancingInterestRate is < 0m or > 1m)
+        {
+            throw new InvalidOperationException(
+                "Faiz varsayımları %0 ile %100 arasında olmalıdır.");
         }
 
         var plan = await GetFinancialPlanAsync(cancellationToken);

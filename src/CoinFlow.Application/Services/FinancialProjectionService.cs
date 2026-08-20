@@ -50,7 +50,10 @@ public sealed class FinancialProjectionService(
             periods.Any(x => x.HasUndeterminedCardPayment),
             currentStrategy,
             pending,
-            plan.Settings.ProjectionAnchorDate);
+            plan.Settings.ProjectionAnchorDate,
+            projection.TotalCreditCardInterest,
+            projection.TotalDeficitFinancingInterest,
+            projection.TotalInterestCost);
     }
 
     public IReadOnlyList<SalaryPeriodProjection> BuildFuturePeriods(

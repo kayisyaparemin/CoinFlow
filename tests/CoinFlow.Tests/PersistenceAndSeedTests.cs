@@ -22,6 +22,10 @@ public sealed class PersistenceAndSeedTests
             Assert.Equal(30_000m, plan.Settings.MonthlyLivingBudget);
             Assert.Equal(0m, plan.Settings.ProjectionStartingSavings);
             Assert.Equal(Today, plan.Settings.ProjectionAnchorDate);
+            Assert.Equal(0.05m,
+                plan.Settings.CreditCardCarryInterestRate);
+            Assert.Equal(0.05m,
+                plan.Settings.DeficitFinancingInterestRate);
             Assert.Equal(
                 PaymentAssignmentMode.UpcomingPeriod,
                 Assert.Single(plan.PaymentAssignmentStrategies).Mode);
@@ -230,6 +234,10 @@ public sealed class PersistenceAndSeedTests
             Assert.Equal(0m, reset.Settings.MonthlyLivingBudget);
             Assert.Equal(0m, reset.Settings.ProjectionStartingSavings);
             Assert.Equal(default, reset.Settings.ProjectionAnchorDate);
+            Assert.Equal(0.05m,
+                reset.Settings.CreditCardCarryInterestRate);
+            Assert.Equal(0.05m,
+                reset.Settings.DeficitFinancingInterestRate);
             Assert.Null(await service.GetDashboardAsync());
             Assert.Empty(await service.GetFuturePeriodsAsync());
 
@@ -278,8 +286,52 @@ public sealed class PersistenceAndSeedTests
             Assert.Empty(plan.CreditCards);
             Assert.Equal(0m, plan.Settings.MonthlyLivingBudget);
             Assert.Equal(default, plan.Settings.ProjectionAnchorDate);
+            Assert.Equal(0.05m,
+                plan.Settings.CreditCardCarryInterestRate);
+            Assert.Equal(0.05m,
+                plan.Settings.DeficitFinancingInterestRate);
             Assert.Empty(plan.PaymentAssignmentStrategies);
         });
+    }
+
+    [Fact]
+    public async Task InterestAssumptions_PersistAcrossReopenAndRejectInvalid()
+    {
+        var path = TempPath();
+        try
+        {
+            await using (var first = new SqliteCoinFlowStore(
+                             path, false, Today))
+            {
+                var service = TestFactory.Service(first);
+                var settings = (await service.GetFinancialPlanAsync()).Settings;
+                await service.SaveSettingsAsync(settings with
+                {
+                    CreditCardCarryInterestRate = 0.04m,
+                    DeficitFinancingInterestRate = 0.06m
+                });
+                await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                    service.SaveSettingsAsync(settings with
+                    {
+                        CreditCardCarryInterestRate = -0.01m
+                    }));
+                await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                    service.SaveSettingsAsync(settings with
+                    {
+                        DeficitFinancingInterestRate = 1.01m
+                    }));
+            }
+
+            await using var second = new SqliteCoinFlowStore(
+                path, false, Today);
+            var reopened = await second.GetSettingsAsync();
+            Assert.Equal(0.04m, reopened.CreditCardCarryInterestRate);
+            Assert.Equal(0.06m, reopened.DeficitFinancingInterestRate);
+        }
+        finally
+        {
+            DeleteDatabase(path);
+        }
     }
 
     [Fact]
@@ -475,6 +527,10 @@ public sealed class PersistenceAndSeedTests
             Assert.Equal(42_000m, settings.MonthlyLivingBudget);
             Assert.Equal(123_000m, settings.ProjectionStartingSavings);
             Assert.Equal(Today, settings.ProjectionAnchorDate);
+            Assert.Equal(0.05m,
+                settings.CreditCardCarryInterestRate);
+            Assert.Equal(0.05m,
+                settings.DeficitFinancingInterestRate);
             var strategy = Assert.Single(
                 (await TestFactory.Service(store)
                     .GetFinancialPlanAsync())

@@ -8,7 +8,7 @@
 - [x] Simülatörü baseline/scenario için aynı projection motoruna geçir
 - [x] Dokuz senaryo türünü ve açık onaylı kalıcı uygulamayı ekle
 - [x] Development kanonik seed'ini idempotent hale getir; production seed'ini kapat
-- [x] SQLite şema v4 migration'ını ve legacy veri korumasını tamamla
+- [x] SQLite şema v7 migration'ını ve legacy veri korumasını tamamla
 - [x] Alt navigasyonu dört ana ekrana indir ve detay kırılımlarını ekle
 - [x] Kanonik ilk dört maaş dönemi için exact regression testlerini ekle
 - [x] Domain, simulator ve SQLite test paketini tamamla
@@ -19,3 +19,5 @@
 - [x] Ayarlar ekranına dinamik örnekli maaş kullanım şekli seçimini ekle
 - [x] Maaştan önce vadesi gelen ödemeler için bilgi/risk uyarısı ekle
 - [x] Assignment mode persistence ve legacy settings migration testlerini ekle
+- [x] Kart carry faizi ile finansman açığı faizini ayrı state olarak hesapla
+- [x] Persistent `%5` faiz varsayımları, 12 aylık özet ve simulator faiz karşılaştırmasını ekle

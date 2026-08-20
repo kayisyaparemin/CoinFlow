@@ -17,18 +17,18 @@ public sealed class FinancialProjectionTests
             4);
 
         AssertRow(
-            rows[0], 115_000m, 21_875.82m, 23_156.56m, 28_167.40m,
-            73_199.78m, 41_800.22m, 30_000m, 11_800.22m);
+            rows[0], 115_000m, 21_875.82m, 24_314.39m, 28_167.40m,
+            74_357.61m, 40_642.39m, 30_000m, 10_642.39m);
         AssertRow(
-            rows[1], 115_000m, 21_875.82m, 20_109.28m, 28_167.40m,
-            70_152.50m, 44_847.50m, 30_000m, 14_847.50m);
+            rows[1], 115_000m, 21_875.82m, 21_533.41m, 28_167.40m,
+            71_576.63m, 43_423.37m, 30_000m, 13_423.37m);
         AssertRow(
-            rows[2], 115_000m, 21_875.82m, 15_706.73m, 55_492.20m,
-            93_074.75m, 21_925.25m, 30_000m, -8_074.75m);
+            rows[2], 115_000m, 21_875.82m, 17_207.21m, 55_492.20m,
+            94_575.23m, 20_424.77m, 30_000m, -9_575.23m);
 
-        Assert.Equal(11_800.22m, rows[0].EndingProjectedSavings);
-        Assert.Equal(26_647.72m, rows[1].EndingProjectedSavings);
-        Assert.Equal(18_572.97m, rows[2].EndingProjectedSavings);
+        Assert.Equal(10_642.39m, rows[0].EndingProjectedSavings);
+        Assert.Equal(24_065.76m, rows[1].EndingProjectedSavings);
+        Assert.Equal(14_490.53m, rows[2].EndingProjectedSavings);
         Assert.Equal(new DateOnly(2026, 12, 10), rows[3].PeriodStart);
     }
 
@@ -166,17 +166,23 @@ public sealed class FinancialProjectionTests
             2);
         var current = rows[1];
 
-        Assert.Equal(-25_987m, rows[0].EndingProjectedSavings);
-        Assert.Equal(-25_987m, current.OpeningProjectedSavings);
+        Assert.Equal(-25_987m,
+            rows[0].EndingProjectedSavingsBeforeDeficitInterest);
+        Assert.Equal(1_299.35m, rows[0].DeficitFinancingInterest);
+        Assert.Equal(-27_286.35m, rows[0].EndingProjectedSavings);
+        Assert.Equal(-27_286.35m, current.OpeningProjectedSavings);
         Assert.Equal(115_000m, current.TotalIncome);
         Assert.Equal(50_043m, current.MandatoryOutflow);
         Assert.Equal(64_957m, current.AvailableAfterMandatory);
-        Assert.Equal(25_987m, current.CarryOverDeficit);
-        Assert.Equal(38_970m,
+        Assert.Equal(27_286.35m, current.CarryOverDeficit);
+        Assert.Equal(37_670.65m,
             current.AvailableAfterCarryOverDeficit);
         Assert.Equal(30_000m, current.LivingBudget);
         Assert.Equal(34_957m, current.EstimatedSavingsCapacity);
-        Assert.Equal(8_970m, current.EndingProjectedSavings);
+        Assert.Equal(7_670.65m,
+            current.EndingProjectedSavingsBeforeDeficitInterest);
+        Assert.Equal(0m, current.DeficitFinancingInterest);
+        Assert.Equal(7_670.65m, current.EndingProjectedSavings);
         Assert.True(current.RecoveredCarryOverDeficit);
         Assert.Single(current.MandatoryItems);
         Assert.Equal(50_043m, current.MandatoryItems[0].Amount);
@@ -205,9 +211,12 @@ public sealed class FinancialProjectionTests
 
         Assert.Equal(25_000m, rows[0].CarryOverDeficit);
         Assert.Equal(20_000m, rows[0].CurrentPeriodNetContribution);
-        Assert.Equal(-5_000m, rows[0].EndingProjectedSavings);
-        Assert.Equal(-5_000m, rows[1].OpeningProjectedSavings);
-        Assert.Equal(5_000m, rows[1].CarryOverDeficit);
+        Assert.Equal(-5_000m,
+            rows[0].EndingProjectedSavingsBeforeDeficitInterest);
+        Assert.Equal(250m, rows[0].DeficitFinancingInterest);
+        Assert.Equal(-5_250m, rows[0].EndingProjectedSavings);
+        Assert.Equal(-5_250m, rows[1].OpeningProjectedSavings);
+        Assert.Equal(5_250m, rows[1].CarryOverDeficit);
         Assert.Empty(rows[0].MandatoryItems);
         Assert.Empty(rows[1].MandatoryItems);
     }
@@ -295,11 +304,13 @@ public sealed class FinancialProjectionTests
         Assert.Equal(
             baselineRows[0].EstimatedSavingsCapacity - 350_000m,
             scenarioRows[0].EstimatedSavingsCapacity);
-        Assert.Equal(
-            baselineRows[0].EndingProjectedSavings - 350_000m,
+        Assert.Equal(-330_000m,
+            scenarioRows[0].EndingProjectedSavingsBeforeDeficitInterest);
+        Assert.Equal(16_500m,
+            scenarioRows[0].DeficitFinancingInterest);
+        Assert.Equal(-346_500m,
             scenarioRows[0].EndingProjectedSavings);
-        Assert.Equal(
-            baselineRows[2].EndingProjectedSavings - 350_000m,
+        Assert.Equal(-338_966.25m,
             scenarioRows[2].EndingProjectedSavings);
     }
 
@@ -350,9 +361,159 @@ public sealed class FinancialProjectionTests
             new DateOnly(2026, 8, 20),
             1));
 
-        Assert.Equal(23_156.56m, row.CreditCardPayments);
+        Assert.Equal(24_314.39m, row.CreditCardPayments);
         Assert.True(row.IsEstimatedCardPayment);
         Assert.False(row.HasUndeterminedCardPayment);
+    }
+
+    [Fact]
+    public void DeficitInterest_CompoundsAndStopsOnRecovery()
+    {
+        var continuing = BasicPlan(40_000m) with
+        {
+            Settings = new UserSettings
+            {
+                SalaryDay = 10,
+                MonthlyLivingBudget = 30_000m,
+                ProjectionStartingSavings = -26_250m,
+                ProjectionAnchorDate = new DateOnly(2026, 8, 20),
+                DeficitFinancingInterestRate = 0.05m
+            }
+        };
+        var row = Assert.Single(_calculator.Calculate(
+            continuing,
+            new DateOnly(2026, 8, 20),
+            1));
+
+        Assert.Equal(-16_250m,
+            row.EndingProjectedSavingsBeforeDeficitInterest);
+        Assert.Equal(16_250m, row.DeficitPrincipal);
+        Assert.Equal(812.50m, row.DeficitFinancingInterest);
+        Assert.Equal(-17_062.50m, row.EndingProjectedSavings);
+
+        var recovered = continuing with
+        {
+            Salaries =
+            [
+                new SalaryScheduleEntry
+                {
+                    Amount = 70_000m,
+                    EffectiveDate = new DateOnly(2026, 1, 1)
+                }
+            ]
+        };
+        var recovery = Assert.Single(_calculator.Calculate(
+            recovered,
+            new DateOnly(2026, 8, 20),
+            1));
+        Assert.Equal(13_750m,
+            recovery.EndingProjectedSavingsBeforeDeficitInterest);
+        Assert.Equal(0m, recovery.DeficitFinancingInterest);
+        Assert.Equal(13_750m, recovery.EndingProjectedSavings);
+    }
+
+    [Fact]
+    public void ZeroDeficitInterestRate_LeavesNegativeEndingUnchanged()
+    {
+        var plan = BasicPlan(5_000m) with
+        {
+            Settings = new UserSettings
+            {
+                SalaryDay = 10,
+                MonthlyLivingBudget = 30_000m,
+                ProjectionAnchorDate = new DateOnly(2026, 8, 20),
+                DeficitFinancingInterestRate = 0m
+            }
+        };
+
+        var row = Assert.Single(_calculator.Calculate(
+            plan,
+            new DateOnly(2026, 8, 20),
+            1));
+
+        Assert.Equal(-25_000m,
+            row.EndingProjectedSavingsBeforeDeficitInterest);
+        Assert.Equal(0m, row.DeficitFinancingInterest);
+        Assert.Equal(-25_000m, row.EndingProjectedSavings);
+    }
+
+    [Fact]
+    public void CardAndDeficitInterest_RemainSeparateAndTotalExactly()
+    {
+        var card = new CreditCard
+        {
+            Name = "Test kart",
+            CarriedBalance = 100_000m,
+            BalanceAsOfDate = new DateOnly(2026, 8, 26),
+            StatementClosingDay = 25,
+            PaymentDueDay = 5,
+            MinimumPaymentRate = 0.40m,
+            PaymentStrategy = CreditCardPaymentStrategy.Minimum
+        };
+        var plan = BasicPlan(45_000m) with
+        {
+            Settings = new UserSettings
+            {
+                SalaryDay = 10,
+                MonthlyLivingBudget = 30_000m,
+                ProjectionAnchorDate = new DateOnly(2026, 8, 20),
+                CreditCardCarryInterestRate = 0.05m,
+                DeficitFinancingInterestRate = 0.05m
+            },
+            Salaries =
+            [
+                new SalaryScheduleEntry
+                {
+                    Amount = 45_000m,
+                    EffectiveDate = new DateOnly(2026, 1, 1)
+                },
+                new SalaryScheduleEntry
+                {
+                    Amount = 65_200m,
+                    EffectiveDate = new DateOnly(2026, 10, 10)
+                }
+            ],
+            CreditCards = [card]
+        };
+
+        var result = _calculator.CalculatePlan(
+            plan,
+            new DateOnly(2026, 8, 20),
+            2);
+
+        Assert.Equal(40_000m, result.Periods[0].MandatoryOutflow);
+        Assert.Equal(-25_000m,
+            result.Periods[0].EstimatedSavingsCapacity);
+        Assert.Equal(-25_000m,
+            result.Periods[0].EndingProjectedSavingsBeforeDeficitInterest);
+        Assert.Equal(3_000m, result.Periods[0].CardInterestGenerated);
+        Assert.Equal(1_250m, result.Periods[0].DeficitFinancingInterest);
+        Assert.Equal(4_250m, result.Periods[0].TotalInterestGenerated);
+        Assert.Equal(1_890m, result.Periods[1].CardInterestGenerated);
+        Assert.Equal(812.50m,
+            result.Periods[1].DeficitFinancingInterest);
+        Assert.Equal(2_702.50m,
+            result.Periods[1].TotalInterestGenerated);
+        Assert.Equal(4_890m, result.TotalCreditCardInterest);
+        Assert.Equal(2_062.50m,
+            result.TotalDeficitFinancingInterest);
+        Assert.Equal(6_952.50m, result.TotalInterestCost);
+        Assert.Empty(plan.PaymentPlans);
+        Assert.Empty(plan.Loans);
+        Assert.Empty(plan.PlannedLargeExpenses);
+    }
+
+    [Fact]
+    public void CanonicalTwelvePeriodInterestTotals_AreExact()
+    {
+        var result = _calculator.CalculatePlan(
+            TestFactory.CanonicalPlan(),
+            new DateOnly(2026, 8, 20),
+            12);
+
+        Assert.Equal(7_101.67m, result.TotalCreditCardInterest);
+        Assert.Equal(0m, result.TotalDeficitFinancingInterest);
+        Assert.Equal(7_101.67m, result.TotalInterestCost);
     }
 
     [Fact]

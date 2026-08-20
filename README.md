@@ -22,10 +22,14 @@ Toplam Gelir = Maaş + Döneme denk gelen diğer gelirler
 Zorunlu Ödeme = Krediler + Kart ödemeleri + geçici/taksitli/diğer planlı ödemeler
 Zorunlu Ödemeler Sonrası = Toplam Gelir - Zorunlu Ödeme
 Tahmini Birikim Kapasitesi = Zorunlu Ödemeler Sonrası - Yaşam Bütçesi - Planlı büyük nakit giderler
-Dönem Sonu Tahmini Birikim = Dönem Başı Birikim + Tahmini Birikim Kapasitesi
+Faiz Öncesi Dönem Sonu = Dönem Başı Birikim + Tahmini Birikim Kapasitesi
+Finansman Açığı Faizi = max(0, -Faiz Öncesi Dönem Sonu) × Açık Faiz Oranı
+Dönem Sonu Tahmini Birikim = Faiz Öncesi Dönem Sonu - Finansman Açığı Faizi
 ```
 
-Negatif dönem sonu tahmini birikim sonraki maaş dönemine aynen `OpeningProjectedSavings` olarak taşınır. UI bunu **devreden finansman açığı** olarak gösterir. Bu değer yeni kredi, kart borcu veya zorunlu ödeme değildir; yalnız kümülatif planlama başlangıç durumudur ve dönem sonu hesabında ikinci kez çıkarılmaz.
+Negatif dönem sonu tahmini birikim, hesaplanan finansman açığı faiziyle birlikte sonraki maaş dönemine aynen `OpeningProjectedSavings` olarak taşınır. UI bunu **devreden finansman açığı** olarak gösterir. Bu değer yeni kredi, kart borcu veya zorunlu ödeme değildir; yalnız kümülatif planlama başlangıç durumudur ve dönem sonu hesabında ikinci kez çıkarılmaz.
+
+Kart ekstresinde ödenmeyen principal için aylık planlama faizi hesaplanır ve yalnız bir sonraki ekstre opening carry bakiyesine eklenir. Kart faizi mevcut maaş döneminin zorunlu ödemesine tekrar yazılmaz. Kart carry faizi ile genel finansman açığı faizi iki ayrı state ve summary olarak tutulur; ikisi de varsayılan `%5,00`, `decimal` ve iki hane `AwayFromZero` yuvarlama kullanır.
 
 Maaş, tek seferlik gelir, kredi, kart harcaması, kart vadesi, geçici ödeme ve büyük giderlerin tamamı exact date ile ilgili maaş dönemine yerleşir. Ayın 29/30/31'i için takvim sonu kırpma kuralı merkezi olarak uygulanır.
 
@@ -34,10 +38,10 @@ Maaş, tek seferlik gelir, kredi, kart harcaması, kart vadesi, geçici ödeme v
 Sol üstteki native Shell hamburger menüsü beş kök bölüm içerir; bottom TabBar yoktur:
 
 1. **Ana Sayfa:** Aktif maaş dönemi özeti, yaklaşan ödemeler, 12 dönem özeti ve en sıkışık dönem.
-2. **12 Aylık:** Her dönem için gelir, zorunlu ödeme, yaşam bütçesi, birikim kapasitesi ve dönem sonu birikim; satıra dokununca exact breakdown.
-3. **Simülatör:** Nakit alışveriş, tek çekim/taksitli kart, finansman, nakit borç, ileri tarihli tek/tekrarlı ödeme, gelecek gelir, maaş ve maaş kullanım düzeni değişimi senaryoları.
+2. **12 Aylık:** Her dönem için gelir, zorunlu ödeme, yaşam bütçesi, faiz maliyeti, birikim kapasitesi ve dönem sonu birikim; satıra dokununca exact breakdown.
+3. **Simülatör:** Nakit alışveriş, tek çekim/taksitli kart, kart ekstresini tam kapatma, finansman, nakit borç, ileri tarihli tek/tekrarlı ödeme, gelecek gelir, maaş ve maaş kullanım düzeni değişimi senaryoları; baseline ve scenario faiz yükünü karşılaştırır.
 4. **Gelir & Ödemeler:** Maaş, diğer gelir, kredi, kredi kartı, geçici/taksitli ödeme ve büyük gider yönetimi.
-5. **Ayarlar:** Maaş günü, bütçe, read-only düzen geçmişi ve development araçları.
+5. **Ayarlar:** Maaş günü, bütçe, kart carry/açık faiz varsayımları, read-only düzen geçmişi ve development araçları.
 
 Simülatörde **Simüle Et** yalnız bellekte hypothetical bir plan üretir. **Planı Uygula** açık onaydan sonra scenario türünü canonical finans kaydına dönüştürür; aynı application kimliği ikinci kez yükümlülük oluşturmaz. Uygulanan kayıt Gelir & Ödemeler içindeki doğru bölümde veya seçili kart detayında hemen açılabilir ve sonraki simulator baseline hesabına normal gerçek veri olarak girer.
 
@@ -66,6 +70,7 @@ Fresh development ve production veritabanları finansal olarak boş açılır; o
 - Eminevim: 20.09.2026 28.167,40 TL; 20.10.2026 28.167,40 TL; 20.11.2026 55.492,20 TL
 - Axess: limit 607.350 TL; devreden 35.201,77 TL; dönem içi 61.283,91 TL; exact future charges
 - Yaşam bütçesi: 30.000 TL; başlangıç birikimi: 0 TL
+- Kart carry ve finansman açığı aylık planlama faizi: `%5,00`
 - Projection anchor: 20.08.2026; ilk projection maaşı: 10.09.2026
 - İlk maaş kullanım düzeni: `UpcomingPeriod`
 
@@ -92,7 +97,7 @@ dotnet publish src/CoinFlow.App/CoinFlow.App.csproj -f net8.0-android -c Release
 
 ## Migration
 
-SQLite şema sürümü 6'dır. Mevcut kullanıcı verisi yerinde yükseltilir; eski global ödeme atama değeri bir kez ilk strategy history kaydına dönüştürülür ve runtime source of truth olmaktan çıkar. Eksik projection anchor upgrade tarihinde bir kez oluşturulur ve sonraki açılışlarda ilerletilmez. Eski kart aggregate alanları yeni kart modeline aktarılır. Kaldırılan mikro harcama, balance snapshot ve acil fon tabloları upgrade sırasında düşürülür.
+SQLite şema sürümü 7'dir. Mevcut kullanıcı verisi yerinde yükseltilir; v7 migration iki planlama faiz varsayımını `%5,00` ile başlatır. Eski global ödeme atama değeri bir kez ilk strategy history kaydına dönüştürülür ve runtime source of truth olmaktan çıkar. Eksik projection anchor upgrade tarihinde bir kez oluşturulur ve sonraki açılışlarda ilerletilmez. Eski kart aggregate alanları yeni kart modeline aktarılır. Kaldırılan mikro harcama, balance snapshot ve acil fon tabloları upgrade sırasında düşürülür.
 
 ## CI/CD
 

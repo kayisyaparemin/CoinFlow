@@ -12,7 +12,10 @@ public sealed record DashboardSnapshot(
     bool HasUndeterminedCardPayments,
     PaymentAssignmentStrategy CurrentStrategy,
     PaymentAssignmentStrategy? PendingStrategy,
-    DateOnly ProjectionAnchorDate);
+    DateOnly ProjectionAnchorDate,
+    decimal TwelvePeriodCreditCardInterest,
+    decimal TwelvePeriodDeficitFinancingInterest,
+    decimal TwelvePeriodTotalInterest);
 
 public sealed record PaymentAssignmentStrategyOverview(
     PaymentAssignmentStrategy? Current,

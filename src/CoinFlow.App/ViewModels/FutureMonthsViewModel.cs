@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CoinFlow.App.Models;
+using CoinFlow.App.Services;
 using CoinFlow.Application.Services;
 using CoinFlow.Domain.Calculations;
 
@@ -19,6 +20,10 @@ public partial class FutureMonthsViewModel(
     [ObservableProperty] private bool hasNoProjection = true;
     [ObservableProperty] private string emptyStateMessage =
         "Projeksiyon oluşturmak için önce maaş bilgisi ekle.";
+    [ObservableProperty] private string totalCreditCardInterest = "—";
+    [ObservableProperty] private string totalDeficitInterest = "—";
+    [ObservableProperty] private string totalInterestCost = "—";
+    [ObservableProperty] private bool hasInterestSummary;
 
     [RelayCommand]
     public async Task LoadAsync()
@@ -50,6 +55,12 @@ public partial class FutureMonthsViewModel(
                     Money(row.PlannedLargeCashExpenses),
                     row.PlannedLargeCashExpenses > 0m,
                     Money(row.EstimatedSavingsCapacity),
+                    Money(row.EndingProjectedSavingsBeforeDeficitInterest),
+                    Money(row.CardInterestGenerated),
+                    Money(row.DeficitFinancingInterest),
+                    Money(row.TotalInterestGenerated),
+                    InterestLabel(row),
+                    row.TotalInterestGenerated > 0m,
                     Money(row.EndingProjectedSavings),
                     CarryOverMessage(row),
                     Breakdown(row),
@@ -59,6 +70,12 @@ public partial class FutureMonthsViewModel(
 
             HasProjection = Periods.Count > 0;
             HasNoProjection = !HasProjection;
+            var interest = ProjectionInterestSummary.From(rows);
+            TotalCreditCardInterest = Money(interest.CreditCardInterest);
+            TotalDeficitInterest = Money(
+                interest.DeficitFinancingInterest);
+            TotalInterestCost = Money(interest.TotalInterestCost);
+            HasInterestSummary = interest.TotalInterestCost > 0m;
             HasTargetResult = false;
             EmptyStateMessage = plan.Salaries.Count == 0
                 ? "Projeksiyon oluşturmak için önce maaş bilgisi ekle."
@@ -124,6 +141,7 @@ public partial class FutureMonthsViewModel(
             $"Tahmini yaşam gideri: {Money(row.LivingBudget)}",
             $"Büyük planlı ödeme: {Money(row.PlannedLargeCashExpenses)}",
             $"Bu dönemin tahmini tasarrufu: {Money(row.EstimatedSavingsCapacity)}",
+            $"Faiz öncesi dönem sonu: {Money(row.EndingProjectedSavingsBeforeDeficitInterest)}",
             $"Dönem sonu tahmini birikim: {Money(row.EndingProjectedSavings)}",
             string.Empty,
             $"Krediler: {Money(row.LoanPayments)}",
@@ -135,6 +153,23 @@ public partial class FutureMonthsViewModel(
             $"Geçmiş düzenden kapanacak: {Money(row.TransitionCatchUpAmount)}",
             $"İleri dönem için ayrılacak: {Money(row.ForwardFundedAmount)}"
         ]);
+        if (row.TotalInterestGenerated > 0m)
+        {
+            lines.Add(string.Empty);
+            lines.Add("Faiz Maliyeti");
+            lines.Add(
+                $"Kredi kartı devreden borç: {Money(row.CardInterestGenerated)}");
+            foreach (var card in row.CardPaymentStatuses.Where(x =>
+                         x.CarryInterest > 0m))
+            {
+                lines.Add($"{card.CardName}: {Money(card.CarryInterest)}");
+            }
+
+            lines.Add(
+                $"Finansman açığı: {Money(row.DeficitFinancingInterest)}");
+            lines.Add(
+                $"Bu dönem oluşan toplam: {Money(row.TotalInterestGenerated)}");
+        }
         if (row.HasCarryOverDeficit)
         {
             lines.Add($"Bu dönem karşılanan açık: {Money(row.DeficitCoveredThisPeriod)}");
@@ -154,9 +189,30 @@ public partial class FutureMonthsViewModel(
                 (x.PaymentBeforeSalary
                     ? $" → {x.AssignedSalaryDate.ToString("dd MMM", TurkishCulture)} maaşı • ⚠ Maaştan önce vadesi geliyor"
                     : string.Empty));
+        var debugLines = BuildInfo.IsDevelopment
+            ? row.CardPaymentStatuses.Select(x => string.Join(
+                    " • ",
+                    $"{x.CardName} Statement={Money(x.StatementBalance ?? 0m, 2)}",
+                    $"Payment={Money(x.Payment ?? 0m, 2)}",
+                    $"RemainingPrincipal={Money(x.CarriedPrincipalAfterPayment ?? 0m, 2)}",
+                    $"InterestRate=%{x.AppliedInterestRate * 100m:N2}",
+                    $"CarryInterest={Money(x.CarryInterest, 2)}",
+                    $"NextCarry={Money(x.NextCarriedBalance ?? 0m, 2)}"))
+                .Concat([
+                    $"OpeningSavings={Money(row.OpeningProjectedSavings, 2)}",
+                    $"CurrentContribution={Money(row.CurrentPeriodNetContribution, 2)}",
+                    $"EndingBeforeDeficitInterest={Money(row.EndingProjectedSavingsBeforeDeficitInterest, 2)}",
+                    $"DeficitPrincipal={Money(row.DeficitPrincipal, 2)}",
+                    $"DeficitInterestRate=%{row.AppliedDeficitInterestRate * 100m:N2}",
+                    $"DeficitInterest={Money(row.DeficitFinancingInterest, 2)}",
+                    $"FinalEndingSavings={Money(row.EndingProjectedSavings, 2)}"
+                ])
+            : [];
         return string.Join(
             Environment.NewLine,
-            lines.Concat(exactSources).Concat(undeterminedCards));
+            lines.Concat(exactSources)
+                .Concat(undeterminedCards)
+                .Concat(debugLines));
     }
 
     private static string CarryOverMessage(SalaryPeriodProjection row)
@@ -190,6 +246,12 @@ public partial class FutureMonthsViewModel(
                 $"Yaşam bütçesi ve büyük planlı ödemeler sonrası {Money(Math.Abs(row.EstimatedSavingsCapacity))} açık.");
         }
 
+        if (row.TotalInterestGenerated > 0m)
+        {
+            notices.Add(
+                $"Bu dönem tahmini faiz yükü {Money(row.TotalInterestGenerated)}.");
+        }
+
         if (row.IsStrategyTransition)
         {
             notices.Add(
@@ -209,6 +271,15 @@ public partial class FutureMonthsViewModel(
 
         return string.Join(" ", notices);
     }
+
+    private static string InterestLabel(SalaryPeriodProjection row) =>
+        (row.CardInterestGenerated > 0m,
+            row.DeficitFinancingInterest > 0m) switch
+        {
+            (true, false) => "Kart borcu faizi",
+            (false, true) => "Açık faizi",
+            _ => "Bu dönem toplam faiz"
+        };
 
     private static string PeriodText(SalaryPeriod period) =>
         $"{period.Start.ToString("dd MMM", TurkishCulture)} → {period.End.ToString("dd MMM yyyy", TurkishCulture)}";

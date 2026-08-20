@@ -159,6 +159,8 @@ public sealed record UserSettings
     public decimal MonthlyLivingBudget { get; init; }
     public decimal ProjectionStartingSavings { get; init; }
     public DateOnly ProjectionAnchorDate { get; init; }
+    public decimal CreditCardCarryInterestRate { get; init; } = 0.05m;
+    public decimal DeficitFinancingInterestRate { get; init; } = 0.05m;
 }
 
 public sealed record FinancialPlan

@@ -94,6 +94,8 @@ public sealed class CreditCardStatementTests
         Assert.Equal(37_600m, statement.MinimumPayment);
         Assert.Equal(37_600m, statement.Payment);
         Assert.Equal(56_400m, statement.CarriedAfterPayment);
+        Assert.Equal(2_820m, statement.CarryInterest);
+        Assert.Equal(59_220m, statement.NextCarriedBalance);
     }
 
     [Fact]
@@ -124,6 +126,74 @@ public sealed class CreditCardStatementTests
 
         Assert.Equal(94_000m, statement.Payment);
         Assert.Equal(0m, statement.CarriedAfterPayment);
+        Assert.Equal(0m, statement.CarryInterest);
+        Assert.Equal(0m, statement.NextCarriedBalance);
+    }
+
+    [Fact]
+    public void MinimumPayment_AddsFivePercentCarryInterest()
+    {
+        var statement = Assert.Single(_calculator.Project(
+            Card() with
+            {
+                CarriedBalance = 100_000m,
+                PaymentStrategy = CreditCardPaymentStrategy.Minimum
+            },
+            1,
+            carryInterestRate: 0.05m));
+
+        Assert.Equal(100_000m, statement.StatementBalance);
+        Assert.Equal(40_000m, statement.Payment);
+        Assert.Equal(60_000m, statement.CarriedAfterPayment);
+        Assert.Equal(3_000m, statement.CarryInterest);
+        Assert.Equal(63_000m, statement.NextCarriedBalance);
+        Assert.Equal(0.05m, statement.AppliedInterestRate);
+    }
+
+    [Fact]
+    public void CarryInterest_CompoundsIntoNextStatement()
+    {
+        var statements = _calculator.Project(
+            Card() with
+            {
+                CarriedBalance = 100_000m,
+                PaymentStrategy = CreditCardPaymentStrategy.Minimum
+            },
+            2,
+            carryInterestRate: 0.05m);
+
+        Assert.Equal(63_000m, statements[0].NextCarriedBalance);
+        Assert.Equal(63_000m, statements[1].StatementBalance);
+        Assert.Equal(25_200m, statements[1].Payment);
+        Assert.Equal(37_800m, statements[1].CarriedAfterPayment);
+        Assert.Equal(1_890m, statements[1].CarryInterest);
+        Assert.Equal(39_690m, statements[1].NextCarriedBalance);
+    }
+
+    [Fact]
+    public void ZeroInterestRate_DoesNotIncreaseCarry()
+    {
+        var statement = Assert.Single(_calculator.Project(
+            Card() with
+            {
+                CarriedBalance = 100_000m,
+                PaymentStrategy = CreditCardPaymentStrategy.Minimum
+            },
+            1,
+            carryInterestRate: 0m));
+
+        Assert.Equal(60_000m, statement.CarriedAfterPayment);
+        Assert.Equal(0m, statement.CarryInterest);
+        Assert.Equal(60_000m, statement.NextCarriedBalance);
+    }
+
+    [Fact]
+    public void InvalidInterestRate_IsRejected()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            _calculator.Project(Card(), 1, carryInterestRate: -0.01m));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            _calculator.Project(Card(), 1, carryInterestRate: 1.01m));
     }
 
     [Theory]
@@ -223,21 +293,27 @@ public sealed class CreditCardStatementTests
             new DateOnly(2026, 9, 5),
             96_485.68m,
             38_594.27m,
-            57_891.41m);
+            57_891.41m,
+            2_894.57m,
+            60_785.98m);
         AssertStatement(
             statements[1],
             new DateOnly(2026, 9, 25),
             new DateOnly(2026, 10, 5),
-            57_891.41m,
-            23_156.56m,
-            34_734.85m);
+            60_785.98m,
+            24_314.39m,
+            36_471.59m,
+            1_823.58m,
+            38_295.17m);
         AssertStatement(
             statements[2],
             new DateOnly(2026, 10, 25),
             new DateOnly(2026, 11, 5),
-            50_273.21m,
-            20_109.28m,
-            30_163.93m);
+            53_833.53m,
+            21_533.41m,
+            32_300.12m,
+            1_615.01m,
+            33_915.13m);
     }
 
     [Fact]
@@ -254,13 +330,17 @@ public sealed class CreditCardStatementTests
         DateOnly dueDate,
         decimal balance,
         decimal payment,
-        decimal carried)
+        decimal carriedPrincipal,
+        decimal interest,
+        decimal nextCarry)
     {
         Assert.Equal(closeDate, statement.StatementCloseDate);
         Assert.Equal(dueDate, statement.PaymentDueDate);
         Assert.Equal(balance, statement.StatementBalance);
         Assert.Equal(payment, statement.Payment);
-        Assert.Equal(carried, statement.CarriedAfterPayment);
+        Assert.Equal(carriedPrincipal, statement.CarriedAfterPayment);
+        Assert.Equal(interest, statement.CarryInterest);
+        Assert.Equal(nextCarry, statement.NextCarriedBalance);
     }
 
     private static CreditCard Card() => new()
@@ -280,4 +360,3 @@ public sealed class CreditCardStatementTests
         Amount = amount
     };
 }
-

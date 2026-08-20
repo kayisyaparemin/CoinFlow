@@ -39,7 +39,8 @@ public sealed class FinancialProjectionCalculator(
 
         var cardBundle = BuildCardPayments(
             plan.CreditCards,
-            periods[^1].End);
+            periods[^1].End,
+            plan.Settings.CreditCardCarryInterestRate);
         var obligations = mandatoryPaymentCalculator
             .BuildObligations(
                 plan.Loans,
@@ -78,10 +79,17 @@ public sealed class FinancialProjectionCalculator(
             var estimatedSavings = availableAfterMandatory -
                                    plan.Settings.MonthlyLivingBudget -
                                    largeExpenseTotal;
-            var endingSavings = openingSavings + estimatedSavings;
             var periodStatuses = statuses
                 .Where(x => x.AssignedSalaryDate == period.Start)
                 .ToArray();
+            var cardInterest = periodStatuses.Sum(x => x.CarryInterest);
+            var endingBeforeDeficitInterest = openingSavings + estimatedSavings;
+            var deficitInterest = endingBeforeDeficitInterest < 0m
+                ? RoundMoney(
+                    Math.Abs(endingBeforeDeficitInterest) *
+                    plan.Settings.DeficitFinancingInterestRate)
+                : 0m;
+            var endingSavings = endingBeforeDeficitInterest - deficitInterest;
 
             result.Add(new SalaryPeriodProjection(
                 period.Start,
@@ -120,7 +128,11 @@ public sealed class FinancialProjectionCalculator(
                 budget.NormalMandatoryAmount,
                 budget.TransitionCatchUpAmount,
                 budget.ForwardFundedAmount,
-                anchor));
+                anchor,
+                endingBeforeDeficitInterest,
+                deficitInterest,
+                cardInterest,
+                plan.Settings.DeficitFinancingInterestRate));
             openingSavings = endingSavings;
         }
 
@@ -150,7 +162,8 @@ public sealed class FinancialProjectionCalculator(
 
     private CardPaymentBundle BuildCardPayments(
         IEnumerable<CreditCard> cards,
-        DateOnly horizonEnd)
+        DateOnly horizonEnd,
+        decimal carryInterestRate)
     {
         var obligations = new List<ObligationItem>();
         var statuses = new List<CreditCardPaymentProjectionStatus>();
@@ -167,7 +180,11 @@ public sealed class FinancialProjectionCalculator(
             var cardName = $"{card.Bank} {card.Name}".Trim();
 
             foreach (var statement in cardStatementCalculator
-                         .Project(card, statementCount, useProjectionFallback: true)
+                         .Project(
+                             card,
+                             statementCount,
+                             useProjectionFallback: true,
+                             carryInterestRate)
                          .Where(x => x.PaymentDueDate < horizonEnd))
             {
                 statuses.Add(new CreditCardPaymentProjectionStatus(
@@ -178,6 +195,12 @@ public sealed class FinancialProjectionCalculator(
                     statement.StatementBalance,
                     statement.MinimumPayment,
                     statement.Payment,
+                    statement.OpeningCarriedBalance,
+                    statement.NewCharges,
+                    statement.CarriedAfterPayment,
+                    statement.CarryInterest,
+                    statement.NextCarriedBalance,
+                    statement.AppliedInterestRate,
                     statement.PaymentResolution,
                     statement.AppliedPaymentType));
 
@@ -261,6 +284,13 @@ public sealed class FinancialProjectionCalculator(
                 "Aylık tahmini yaşam bütçesi negatif olamaz.");
         }
 
+        ValidateInterestRate(
+            plan.Settings.CreditCardCarryInterestRate,
+            "Kredi kartı devreden borç faiz oranı");
+        ValidateInterestRate(
+            plan.Settings.DeficitFinancingInterestRate,
+            "Finansman açığı faiz oranı");
+
         if (plan.Salaries.Any(x => x.Amount < 0m) ||
             plan.OtherIncomes.Any(x => x.Amount < 0m))
         {
@@ -276,6 +306,18 @@ public sealed class FinancialProjectionCalculator(
 
     private static int MonthDistance(DateOnly from, DateOnly to) =>
         ((to.Year - from.Year) * 12) + to.Month - from.Month;
+
+    private static decimal RoundMoney(decimal amount) =>
+        decimal.Round(amount, 2, MidpointRounding.AwayFromZero);
+
+    private static void ValidateInterestRate(decimal rate, string name)
+    {
+        if (rate is < 0m or > 1m)
+        {
+            throw new InvalidOperationException(
+                $"{name} %0 ile %100 arasında olmalıdır.");
+        }
+    }
 
     private sealed record CardPaymentBundle(
         IReadOnlyList<ObligationItem> Obligations,

@@ -70,13 +70,25 @@ public sealed class SimulationTests
 
         var impacted = result.Rows.Single(x =>
             x.Scenario.Period.Contains(new DateOnly(2027, 3, 15)));
-        Assert.Equal(
-            -350_000m,
-            impacted.ProjectedSavingsDifference);
+        Assert.True(impacted.ProjectedSavingsDifference < -350_000m);
+        Assert.True(
+            result.ScenarioInterest.TotalInterestCost >
+            result.BaselineInterest.TotalInterestCost);
+        Assert.Equal(7_101.67m,
+            result.BaselineInterest.TotalInterestCost);
+        Assert.Equal(7_101.67m,
+            result.ScenarioInterest.CreditCardInterest);
+        Assert.Equal(2_916.82m,
+            result.ScenarioInterest.DeficitFinancingInterest);
+        Assert.Equal(10_018.49m,
+            result.ScenarioInterest.TotalInterestCost);
+        Assert.Equal(2_916.82m, result.AdditionalInterestCost);
         Assert.All(
             result.Rows.Where(x =>
                 x.Scenario.PeriodStart > impacted.Scenario.PeriodStart),
-            row => Assert.Equal(-350_000m, row.ProjectedSavingsDifference));
+            row => Assert.True(
+                row.ProjectedSavingsDifference <=
+                impacted.ProjectedSavingsDifference));
     }
 
     [Fact]
@@ -172,15 +184,26 @@ public sealed class SimulationTests
                     new DateOnly(2026, 9, 20)),
                 periodCount: 4);
 
-        Assert.Equal(-25_000m, result.Scenario[0].EndingProjectedSavings);
-        Assert.Equal(-25_000m, result.Scenario[1].OpeningProjectedSavings);
-        Assert.Equal(25_000m, result.Scenario[1].CarryOverDeficit);
-        Assert.Equal(-5_000m, result.Scenario[1].EndingProjectedSavings);
-        Assert.Equal(-5_000m, result.Scenario[2].OpeningProjectedSavings);
-        Assert.Equal(15_000m, result.Scenario[2].EndingProjectedSavings);
+        Assert.Equal(-25_000m,
+            result.Scenario[0].EndingProjectedSavingsBeforeDeficitInterest);
+        Assert.Equal(1_250m,
+            result.Scenario[0].DeficitFinancingInterest);
+        Assert.Equal(-26_250m, result.Scenario[0].EndingProjectedSavings);
+        Assert.Equal(-26_250m, result.Scenario[1].OpeningProjectedSavings);
+        Assert.Equal(26_250m, result.Scenario[1].CarryOverDeficit);
+        Assert.Equal(-6_250m,
+            result.Scenario[1].EndingProjectedSavingsBeforeDeficitInterest);
+        Assert.Equal(312.50m,
+            result.Scenario[1].DeficitFinancingInterest);
+        Assert.Equal(-6_562.50m,
+            result.Scenario[1].EndingProjectedSavings);
+        Assert.Equal(-6_562.50m,
+            result.Scenario[2].OpeningProjectedSavings);
+        Assert.Equal(13_437.50m,
+            result.Scenario[2].EndingProjectedSavings);
         Assert.Equal(new DateOnly(2026, 9, 10),
             result.Risk.FirstDeficitPeriod?.Start);
-        Assert.Equal(25_000m, result.Risk.MaximumCarryOverDeficit);
+        Assert.Equal(26_250m, result.Risk.MaximumCarryOverDeficit);
         Assert.Equal(new DateOnly(2026, 11, 10),
             result.Risk.RecoveryPeriod?.Start);
 
@@ -196,6 +219,99 @@ public sealed class SimulationTests
         Assert.Empty(scenarioPlan.PaymentPlans);
         Assert.Empty(scenarioPlan.CreditCards);
         Assert.Single(scenarioPlan.PlannedLargeExpenses);
+    }
+
+    [Fact]
+    public void FullCardPaymentScenario_ReducesInterestWithoutMutatingBaseline()
+    {
+        var card = TestFactory.AxessCard() with
+        {
+            PaymentStrategy = CreditCardPaymentStrategy.Minimum,
+            ProjectionFallbackStrategy = ProjectionFallbackStrategy.Minimum
+        };
+        var plan = TestFactory.CanonicalPlan() with
+        {
+            CreditCards = [card]
+        };
+        var request = new SimulationRequest(
+            SimulationScenarioType.CreditCardFullPayment,
+            "Axess'i tamamen kapat",
+            0m,
+            new DateOnly(2026, 12, 5),
+            CreditCardId: card.Id,
+            ScenarioId: Guid.NewGuid());
+
+        var result = new SimulationCalculator(_projection, _installments)
+            .Calculate(
+                plan,
+                new DateOnly(2026, 8, 20),
+                request);
+
+        Assert.True(result.InterestSaving > 0m);
+        Assert.True(result.AdditionalInterestCost < 0m);
+        Assert.True(
+            result.ScenarioInterest.CreditCardInterest <
+            result.BaselineInterest.CreditCardInterest);
+        Assert.Equal(7_101.67m,
+            result.BaselineInterest.TotalInterestCost);
+        Assert.Equal(3_648.05m,
+            result.ScenarioInterest.CreditCardInterest);
+        Assert.Equal(566.01m,
+            result.ScenarioInterest.DeficitFinancingInterest);
+        Assert.Equal(4_214.06m,
+            result.ScenarioInterest.TotalInterestCost);
+        Assert.Equal(2_887.61m, result.InterestSaving);
+        Assert.Empty(card.PaymentPlans);
+        var scenarioCard = Assert.Single(
+            new SimulationCalculator(_projection, _installments)
+                .BuildScenarioPlan(plan, request).CreditCards);
+        var payment = Assert.Single(scenarioCard.PaymentPlans);
+        Assert.Equal(CreditCardPaymentType.FullStatement, payment.PaymentType);
+        Assert.Equal(new DateOnly(2026, 12, 5), payment.DueDate);
+    }
+
+    [Fact]
+    public void FullCardPaymentScenario_ClearsFutureCarryWhenNoNewCharges()
+    {
+        var card = TestFactory.AxessCard() with
+        {
+            Charges = [],
+            PaymentStrategy = CreditCardPaymentStrategy.Minimum,
+            ProjectionFallbackStrategy = ProjectionFallbackStrategy.Minimum
+        };
+        var plan = TestFactory.CanonicalPlan() with
+        {
+            CreditCards = [card]
+        };
+        var payoffDate = new DateOnly(2026, 10, 5);
+        var result = new SimulationCalculator(_projection, _installments)
+            .Calculate(
+                plan,
+                new DateOnly(2026, 8, 20),
+                new SimulationRequest(
+                    SimulationScenarioType.CreditCardFullPayment,
+                    "Axess'i tamamen kapat",
+                    0m,
+                    payoffDate,
+                    CreditCardId: card.Id,
+                    ScenarioId: Guid.NewGuid()),
+                periodCount: 4);
+
+        var postPayoffStatements = result.Scenario
+            .SelectMany(x => x.CardPaymentStatuses)
+            .Where(x => x.PaymentDueDate >= payoffDate)
+            .ToArray();
+        Assert.NotEmpty(postPayoffStatements);
+        Assert.All(postPayoffStatements, status =>
+        {
+            Assert.Equal(0m, status.CarriedPrincipalAfterPayment);
+            Assert.Equal(0m, status.CarryInterest);
+            Assert.Equal(0m, status.NextCarriedBalance);
+        });
+        Assert.Equal(0m, result.ScenarioInterest.CreditCardInterest);
+        Assert.True(
+            result.ScenarioInterest.CreditCardInterest <
+            result.BaselineInterest.CreditCardInterest);
     }
 
     [Fact]
@@ -377,6 +493,27 @@ public sealed class SimulationTests
             Assert.Equal(cardCountBefore + 9, Assert.Single(
                 (await service.GetFinancialPlanAsync()).CreditCards).Charges.Count);
 
+            var payoffId = Guid.NewGuid();
+            var payoffDate = new CreditCardStatementCalculator()
+                .Project(cardAfter, 2, useProjectionFallback: true)
+                [1].PaymentDueDate;
+            await service.ApplySimulationAsync(
+                new SimulationRequest(
+                    SimulationScenarioType.CreditCardFullPayment,
+                    "Axess'i kapat",
+                    0m,
+                    payoffDate,
+                    CreditCardId: card.Id,
+                    ScenarioId: payoffId),
+                confirmed: true);
+            var appliedPayoff = Assert.Single(
+                (await service.GetFinancialPlanAsync()).CreditCards
+                .Single().PaymentPlans);
+            Assert.Equal(payoffId, appliedPayoff.Id);
+            Assert.Equal(
+                CreditCardPaymentType.FullStatement,
+                appliedPayoff.PaymentType);
+
             var incomeId = Guid.NewGuid();
             var incomeResult = await service.ApplySimulationAsync(
                 new SimulationRequest(
@@ -468,6 +605,8 @@ public sealed class SimulationTests
                 x.Id == financingId && x.Installments.Count == 9);
             Assert.Contains(restartedPlan.CreditCards.Single().Charges, x =>
                 x.Id == cardScenarioId);
+            Assert.Contains(restartedPlan.CreditCards.Single().PaymentPlans,
+                x => x.Id == payoffId);
             Assert.Contains(restartedPlan.OtherIncomes, x => x.Id == incomeId);
             Assert.Contains(restartedPlan.Salaries, x => x.Id == salaryId);
             Assert.Contains(restartedPlan.PaymentAssignmentStrategies, x =>
@@ -605,8 +744,8 @@ public sealed class SimulationTests
             StatementClosingDay = 25,
             PaymentDueDay = 5,
             MinimumPaymentRate = 0.40m,
-            PaymentStrategy = CreditCardPaymentStrategy.FullStatement,
-            ProjectionFallbackStrategy = ProjectionFallbackStrategy.FullStatement
+            PaymentStrategy = CreditCardPaymentStrategy.Minimum,
+            ProjectionFallbackStrategy = ProjectionFallbackStrategy.Minimum
         });
     }
 

@@ -30,6 +30,10 @@ public partial class DashboardViewModel(
     [ObservableProperty] private string estimatedSavings = "—";
     [ObservableProperty] private string endingSavings = "—";
     [ObservableProperty] private string twelveMonthSavings = "—";
+    [ObservableProperty] private string twelveMonthInterest = "—";
+    [ObservableProperty] private string twelveMonthCardInterest = "—";
+    [ObservableProperty] private string twelveMonthDeficitInterest = "—";
+    [ObservableProperty] private bool hasTwelveMonthInterest;
     [ObservableProperty] private string tightestPeriod = "—";
     [ObservableProperty] private string tightestValue = "—";
     [ObservableProperty] private string deficitMessage = string.Empty;
@@ -73,6 +77,7 @@ public partial class DashboardViewModel(
                 HasNoUpcomingPayments = true;
                 HasUndeterminedCardPayment = false;
                 HasPendingStrategy = false;
+                HasTwelveMonthInterest = false;
                 PreFirstSalaryPayments.Clear();
                 UpcomingPayments.Clear();
                 EmptyStateMessage = plan.Salaries.Count == 0
@@ -114,6 +119,14 @@ public partial class DashboardViewModel(
             EndingSavings = Money(current.EndingProjectedSavings);
             TwelveMonthSavings = Money(
                 dashboard.TwelvePeriodEndingProjectedSavings);
+            TwelveMonthInterest = Money(
+                dashboard.TwelvePeriodTotalInterest);
+            TwelveMonthCardInterest = Money(
+                dashboard.TwelvePeriodCreditCardInterest);
+            TwelveMonthDeficitInterest = Money(
+                dashboard.TwelvePeriodDeficitFinancingInterest);
+            HasTwelveMonthInterest =
+                dashboard.TwelvePeriodTotalInterest > 0m;
             TightestPeriod = PeriodText(dashboard.TightestPeriod.Period);
             TightestValue = Money(
                 dashboard.TightestPeriod.EstimatedSavingsCapacity);
@@ -212,12 +225,27 @@ public partial class DashboardViewModel(
             $"LivingBudget: {Money(row.LivingBudget, 2)}",
             $"LargeExpenses: {Money(row.PlannedLargeCashExpenses, 2)}",
             $"CurrentPeriodNetContribution: {Money(row.CurrentPeriodNetContribution, 2)}",
-            $"EndingProjectedSavings: {Money(row.EndingProjectedSavings, 2)}",
+            $"EndingBeforeDeficitInterest: {Money(row.EndingProjectedSavingsBeforeDeficitInterest, 2)}",
+            $"DeficitPrincipal: {Money(row.DeficitPrincipal, 2)}",
+            $"DeficitInterestRate: %{row.AppliedDeficitInterestRate * 100m:N2}",
+            $"DeficitInterest: {Money(row.DeficitFinancingInterest, 2)}",
+            $"CardInterestGenerated: {Money(row.CardInterestGenerated, 2)}",
+            $"TotalInterestGenerated: {Money(row.TotalInterestGenerated, 2)}",
+            $"FinalEndingProjectedSavings: {Money(row.EndingProjectedSavings, 2)}",
             string.Empty
         };
+        var cardInterestLines = row.CardPaymentStatuses.Select(x =>
+            $"{x.CardName}: Statement={Money(x.StatementBalance ?? 0m, 2)} • " +
+            $"Payment={Money(x.Payment ?? 0m, 2)} • " +
+            $"RemainingPrincipal={Money(x.CarriedPrincipalAfterPayment ?? 0m, 2)} • " +
+            $"Rate=%{x.AppliedInterestRate * 100m:N2} • " +
+            $"CarryInterest={Money(x.CarryInterest, 2)} • " +
+            $"NextCarry={Money(x.NextCarriedBalance ?? 0m, 2)}");
         return string.Join(
             Environment.NewLine,
-            calculation.Concat(incomeLines).Concat(paymentLines));
+            calculation.Concat(incomeLines)
+                .Concat(paymentLines)
+                .Concat(cardInterestLines));
     }
 
     private static UpcomingPaymentLine ToLine(

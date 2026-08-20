@@ -19,6 +19,9 @@ public sealed record CreditCardStatementProjection(
     decimal? MinimumPayment,
     decimal? Payment,
     decimal? CarriedAfterPayment,
+    decimal CarryInterest,
+    decimal? NextCarriedBalance,
+    decimal AppliedInterestRate,
     CreditCardPaymentResolution PaymentResolution,
     CreditCardPaymentType? AppliedPaymentType)
 {
@@ -32,7 +35,8 @@ public sealed class CreditCardStatementCalculator
     public IReadOnlyList<CreditCardStatementProjection> Project(
         CreditCard card,
         int statementCount,
-        bool useProjectionFallback = false)
+        bool useProjectionFallback = false,
+        decimal carryInterestRate = 0.05m)
     {
         if (statementCount < 1)
         {
@@ -40,6 +44,7 @@ public sealed class CreditCardStatementCalculator
         }
 
         Validate(card);
+        ValidateInterestRate(carryInterestRate);
         var firstClose = ResolveStatementCloseOnOrAfter(
             card.BalanceAsOfDate,
             card.StatementClosingDay);
@@ -77,6 +82,12 @@ public sealed class CreditCardStatementCalculator
             decimal? carriedAfterPayment = statementBalance is null || decision.Payment is null
                 ? null
                 : Math.Max(0m, statementBalance.Value - decision.Payment.Value);
+            var carryInterest = carriedAfterPayment is > 0m
+                ? RoundMoney(carriedAfterPayment.Value * carryInterestRate)
+                : 0m;
+            decimal? nextCarriedBalance = carriedAfterPayment is null
+                ? null
+                : carriedAfterPayment.Value + carryInterest;
 
             result.Add(new CreditCardStatementProjection(
                 closeDate,
@@ -87,10 +98,13 @@ public sealed class CreditCardStatementCalculator
                 minimumPayment,
                 decision.Payment,
                 carriedAfterPayment,
+                carryInterest,
+                nextCarriedBalance,
+                carryInterestRate,
                 decision.Resolution,
                 decision.PaymentType));
 
-            carried = carriedAfterPayment;
+            carried = nextCarriedBalance;
             closeDate = CalendarRules.AddMonthsKeepingDay(
                 closeDate,
                 1,
@@ -237,6 +251,16 @@ public sealed class CreditCardStatementCalculator
 
     private static decimal RoundMoney(decimal amount) =>
         decimal.Round(amount, 2, MidpointRounding.AwayFromZero);
+
+    private static void ValidateInterestRate(decimal rate)
+    {
+        if (rate is < 0m or > 1m)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(rate),
+                "Kart devreden borç faiz oranı 0 ile 1 arasında olmalıdır.");
+        }
+    }
 
     private static void Validate(CreditCard card)
     {

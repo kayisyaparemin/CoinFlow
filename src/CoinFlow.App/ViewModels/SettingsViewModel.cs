@@ -25,6 +25,8 @@ public partial class SettingsViewModel(
     [ObservableProperty] private string salaryDay = "10";
     [ObservableProperty] private string monthlyLivingBudget = "0";
     [ObservableProperty] private string projectionStartingSavings = "0";
+    [ObservableProperty] private string creditCardCarryInterestRate = "5";
+    [ObservableProperty] private string deficitFinancingInterestRate = "5";
     [ObservableProperty] private string projectionAnchorText = "—";
     [ObservableProperty] private string currentStrategyText = "Henüz seçilmedi";
     [ObservableProperty] private string currentStrategySinceText = string.Empty;
@@ -54,6 +56,12 @@ public partial class SettingsViewModel(
         MonthlyLivingBudget = settings.MonthlyLivingBudget
             .ToString("N2", TurkishCulture);
         ProjectionStartingSavings = settings.ProjectionStartingSavings
+            .ToString("N2", TurkishCulture);
+        CreditCardCarryInterestRate =
+            (settings.CreditCardCarryInterestRate * 100m)
+            .ToString("N2", TurkishCulture);
+        DeficitFinancingInterestRate =
+            (settings.DeficitFinancingInterestRate * 100m)
             .ToString("N2", TurkishCulture);
         ProjectionAnchorText = settings.ProjectionAnchorDate == default
             ? "İlk maaş kaydıyla oluşturulacak"
@@ -237,7 +245,13 @@ public partial class SettingsViewModel(
                 ProjectionStartingSavings = ParseMoney(
                     ProjectionStartingSavings,
                     "Projeksiyon başlangıç birikimi"),
-                ProjectionAnchorDate = _projectionAnchorDate
+                ProjectionAnchorDate = _projectionAnchorDate,
+                CreditCardCarryInterestRate = ParseRate(
+                    CreditCardCarryInterestRate,
+                    "Kredi kartı devreden borç faizi"),
+                DeficitFinancingInterestRate = ParseRate(
+                    DeficitFinancingInterestRate,
+                    "Finansman açığı faizi")
             });
             SetStatus("Ayarlar kaydedildi.");
         }
@@ -300,4 +314,16 @@ public partial class SettingsViewModel(
         mode == PaymentAssignmentMode.PreviousPeriod
             ? "Geçmiş dönemi kapatırım"
             : "Gelecek dönemi karşılarım";
+
+    private static decimal ParseRate(string value, string field)
+    {
+        var percentage = ParseMoney(value, field);
+        if (percentage is < 0m or > 100m)
+        {
+            throw new InvalidOperationException(
+                $"{field} %0 ile %100 arasında olmalıdır.");
+        }
+
+        return percentage / 100m;
+    }
 }

@@ -82,6 +82,19 @@
                 </VerticalStackLayout>
             </Border>
 
+            <Border>
+                <VerticalStackLayout Spacing="9">
+                    <Label Text="Faiz Varsayımları" Style="{StaticResource SectionTitle}" />
+                    <Label Text="Kredi kartı devreden borç faizi (%)" Style="{StaticResource FieldLabel}" />
+                    <Entry Text="{Binding CreditCardCarryInterestRate}" Keyboard="Numeric" />
+                    <Label Text="Finansman açığı faizi (%)" Style="{StaticResource FieldLabel}" />
+                    <Entry Text="{Binding DeficitFinancingInterestRate}" Keyboard="Numeric" />
+                    <Label Text="Bu oranlar gelecek projeksiyonu için kullanılan yaklaşık aylık faiz varsayımlarıdır. Banka faiz, vergi ve ücretlerini birebir temsil etmeyebilir."
+                           Style="{StaticResource MutedText}" />
+                    <Button Text="Faiz Varsayımlarını Kaydet" Command="{Binding SaveCommand}" />
+                </VerticalStackLayout>
+            </Border>
+
             <Label Text="{Binding StatusMessage}" IsVisible="{Binding HasStatus}" TextColor="{StaticResource Error}" />
 
             <Border>
