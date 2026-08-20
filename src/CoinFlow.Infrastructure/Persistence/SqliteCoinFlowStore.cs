@@ -330,6 +330,8 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
             Kind = Enum.IsDefined(typeof(PaymentPlanKind), row.Kind)
                 ? (PaymentPlanKind)row.Kind
                 : PaymentPlanKind.Temporary,
+            OriginalAmount = row.OriginalAmount,
+            TotalRepaymentAmount = row.TotalRepaymentAmount,
             Installments = installments
                 .Where(x => x.PlanId == row.Id)
                 .Select(FromRow)
@@ -343,20 +345,26 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         await InitializeAsync(cancellationToken);
-        await _database.InsertOrReplaceAsync(new PaymentPlanRow
+        cancellationToken.ThrowIfCancellationRequested();
+        await _database.RunInTransactionAsync(connection =>
         {
-            Id = Key(plan.Id),
-            Name = plan.Name,
-            Kind = (int)plan.Kind
+            connection.InsertOrReplace(new PaymentPlanRow
+            {
+                Id = Key(plan.Id),
+                Name = plan.Name,
+                Kind = (int)plan.Kind,
+                OriginalAmount = plan.OriginalAmount,
+                TotalRepaymentAmount = plan.TotalRepaymentAmount
+            });
+            connection.Execute(
+                "DELETE FROM payment_installments WHERE PlanId = ?",
+                Key(plan.Id));
+            foreach (var installment in plan.Installments)
+            {
+                connection.Insert(
+                    ToRow(installment with { PlanId = plan.Id }));
+            }
         });
-        await _database.ExecuteAsync(
-            "DELETE FROM payment_installments WHERE PlanId = ?",
-            Key(plan.Id));
-        foreach (var installment in plan.Installments)
-        {
-            await _database.InsertAsync(
-                ToRow(installment with { PlanId = plan.Id }));
-        }
     }
 
     public async Task DeletePaymentPlanAsync(
@@ -394,24 +402,28 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         await InitializeAsync(cancellationToken);
-        await _database.InsertOrReplaceAsync(ToRow(card));
-        await _database.ExecuteAsync(
-            "DELETE FROM card_installments WHERE CreditCardId = ?",
-            Key(card.Id));
-        foreach (var charge in card.Charges)
+        cancellationToken.ThrowIfCancellationRequested();
+        await _database.RunInTransactionAsync(connection =>
         {
-            await _database.InsertAsync(
-                ToRow(charge with { CreditCardId = card.Id }));
-        }
+            connection.InsertOrReplace(ToRow(card));
+            connection.Execute(
+                "DELETE FROM card_installments WHERE CreditCardId = ?",
+                Key(card.Id));
+            foreach (var charge in card.Charges)
+            {
+                connection.Insert(
+                    ToRow(charge with { CreditCardId = card.Id }));
+            }
 
-        await _database.ExecuteAsync(
-            "DELETE FROM credit_card_payment_plans WHERE CreditCardId = ?",
-            Key(card.Id));
-        foreach (var payment in card.PaymentPlans)
-        {
-            await _database.InsertAsync(
-                ToRow(payment with { CreditCardId = card.Id }));
-        }
+            connection.Execute(
+                "DELETE FROM credit_card_payment_plans WHERE CreditCardId = ?",
+                Key(card.Id));
+            foreach (var payment in card.PaymentPlans)
+            {
+                connection.Insert(
+                    ToRow(payment with { CreditCardId = card.Id }));
+            }
+        });
     }
 
     public async Task DeleteCreditCardAsync(

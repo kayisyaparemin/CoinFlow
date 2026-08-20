@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CoinFlow.App.Models;
+using CoinFlow.Application.Models;
 using CoinFlow.Application.Services;
 using CoinFlow.Domain.Calculations;
 using CoinFlow.Domain.Models;
@@ -36,6 +37,7 @@ public partial class SimulationViewModel(
     ];
 
     private SimulationRequest? _lastRequest;
+    private readonly SemaphoreSlim _applyLock = new(1, 1);
 
     [ObservableProperty] private string name = "Beyaz eşya";
     [ObservableProperty] private string amount = "120000";
@@ -54,7 +56,9 @@ public partial class SimulationViewModel(
     [ObservableProperty] private SelectionOption<PaymentAssignmentMode>? selectedStrategyMode;
     [ObservableProperty] private SelectionOption<DateOnly>? selectedStrategySalaryDate;
     [ObservableProperty] private string scenarioDescription = string.Empty;
-    [ObservableProperty] private bool hasResults;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanApplyPlan))]
+    private bool hasResults;
     [ObservableProperty] private string baselineEnding = "—";
     [ObservableProperty] private string scenarioEnding = "—";
     [ObservableProperty] private string endingDifference = "—";
@@ -76,6 +80,20 @@ public partial class SimulationViewModel(
     [ObservableProperty] private bool isPlanUnavailable = true;
     [ObservableProperty] private string emptyStateMessage =
         "Simülasyon yapabilmek için önce temel finans planını oluştur.";
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanApplyPlan))]
+    private bool isApplyingPlan;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanApplyPlan))]
+    private bool isPlanApplied;
+    [ObservableProperty] private string applyButtonText = "Planı Uygula";
+    [ObservableProperty] private string applyConfirmationText =
+        "Bu simülasyon gerçek finans planına eklenecek.";
+
+    public bool CanApplyPlan =>
+        HasResults && !IsApplyingPlan && !IsPlanApplied;
+
+    public SimulationApplyResult? LastApplyResult { get; private set; }
 
     public async Task LoadAsync()
     {
@@ -88,6 +106,7 @@ public partial class SimulationViewModel(
                               plan.Settings.ProjectionAnchorDate != default;
             IsPlanUnavailable = !IsPlanAvailable;
             HasResults = false;
+            ResetApplyState(clearRequest: true);
             if (!IsPlanAvailable)
             {
                 EmptyStateMessage = plan.Salaries.Count == 0
@@ -184,7 +203,25 @@ public partial class SimulationViewModel(
             _ => string.Empty
         };
         HasResults = false;
+        ResetApplyState(clearRequest: true);
     }
+
+    partial void OnNameChanged(string value) => InvalidateCalculatedPlan();
+    partial void OnAmountChanged(string value) => InvalidateCalculatedPlan();
+    partial void OnSelectedCreditCardChanged(SelectionOption<Guid>? value) =>
+        InvalidateCalculatedPlan();
+    partial void OnStartDateChanged(DateTime value) => InvalidateCalculatedPlan();
+    partial void OnPaymentCountChanged(string value) => InvalidateCalculatedPlan();
+    partial void OnFirstPaymentDateChanged(DateTime value) =>
+        InvalidateCalculatedPlan();
+    partial void OnTotalRepaymentAmountChanged(string value) =>
+        InvalidateCalculatedPlan();
+    partial void OnSelectedStrategyModeChanged(
+        SelectionOption<PaymentAssignmentMode>? value) =>
+        InvalidateCalculatedPlan();
+    partial void OnSelectedStrategySalaryDateChanged(
+        SelectionOption<DateOnly>? value) =>
+        InvalidateCalculatedPlan();
 
     [RelayCommand]
     private async Task CalculateAsync()
@@ -201,6 +238,10 @@ public partial class SimulationViewModel(
             var request = BuildRequest();
             var result = await service.SimulateAsync(request);
             _lastRequest = request;
+            IsPlanApplied = false;
+            ApplyButtonText = "Planı Uygula";
+            LastApplyResult = null;
+            ApplyConfirmationText = BuildApplyConfirmation(request);
             Populate(result);
             HasResults = true;
         }
@@ -215,26 +256,46 @@ public partial class SimulationViewModel(
         }
     }
 
-    public async Task<bool> ApplyLastPlanAsync()
+    public async Task<SimulationApplyResult?> ApplyLastPlanAsync()
     {
         if (_lastRequest is null || !HasResults)
         {
             SetStatus("Önce bir simülasyon hesaplayın.");
-            return false;
+            return null;
+        }
+
+        if (IsPlanApplied)
+        {
+            SetStatus("Plan zaten uygulandı.");
+            return LastApplyResult;
+        }
+
+        if (!await _applyLock.WaitAsync(0))
+        {
+            return null;
         }
 
         try
         {
-            await service.ApplySimulationAsync(
+            IsApplyingPlan = true;
+            var result = await service.ApplySimulationAsync(
                 _lastRequest,
                 confirmed: true);
-            SetStatus("Plan finansal kayıtlarına uygulandı.");
-            return true;
+            LastApplyResult = result;
+            IsPlanApplied = true;
+            ApplyButtonText = "Plan uygulandı";
+            SetStatus(result.Message);
+            return result;
         }
         catch (Exception exception)
         {
             SetStatus(exception.Message);
-            return false;
+            return null;
+        }
+        finally
+        {
+            IsApplyingPlan = false;
+            _applyLock.Release();
         }
     }
 
@@ -269,7 +330,55 @@ public partial class SimulationViewModel(
                 : null,
             repayment,
             IsStrategyChange ? SelectedStrategyMode?.Value : null,
-            IsStrategyChange ? SelectedStrategySalaryDate?.Value : null);
+            IsStrategyChange ? SelectedStrategySalaryDate?.Value : null,
+            Guid.NewGuid());
+    }
+
+    private string BuildApplyConfirmation(SimulationRequest request)
+    {
+        var summary = request.Type == SimulationScenarioType.PaymentStrategyChange
+            ? request.Name.Trim()
+            : $"{Money(request.Amount)} {request.Name.Trim()}";
+        var detail = request.Type switch
+        {
+            SimulationScenarioType.CreditCardInstallmentPurchase =>
+                $"Kart: {SelectedCreditCard?.Label}\n{request.PaymentCount} taksit\nİşlem: {request.StartDate:dd MMMM yyyy}",
+            SimulationScenarioType.CreditCardSinglePayment =>
+                $"Kart: {SelectedCreditCard?.Label}\nİşlem: {request.StartDate:dd MMMM yyyy}",
+            SimulationScenarioType.FinancingLoan =>
+                $"{request.PaymentCount} taksit • toplam {Money(request.TotalRepaymentAmount.GetValueOrDefault())}\nİlk ödeme: {request.FirstPaymentDate:dd MMMM yyyy}",
+            SimulationScenarioType.CashDebt or
+                SimulationScenarioType.RecurringPayment =>
+                $"{request.PaymentCount} ödeme\nİlk ödeme: {request.FirstPaymentDate:dd MMMM yyyy}",
+            SimulationScenarioType.PaymentStrategyChange =>
+                $"Geçerli maaş: {request.EffectiveSalaryDate:dd MMMM yyyy}",
+            _ => $"Tarih: {request.StartDate:dd MMMM yyyy}"
+        };
+        return $"Bu simülasyon gerçek finans planına eklenecek.\n\n{summary}\n{detail}";
+    }
+
+    private void ResetApplyState(bool clearRequest)
+    {
+        if (clearRequest)
+        {
+            _lastRequest = null;
+        }
+
+        LastApplyResult = null;
+        IsPlanApplied = false;
+        IsApplyingPlan = false;
+        ApplyButtonText = "Planı Uygula";
+    }
+
+    private void InvalidateCalculatedPlan()
+    {
+        if (!HasResults && _lastRequest is null)
+        {
+            return;
+        }
+
+        HasResults = false;
+        ResetApplyState(clearRequest: true);
     }
 
     private void Populate(SimulationResult result)

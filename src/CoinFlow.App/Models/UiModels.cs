@@ -42,11 +42,13 @@ public sealed record FinancialRecordLine(
 public sealed record DatedAmountLine(
     Guid Id,
     DateOnly Date,
-    decimal Amount)
+    decimal Amount,
+    string Description = "")
 {
     public string DateText => Date.ToString("dd.MM.yyyy");
     public string AmountText =>
         $"{Amount.ToString("N2", CultureInfo.GetCultureInfo("tr-TR"))} TL";
+    public bool HasDescription => !string.IsNullOrWhiteSpace(Description);
 }
 
 public sealed record CardPaymentPlanLine(

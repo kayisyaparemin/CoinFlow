@@ -39,3 +39,19 @@ public sealed record PaymentStrategyChangePreview(
         0m,
         Scenario.EstimatedSavingsCapacity);
 }
+
+public enum SimulationApplyDestination
+{
+    Payments,
+    CreditCard,
+    Income,
+    SalaryHistory,
+    Settings
+}
+
+public sealed record SimulationApplyResult(
+    Guid ScenarioId,
+    Guid EntityId,
+    SimulationApplyDestination Destination,
+    bool AlreadyApplied,
+    string Message);

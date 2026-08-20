@@ -39,6 +39,8 @@ Sol üstteki native Shell hamburger menüsü beş kök bölüm içerir; bottom T
 4. **Gelir & Ödemeler:** Maaş, diğer gelir, kredi, kredi kartı, geçici/taksitli ödeme ve büyük gider yönetimi.
 5. **Ayarlar:** Maaş günü, bütçe, read-only düzen geçmişi ve development araçları.
 
+Simülatörde **Simüle Et** yalnız bellekte hypothetical bir plan üretir. **Planı Uygula** açık onaydan sonra scenario türünü canonical finans kaydına dönüştürür; aynı application kimliği ikinci kez yükümlülük oluşturmaz. Uygulanan kayıt Gelir & Ödemeler içindeki doğru bölümde veya seçili kart detayında hemen açılabilir ve sonraki simulator baseline hesabına normal gerçek veri olarak girer.
+
 Ayarlar, düzen geçmişini yalnız bilgi amaçlı gösterir. Kullanıcı bir sonraki değişikliğin başlayacağı maaşı seçer; uygulama eski kayıtları değiştirmeden yeni effective-dated event ekler. Yalnız henüz başlamamış planlanan değişiklik düzenlenebilir veya iptal edilebilir.
 
 ## Mimari

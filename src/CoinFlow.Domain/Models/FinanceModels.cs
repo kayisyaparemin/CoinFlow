@@ -89,6 +89,8 @@ public sealed record TemporaryPaymentPlan
     public Guid Id { get; init; } = Guid.NewGuid();
     public string Name { get; init; } = string.Empty;
     public PaymentPlanKind Kind { get; init; }
+    public decimal? OriginalAmount { get; init; }
+    public decimal? TotalRepaymentAmount { get; init; }
     public IReadOnlyList<TemporaryPaymentInstallment> Installments { get; init; } = [];
 }
 

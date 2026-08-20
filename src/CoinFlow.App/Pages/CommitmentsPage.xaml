@@ -134,7 +134,9 @@
                         <VerticalStackLayout BindableLayout.ItemsSource="{Binding CardFutureCharges}" Spacing="6">
                             <BindableLayout.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid ColumnDefinitions="*,Auto,Auto" Padding="8">
+                                    <Grid ColumnDefinitions="*,Auto,Auto"
+                                          RowDefinitions="Auto,Auto"
+                                          Padding="8">
                                         <Label Text="{Binding DateText}" />
                                         <Label Grid.Column="1" Text="{Binding AmountText}" />
                                         <Button Grid.Column="2"
@@ -143,6 +145,11 @@
                                                 Clicked="OnRemoveCardChargeClicked"
                                                 MinimumHeightRequest="36"
                                                 Padding="10,4" />
+                                        <Label Grid.Row="1"
+                                               Grid.ColumnSpan="2"
+                                               Text="{Binding Description}"
+                                               IsVisible="{Binding HasDescription}"
+                                               Style="{StaticResource MutedText}" />
                                     </Grid>
                                 </DataTemplate>
                             </BindableLayout.ItemTemplate>

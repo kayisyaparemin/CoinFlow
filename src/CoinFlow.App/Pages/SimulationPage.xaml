@@ -123,7 +123,10 @@
                             <Label Grid.Row="6" Text="Açığın kapanacağı dönem" Style="{StaticResource MutedText}" />
                             <Label Grid.Row="6" Grid.Column="1" Text="{Binding RecoveryPeriod}" />
                         </Grid>
-                        <Button Text="Planı Uygula" Clicked="OnApplyPlanClicked" Style="{StaticResource SecondaryButton}" />
+                        <Button Text="{Binding ApplyButtonText}"
+                                IsEnabled="{Binding CanApplyPlan}"
+                                Clicked="OnApplyPlanClicked"
+                                Style="{StaticResource SecondaryButton}" />
                     </VerticalStackLayout>
                 </Border>
 

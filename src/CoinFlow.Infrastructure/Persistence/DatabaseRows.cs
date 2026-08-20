@@ -42,6 +42,8 @@ internal sealed class PaymentPlanRow
     [PrimaryKey] public string Id { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public int Kind { get; set; }
+    public decimal? OriginalAmount { get; set; }
+    public decimal? TotalRepaymentAmount { get; set; }
 }
 
 [Table("payment_installments")]

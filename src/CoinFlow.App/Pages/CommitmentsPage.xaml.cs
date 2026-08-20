@@ -3,10 +3,12 @@ using CoinFlow.App.ViewModels;
 
 namespace CoinFlow.App.Pages;
 
-public partial class CommitmentsPage : ContentPage
+public partial class CommitmentsPage : ContentPage, IQueryAttributable
 {
     private readonly CommitmentsViewModel _viewModel;
     private bool _isShowingInitialStrategySetup;
+    private string? _requestedSection;
+    private Guid? _requestedCardId;
 
     public CommitmentsPage(CommitmentsViewModel viewModel)
     {
@@ -41,6 +43,40 @@ public partial class CommitmentsPage : ContentPage
     {
         base.OnAppearing();
         await _viewModel.LoadAsync();
+        if (string.Equals(
+                _requestedSection,
+                "payment",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            _viewModel.SelectPaymentSection();
+        }
+        else if (string.Equals(
+                     _requestedSection,
+                     "income",
+                     StringComparison.OrdinalIgnoreCase))
+        {
+            _viewModel.SelectIncomeSection();
+        }
+
+        if (_requestedCardId is Guid cardId)
+        {
+            await _viewModel.EditCardAsync(cardId);
+            await PageScroll.ScrollToAsync(0, 0, false);
+        }
+
+        _requestedSection = null;
+        _requestedCardId = null;
+    }
+
+    public void ApplyQueryAttributes(IDictionary<string, object> query)
+    {
+        _requestedSection = query.TryGetValue("section", out var section)
+            ? section?.ToString()
+            : null;
+        _requestedCardId = query.TryGetValue("cardId", out var cardId) &&
+                           Guid.TryParse(cardId?.ToString(), out var parsed)
+            ? parsed
+            : null;
     }
 
     private void OnRemovePlanPaymentClicked(

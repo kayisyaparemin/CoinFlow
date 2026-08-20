@@ -1,4 +1,5 @@
 using CoinFlow.App.ViewModels;
+using CoinFlow.Application.Models;
 
 namespace CoinFlow.App.Pages;
 
@@ -22,20 +23,46 @@ public partial class SimulationPage : ContentPage
     {
         var confirmed = await DisplayAlert(
             "Planı uygula",
-            "Bu senaryo gerçek finansal kayıtlarına eklenecek. Devam edilsin mi?",
-            "Uygula",
+            _viewModel.ApplyConfirmationText,
+            "Planı Uygula",
             "Vazgeç");
         if (!confirmed)
         {
             return;
         }
 
-        if (await _viewModel.ApplyLastPlanAsync())
+        var result = await _viewModel.ApplyLastPlanAsync();
+        if (result is not null)
         {
-            await DisplayAlert(
+            var showRecord = await DisplayAlert(
                 "Plan uygulandı",
-                "Yeni plan Gelir & Ödemeler kayıtlarına eklendi.",
+                result.Message,
+                result.Destination == SimulationApplyDestination.Settings
+                    ? "Ayarlarda Gör"
+                    : "Gelir & Ödemelerde Gör",
                 "Tamam");
+            if (showRecord)
+            {
+                await NavigateToAppliedRecordAsync(result);
+            }
         }
     }
+
+    private static Task NavigateToAppliedRecordAsync(
+        SimulationApplyResult result) => result.Destination switch
+        {
+            SimulationApplyDestination.CreditCard =>
+                Shell.Current.GoToAsync(
+                    $"//commitments/commitments-content?section=payment&cardId={result.EntityId}"),
+            SimulationApplyDestination.Payments =>
+                Shell.Current.GoToAsync(
+                    "//commitments/commitments-content?section=payment"),
+            SimulationApplyDestination.Income or
+                SimulationApplyDestination.SalaryHistory =>
+                Shell.Current.GoToAsync(
+                    "//commitments/commitments-content?section=income"),
+            SimulationApplyDestination.Settings =>
+                Shell.Current.GoToAsync("//settings/settings-content"),
+            _ => throw new ArgumentOutOfRangeException()
+        };
 }

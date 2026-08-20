@@ -156,6 +156,11 @@ public partial class CommitmentsViewModel(
 
         foreach (var paymentPlan in plan.PaymentPlans)
         {
+            var paymentDetail = paymentPlan.Kind == PaymentPlanKind.Installment &&
+                                paymentPlan.OriginalAmount is decimal original &&
+                                paymentPlan.TotalRepaymentAmount is decimal repayment
+                ? $"Ana tutar: {Money(original)} • Toplam geri ödeme: {Money(repayment)} • {paymentPlan.Installments.Count} ödeme"
+                : $"{paymentPlan.Installments.Count(x => !x.IsPaid)} ödeme • exact tarihli";
             _allItems.Add(new FinancialRecordLine(
                 paymentPlan.Id,
                 ManagementSection.Payment,
@@ -163,7 +168,7 @@ public partial class CommitmentsViewModel(
                     ? FinancialRecordKind.TemporaryPlan
                     : FinancialRecordKind.InstallmentPlan,
                 paymentPlan.Name,
-                $"{paymentPlan.Installments.Count(x => !x.IsPaid)} ödeme • exact tarihli",
+                paymentDetail,
                 Money(paymentPlan.Installments.Where(x => !x.IsPaid).Sum(x => x.Amount)),
                 paymentPlan.Kind switch
                 {
@@ -239,6 +244,8 @@ public partial class CommitmentsViewModel(
         RefreshVisibleItems();
     }
 
+    public void SelectIncomeSection() => ShowIncome();
+
     [RelayCommand]
     private void ShowPayments()
     {
@@ -248,6 +255,8 @@ public partial class CommitmentsViewModel(
         RefreshRecordTypes();
         RefreshVisibleItems();
     }
+
+    public void SelectPaymentSection() => ShowPayments();
 
     partial void OnSelectedRecordTypeChanged(
         SelectionOption<string>? value)
@@ -308,10 +317,11 @@ public partial class CommitmentsViewModel(
             CardFutureCharges.Add(new DatedAmountLine(
                 id,
                 DateOnly.FromDateTime(CardChargeDate),
-                parsed));
-            _cardChargeDescriptions[id] = string.IsNullOrWhiteSpace(Note)
+                parsed,
+                string.IsNullOrWhiteSpace(Note)
                 ? "Gelecek taksit"
-                : Note.Trim();
+                : Note.Trim()));
+            _cardChargeDescriptions[id] = CardFutureCharges[^1].Description;
             CardChargeAmount = string.Empty;
             SetStatus(string.Empty);
         }
@@ -403,7 +413,8 @@ public partial class CommitmentsViewModel(
             CardFutureCharges.Add(new DatedAmountLine(
                 charge.Id,
                 charge.PostingDate,
-                charge.Amount));
+                charge.Amount,
+                charge.Description));
             _cardChargeDescriptions[charge.Id] = charge.Description;
         }
 

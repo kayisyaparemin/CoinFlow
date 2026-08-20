@@ -26,7 +26,8 @@ public sealed record SimulationRequest(
     Guid? CreditCardId = null,
     decimal? TotalRepaymentAmount = null,
     PaymentAssignmentMode? NewPaymentAssignmentMode = null,
-    DateOnly? EffectiveSalaryDate = null);
+    DateOnly? EffectiveSalaryDate = null,
+    Guid ScenarioId = default);
 
 public sealed record SimulationImpactRow(
     SalaryPeriodProjection Baseline,
@@ -132,6 +133,9 @@ public sealed class SimulationCalculator(
         SimulationRequest request)
     {
         Validate(request);
+        request = request.ScenarioId == Guid.Empty
+            ? request with { ScenarioId = Guid.NewGuid() }
+            : request;
         return request.Type switch
         {
             SimulationScenarioType.CashPurchase =>
@@ -162,6 +166,7 @@ public sealed class SimulationCalculator(
                     OtherIncomes = plan.OtherIncomes
                         .Append(new OneTimeIncome
                         {
+                            Id = request.ScenarioId,
                             Description = request.Name.Trim(),
                             Amount = request.Amount,
                             ExactDate = request.StartDate
@@ -175,6 +180,7 @@ public sealed class SimulationCalculator(
                         .Where(x => x.EffectiveDate != request.StartDate)
                         .Append(new SalaryScheduleEntry
                         {
+                            Id = request.ScenarioId,
                             Description = request.Name.Trim(),
                             Amount = request.Amount,
                             EffectiveDate = request.StartDate
@@ -210,6 +216,7 @@ public sealed class SimulationCalculator(
                 .Where(x => x.EffectiveFromSalaryDate != effectiveDate)
                 .Append(new PaymentAssignmentStrategy
                 {
+                    Id = request.ScenarioId,
                     Mode = mode,
                     EffectiveFromSalaryDate = effectiveDate,
                     Note = request.Name.Trim()
@@ -226,6 +233,7 @@ public sealed class SimulationCalculator(
         PlannedLargeExpenses = plan.PlannedLargeExpenses
             .Append(new PlannedLargeExpense
             {
+                Id = request.ScenarioId,
                 Name = request.Name.Trim(),
                 Amount = request.Amount,
                 ExactDate = request.StartDate,
@@ -256,10 +264,15 @@ public sealed class SimulationCalculator(
 
         var charges = installmentScheduleCalculator
             .Split(request.Amount, request.PaymentCount, request.StartDate)
-            .Select(x => new CardCharge
+            .Select((x, index) => new CardCharge
             {
+                Id = index == 0
+                    ? request.ScenarioId
+                    : ChildId(request.ScenarioId, index),
                 CreditCardId = card.Id,
-                Description = request.Name.Trim(),
+                Description = request.PaymentCount == 1
+                    ? request.Name.Trim()
+                    : $"{request.Name.Trim()} ({index + 1}/{request.PaymentCount})",
                 PostingDate = x.Date,
                 Amount = x.Amount
             })
@@ -294,7 +307,13 @@ public sealed class SimulationCalculator(
             repaymentTotal,
             request.PaymentCount,
             firstPaymentDate);
-        return AddPaymentPlan(plan, request.Name, kind, schedule);
+        return AddPaymentPlan(
+            plan,
+            request,
+            kind,
+            schedule,
+            request.Amount,
+            repaymentTotal);
     }
 
     private static FinancialPlan AddRecurringPayment(
@@ -312,34 +331,43 @@ public sealed class SimulationCalculator(
             .ToArray();
         return AddPaymentPlan(
             plan,
-            request.Name,
+            request,
             PaymentPlanKind.Recurring,
-            schedule);
+            schedule,
+            request.Amount,
+            request.Amount * request.PaymentCount);
     }
 
     private static FinancialPlan AddSinglePayment(
         FinancialPlan plan,
         SimulationRequest request) => AddPaymentPlan(
             plan,
-            request.Name,
+            request,
             PaymentPlanKind.OtherScheduled,
-            [new ScheduledAmount(request.StartDate, request.Amount)]);
+            [new ScheduledAmount(request.StartDate, request.Amount)],
+            request.Amount,
+            request.Amount);
 
     private static FinancialPlan AddPaymentPlan(
         FinancialPlan plan,
-        string name,
+        SimulationRequest request,
         PaymentPlanKind kind,
-        IReadOnlyList<ScheduledAmount> schedule)
+        IReadOnlyList<ScheduledAmount> schedule,
+        decimal originalAmount,
+        decimal totalRepaymentAmount)
     {
-        var planId = Guid.NewGuid();
+        var planId = request.ScenarioId;
         var paymentPlan = new TemporaryPaymentPlan
         {
             Id = planId,
-            Name = name.Trim(),
+            Name = request.Name.Trim(),
             Kind = kind,
+            OriginalAmount = originalAmount,
+            TotalRepaymentAmount = totalRepaymentAmount,
             Installments = schedule
-                .Select(x => new TemporaryPaymentInstallment
+                .Select((x, index) => new TemporaryPaymentInstallment
                 {
+                    Id = ChildId(planId, index),
                     PlanId = planId,
                     DueDate = x.Date,
                     Amount = x.Amount
@@ -350,6 +378,18 @@ public sealed class SimulationCalculator(
         {
             PaymentPlans = plan.PaymentPlans.Append(paymentPlan).ToArray()
         };
+    }
+
+    private static Guid ChildId(Guid parentId, int index)
+    {
+        var bytes = parentId.ToByteArray();
+        var ordinal = BitConverter.GetBytes(index + 1);
+        for (var offset = 0; offset < ordinal.Length; offset++)
+        {
+            bytes[12 + offset] ^= ordinal[offset];
+        }
+
+        return new Guid(bytes);
     }
 
     private static decimal ResolveTotalCost(SimulationRequest request) =>
@@ -389,7 +429,7 @@ public sealed class SimulationCalculator(
         return "Bu plan, gösterilen dönemlerde tahmini birikimi negatife düşürmüyor.";
     }
 
-    private static void Validate(SimulationRequest request)
+    public static void Validate(SimulationRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
         {
@@ -429,6 +469,13 @@ public sealed class SimulationCalculator(
         {
             throw new InvalidOperationException(
                 "Finansman için toplam geri ödeme gereklidir.");
+        }
+
+        if (request.Type == SimulationScenarioType.FinancingLoan &&
+            request.FirstPaymentDate is null)
+        {
+            throw new InvalidOperationException(
+                "Finansman için ilk ödeme tarihi gereklidir.");
         }
 
         if (request.FirstPaymentDate is DateOnly firstPayment &&
