@@ -43,8 +43,15 @@ public partial class FutureMonthsViewModel(
                     SalaryText(row),
                     AssignmentText(row),
                     Money(row.AvailableAfterMandatory),
+                    Money(-row.CarryOverDeficit),
+                    Money(row.AvailableAfterCarryOverDeficit),
+                    row.HasCarryOverDeficit,
+                    Money(row.LivingBudget),
+                    Money(row.PlannedLargeCashExpenses),
+                    row.PlannedLargeCashExpenses > 0m,
                     Money(row.EstimatedSavingsCapacity),
                     Money(row.EndingProjectedSavings),
+                    CarryOverMessage(row),
                     Breakdown(row),
                     notice,
                     !string.IsNullOrWhiteSpace(notice)));
@@ -93,21 +100,49 @@ public partial class FutureMonthsViewModel(
 
     private static string Breakdown(SalaryPeriodProjection row)
     {
-        var lines = new[]
+        var lines = new List<string>
         {
             $"Gelir: {Money(row.TotalIncome)}",
+            $"Zorunlu ödemeler: {Money(row.MandatoryOutflow)}",
+            $"Zorunlular sonrası: {Money(row.AvailableAfterMandatory)}"
+        };
+        if (row.HasCarryOverDeficit)
+        {
+            lines.Add(
+                $"Önceki dönemden devreden açık: {Money(row.CarryOverDeficit)}");
+            lines.Add(
+                $"Açık kapandıktan sonra kalan: {Money(row.AvailableAfterCarryOverDeficit)}");
+        }
+        else if (row.OpeningProjectedSavings > 0m)
+        {
+            lines.Add(
+                $"Dönem başı tahmini birikim: {Money(row.OpeningProjectedSavings)}");
+        }
+
+        lines.AddRange(
+        [
+            $"Tahmini yaşam gideri: {Money(row.LivingBudget)}",
+            $"Büyük planlı ödeme: {Money(row.PlannedLargeCashExpenses)}",
+            $"Bu dönemin tahmini tasarrufu: {Money(row.EstimatedSavingsCapacity)}",
+            $"Dönem sonu tahmini birikim: {Money(row.EndingProjectedSavings)}",
+            string.Empty,
             $"Krediler: {Money(row.LoanPayments)}",
             $"Kartlar: {Money(row.CreditCardPayments)}",
             $"Geçici planlar: {Money(row.TemporaryPayments)}",
             $"Taksit / finansman: {Money(row.InstallmentPayments)}",
             $"Diğer planlı: {Money(row.OtherScheduledPayments)}",
-            $"Zorunlu toplam: {Money(row.MandatoryOutflow)}",
             $"Normal zorunlu yük: {Money(row.NormalMandatoryAmount)}",
             $"Geçmiş düzenden kapanacak: {Money(row.TransitionCatchUpAmount)}",
-            $"İleri dönem için ayrılacak: {Money(row.ForwardFundedAmount)}",
-            $"Tahmini yaşam gideri: {Money(row.LivingBudget)}",
-            $"Büyük planlı ödeme: {Money(row.PlannedLargeCashExpenses)}"
-        };
+            $"İleri dönem için ayrılacak: {Money(row.ForwardFundedAmount)}"
+        ]);
+        if (row.HasCarryOverDeficit)
+        {
+            lines.Add($"Bu dönem karşılanan açık: {Money(row.DeficitCoveredThisPeriod)}");
+            lines.Add(row.RemainingCarryOverDeficit > 0m
+                ? $"Sonraki döneme devreden açık: {Money(row.RemainingCarryOverDeficit)}"
+                : $"Bu dönem açık tamamen kapandı. Açık sonrası kalan: {Money(row.EndingProjectedSavings)}");
+        }
+
         var exactSources = row.MandatoryItems.Select(x =>
             $"{x.DueDate:dd.MM.yyyy} • {x.Name}: {Money(x.Amount, 2)}" +
             (x.IsEstimate ? " (tahmini)" : string.Empty) +
@@ -122,6 +157,18 @@ public partial class FutureMonthsViewModel(
         return string.Join(
             Environment.NewLine,
             lines.Concat(exactSources).Concat(undeterminedCards));
+    }
+
+    private static string CarryOverMessage(SalaryPeriodProjection row)
+    {
+        if (!row.HasCarryOverDeficit)
+        {
+            return string.Empty;
+        }
+
+        return row.RemainingCarryOverDeficit > 0m
+            ? $"Bu dönem {Money(row.DeficitCoveredThisPeriod)} karşılanıyor; sonraki döneme {Money(row.RemainingCarryOverDeficit)} açık devrediyor."
+            : $"{Money(row.CarryOverDeficit)} devreden açık bu dönem tamamen kapanıyor; dönem sonu {Money(row.EndingProjectedSavings)}.";
     }
 
     private static string Notice(SalaryPeriodProjection row)
@@ -140,7 +187,7 @@ public partial class FutureMonthsViewModel(
         if (row.EstimatedSavingsCapacity < 0m)
         {
             notices.Add(
-                $"Yaşam bütçesi sonrası {Money(Math.Abs(row.EstimatedSavingsCapacity))} açık.");
+                $"Yaşam bütçesi ve büyük planlı ödemeler sonrası {Money(Math.Abs(row.EstimatedSavingsCapacity))} açık.");
         }
 
         if (row.IsStrategyTransition)

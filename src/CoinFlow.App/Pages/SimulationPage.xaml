@@ -107,7 +107,7 @@
                 <Border>
                     <VerticalStackLayout Spacing="8">
                         <Label Text="Risk Özeti" Style="{StaticResource SectionTitle}" />
-                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="7">
+                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="7">
                             <Label Text="En sıkışık dönem" Style="{StaticResource MutedText}" />
                             <Label Grid.Column="1" Text="{Binding TightestPeriod}" />
                             <Label Grid.Row="1" Text="En düşük kullanılabilir alan" Style="{StaticResource MutedText}" />
@@ -116,8 +116,12 @@
                             <Label Grid.Row="2" Grid.Column="1" Text="{Binding LowestSavingsCapacity}" />
                             <Label Grid.Row="3" Text="En düşük tahmini birikim" Style="{StaticResource MutedText}" />
                             <Label Grid.Row="3" Grid.Column="1" Text="{Binding LowestProjectedSavings}" />
-                            <Label Grid.Row="4" Text="İlk negatif dönem" Style="{StaticResource MutedText}" />
+                            <Label Grid.Row="4" Text="İlk finansman açığı dönemi" Style="{StaticResource MutedText}" />
                             <Label Grid.Row="4" Grid.Column="1" Text="{Binding FirstNegativePeriod}" />
+                            <Label Grid.Row="5" Text="Maksimum devreden açık" Style="{StaticResource MutedText}" />
+                            <Label Grid.Row="5" Grid.Column="1" Text="{Binding MaximumCarryOverDeficit}" />
+                            <Label Grid.Row="6" Text="Açığın kapanacağı dönem" Style="{StaticResource MutedText}" />
+                            <Label Grid.Row="6" Grid.Column="1" Text="{Binding RecoveryPeriod}" />
                         </Grid>
                         <Button Text="Planı Uygula" Clicked="OnApplyPlanClicked" Style="{StaticResource SecondaryButton}" />
                     </VerticalStackLayout>
@@ -139,8 +143,17 @@
                                         <Label Grid.Row="2" Grid.Column="1" Text="{Binding Difference}" FontFamily="OpenSansSemibold" />
                                         <Label Grid.Row="3" Text="Zorunlular sonrası" Style="{StaticResource MutedText}" />
                                         <Label Grid.Row="3" Grid.Column="1" Text="{Binding AvailableAfterMandatory}" />
-                                        <Label Grid.Row="4" Text="Yaşam sonrası" Style="{StaticResource MutedText}" />
+                                        <Label Grid.Row="4" Text="Bu dönemin tahmini tasarrufu" Style="{StaticResource MutedText}" />
                                         <Label Grid.Row="4" Grid.Column="1" Text="{Binding SavingsCapacity}" />
+                                    </Grid>
+                                    <Grid ColumnDefinitions="*,Auto"
+                                          RowDefinitions="Auto,Auto"
+                                          RowSpacing="4"
+                                          IsVisible="{Binding HasCarryOverDeficit}">
+                                        <Label Text="Devreden finansman açığı" TextColor="{StaticResource Error}" />
+                                        <Label Grid.Column="1" Text="{Binding CarryOverDeficit}" TextColor="{StaticResource Error}" />
+                                        <Label Grid.Row="1" Text="Açık sonrası kullanılabilir" Style="{StaticResource MutedText}" />
+                                        <Label Grid.Row="1" Grid.Column="1" Text="{Binding AvailableAfterCarryOverDeficit}" />
                                     </Grid>
                                 </VerticalStackLayout>
                             </Border>

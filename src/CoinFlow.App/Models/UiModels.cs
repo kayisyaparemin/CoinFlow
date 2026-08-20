@@ -84,8 +84,15 @@ public partial class ProjectionLine(
     string period,
     string assignment,
     string availableAfterMandatory,
+    string carryOverDeficit,
+    string availableAfterCarryOverDeficit,
+    bool hasCarryOverDeficit,
+    string livingBudget,
+    string plannedLargeCashExpenses,
+    bool hasPlannedLargeCashExpenses,
     string estimatedSavings,
     string endingProjectedSavings,
+    string carryOverMessage,
     string breakdown,
     string notice,
     bool hasNotice) : ObservableObject
@@ -93,8 +100,18 @@ public partial class ProjectionLine(
     public string Period { get; } = period;
     public string Assignment { get; } = assignment;
     public string AvailableAfterMandatory { get; } = availableAfterMandatory;
+    public string CarryOverDeficit { get; } = carryOverDeficit;
+    public string AvailableAfterCarryOverDeficit { get; } =
+        availableAfterCarryOverDeficit;
+    public bool HasCarryOverDeficit { get; } = hasCarryOverDeficit;
+    public string LivingBudget { get; } = livingBudget;
+    public string PlannedLargeCashExpenses { get; } =
+        plannedLargeCashExpenses;
+    public bool HasPlannedLargeCashExpenses { get; } =
+        hasPlannedLargeCashExpenses;
     public string EstimatedSavings { get; } = estimatedSavings;
     public string EndingProjectedSavings { get; } = endingProjectedSavings;
+    public string CarryOverMessage { get; } = carryOverMessage;
     public string Breakdown { get; } = breakdown;
     public string Notice { get; } = notice;
     public bool HasNotice { get; } = hasNotice;
@@ -115,4 +132,7 @@ public sealed record SimulationLine(
     string ScenarioSavings,
     string Difference,
     string AvailableAfterMandatory,
+    string CarryOverDeficit,
+    string AvailableAfterCarryOverDeficit,
+    bool HasCarryOverDeficit,
     string SavingsCapacity);

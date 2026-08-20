@@ -67,8 +67,6 @@ public sealed class FinancialProjectionCalculator(
                 plan.OtherIncomes);
             var mandatory = mandatoryPaymentCalculator.Summarize(budget.Items);
             var availableAfterMandatory = income.TotalIncome - mandatory.Total;
-            var estimatedSavings = availableAfterMandatory -
-                                   plan.Settings.MonthlyLivingBudget;
             var largeExpenses = budget.Items
                 .Where(x => x.Type == ObligationType.PlannedLargeExpense)
                 .Select(item => plan.PlannedLargeExpenses.Single(x =>
@@ -77,8 +75,10 @@ public sealed class FinancialProjectionCalculator(
                 .ThenBy(x => x.Name)
                 .ToArray();
             var largeExpenseTotal = largeExpenses.Sum(x => x.Amount);
-            var endingSavings = openingSavings + estimatedSavings -
-                                largeExpenseTotal;
+            var estimatedSavings = availableAfterMandatory -
+                                   plan.Settings.MonthlyLivingBudget -
+                                   largeExpenseTotal;
+            var endingSavings = openingSavings + estimatedSavings;
             var periodStatuses = statuses
                 .Where(x => x.AssignedSalaryDate == period.Start)
                 .ToArray();
@@ -105,7 +105,9 @@ public sealed class FinancialProjectionCalculator(
                     x.Resolution == CreditCardPaymentResolution.ProjectionFallback),
                 periodStatuses.Any(x =>
                     x.Resolution == CreditCardPaymentResolution.Undetermined),
-                availableAfterMandatory < 0m || estimatedSavings < 0m,
+                availableAfterMandatory < 0m ||
+                estimatedSavings < 0m ||
+                endingSavings < 0m,
                 income.Items,
                 mandatory.Items,
                 largeExpenses,

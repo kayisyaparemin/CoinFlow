@@ -55,6 +55,24 @@ public sealed record SalaryPeriodProjection(
     DateOnly ProjectionAnchorDate = default)
 {
     public SalaryPeriod Period => new(PeriodStart, PeriodEnd);
+    public decimal CarryOverDeficit => OpeningProjectedSavings < 0m
+        ? Math.Abs(OpeningProjectedSavings)
+        : 0m;
+    public decimal AvailableAfterCarryOverDeficit =>
+        AvailableAfterMandatory - CarryOverDeficit;
+    public decimal CurrentPeriodNetContribution =>
+        EstimatedSavingsCapacity;
+    public decimal DeficitCoveredThisPeriod => CarryOverDeficit == 0m
+        ? 0m
+        : Math.Min(
+            CarryOverDeficit,
+            Math.Max(0m, CurrentPeriodNetContribution));
+    public decimal RemainingCarryOverDeficit => EndingProjectedSavings < 0m
+        ? Math.Abs(EndingProjectedSavings)
+        : 0m;
+    public bool HasCarryOverDeficit => CarryOverDeficit > 0m;
+    public bool RecoveredCarryOverDeficit =>
+        HasCarryOverDeficit && EndingProjectedSavings >= 0m;
 }
 
 public sealed record FinancialProjectionResult(

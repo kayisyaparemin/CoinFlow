@@ -40,18 +40,34 @@
                     <Label Text="{Binding CurrentPeriodText}" Style="{StaticResource SectionTitle}" />
                     <Label Text="{Binding AssignmentModeText}" FontFamily="OpenSansSemibold" />
                     <Label Text="{Binding PaymentWindowText}" Style="{StaticResource MutedText}" />
-                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
+                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
                         <Label Text="Gelir" Style="{StaticResource MutedText}" />
                         <Label Grid.Column="1" Text="{Binding Income}" FontFamily="OpenSansSemibold" />
                         <Label Grid.Row="1" Text="Zorunlu ödemeler" Style="{StaticResource MutedText}" />
                         <Label Grid.Row="1" Grid.Column="1" Text="{Binding Mandatory}" />
                         <Label Grid.Row="2" Text="Zorunlular sonrası alan" FontFamily="OpenSansSemibold" />
                         <Label Grid.Row="2" Grid.Column="1" Text="{Binding Available}" FontFamily="OpenSansSemibold" />
-                        <Label Grid.Row="3" Text="Tahmini yaşam gideri" Style="{StaticResource MutedText}" />
-                        <Label Grid.Row="3" Grid.Column="1" Text="{Binding Living}" />
-                        <Label Grid.Row="4" Text="Tahmini tasarruf" FontFamily="OpenSansSemibold" />
-                        <Label Grid.Row="4" Grid.Column="1" Text="{Binding EstimatedSavings}" FontFamily="OpenSansSemibold" />
+                        <Label Grid.Row="3" Text="Devreden finansman açığı"
+                               IsVisible="{Binding HasCarryOverDeficit}"
+                               TextColor="{StaticResource Error}" />
+                        <Label Grid.Row="3" Grid.Column="1" Text="{Binding CarryOverDeficit}"
+                               IsVisible="{Binding HasCarryOverDeficit}"
+                               TextColor="{StaticResource Error}"
+                               FontFamily="OpenSansSemibold" />
+                        <Label Grid.Row="4" Text="Açık sonrası kullanılabilir"
+                               IsVisible="{Binding HasCarryOverDeficit}"
+                               Style="{StaticResource MutedText}" />
+                        <Label Grid.Row="4" Grid.Column="1" Text="{Binding AvailableAfterCarryOverDeficit}"
+                               IsVisible="{Binding HasCarryOverDeficit}"
+                               FontFamily="OpenSansSemibold" />
+                        <Label Grid.Row="5" Text="Tahmini yaşam gideri" Style="{StaticResource MutedText}" />
+                        <Label Grid.Row="5" Grid.Column="1" Text="{Binding Living}" />
+                        <Label Grid.Row="6" Text="Bu dönemin tahmini tasarrufu" FontFamily="OpenSansSemibold" />
+                        <Label Grid.Row="6" Grid.Column="1" Text="{Binding EstimatedSavings}" FontFamily="OpenSansSemibold" />
                     </Grid>
+                    <Label Text="{Binding CarryOverMessage}"
+                           IsVisible="{Binding HasCarryOverDeficit}"
+                           Style="{StaticResource MutedText}" />
                     <BoxView HeightRequest="1" Color="{StaticResource Line}" />
                     <Label Text="Tahmini dönem sonu birikim" Style="{StaticResource MutedText}" />
                     <Label Text="{Binding EndingSavings}" Style="{StaticResource HeroNumber}" />

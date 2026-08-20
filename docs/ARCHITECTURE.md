@@ -45,6 +45,7 @@ Bağımlılık yönü `App → Application → Domain`; `Infrastructure → Appl
 - Diğer gelir ve tüm yükümlülükler exact date ile tek bir döneme girer.
 - Para hesapları `decimal` ile yapılır; eşit taksitlerde kalan kuruş yalnız son taksite eklenir.
 - Kümülatif birikim her dönemin `OpeningProjectedSavings` değerinden devam eder.
+- Negatif opening değerinin mutlak tutarı `CarryOverDeficit`, zorunlu ödemeler sonrası alandan görünüm amaçlı düşülmüş hali `AvailableAfterCarryOverDeficit` olarak türetilir. Bunlar obligation değildir ve `EndingProjectedSavings = OpeningProjectedSavings + CurrentPeriodNetContribution` hesabında yeniden düşülmez.
 
 ## Kredi kartı motoru
 
@@ -54,7 +55,7 @@ Kart başına gerçek ödeme stratejisi (`AskEachStatement`, asgari, tam ekstre,
 
 ## Simülatör
 
-`SimulationCalculator` önce mevcut `FinancialPlan` ile baseline hesaplar, sonra yalnız bellekte scenario planı kurup aynı projection motorunu yeniden çalıştırır. Payment strategy senaryosu history kopyasına future effective kayıt ekler; önizleme veritabanına yazmaz. Bu sayede baseline ve scenario kolonları aynı anchor, coverage, tarih, kart ve birikim kurallarına tabidir.
+`SimulationCalculator` önce mevcut `FinancialPlan` ile baseline hesaplar, sonra yalnız bellekte scenario planı kurup aynı projection motorunu yeniden çalıştırır. Payment strategy senaryosu history kopyasına future effective kayıt ekler; önizleme veritabanına yazmaz. Bu sayede baseline ve scenario kolonları aynı anchor, coverage, tarih, kart, carry-over deficit ve birikim kurallarına tabidir. Risk özeti ilk deficit dönemini, maksimum devreden açığı ve recovery dönemini aynı sonuçlardan türetir.
 
 Senaryoyu kaydetmek ayrı bir işlemdir. `CoinFlowService.ApplySimulationAsync` açık `confirmed=true` olmadan kalıcı değişiklik yapmaz. Aynı tarihli maaş değişimi uygulanırken önceki kayıt kaldırıldığı için tekrar apply çoğaltma üretmez.
 

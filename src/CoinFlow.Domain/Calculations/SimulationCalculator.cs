@@ -47,9 +47,15 @@ public sealed record SimulationRiskSummary(
     SalaryPeriod LowestPeriod,
     SalaryPeriod? FirstNegativeSavingsCapacityPeriod,
     SalaryPeriod? FirstNegativeProjectedSavingsPeriod,
+    decimal MaximumCarryOverDeficit,
+    SalaryPeriod? RecoveryPeriod,
     decimal EndingProjectedSavings,
     decimal TotalScenarioCost,
-    decimal? FinancingCost);
+    decimal? FinancingCost)
+{
+    public SalaryPeriod? FirstDeficitPeriod =>
+        FirstNegativeProjectedSavingsPeriod;
+}
 
 public sealed record SimulationResult(
     IReadOnlyList<SalaryPeriodProjection> Baseline,
@@ -90,6 +96,12 @@ public sealed class SimulationCalculator(
             .FirstOrDefault(x => x.EstimatedSavingsCapacity < 0m);
         var firstNegativeSavings = scenario
             .FirstOrDefault(x => x.EndingProjectedSavings < 0m);
+        var maximumCarryOverDeficit = scenario
+            .Select(x => x.CarryOverDeficit)
+            .Append(scenario[^1].RemainingCarryOverDeficit)
+            .Max();
+        var recovery = scenario.FirstOrDefault(x =>
+            x.HasCarryOverDeficit && x.EndingProjectedSavings >= 0m);
         var totalCost = ResolveTotalCost(request);
         decimal? financingCost = request.Type == SimulationScenarioType.FinancingLoan
             ? (request.TotalRepaymentAmount ?? request.Amount) - request.Amount
@@ -101,6 +113,8 @@ public sealed class SimulationCalculator(
             lowest.Period,
             firstNegativeCapacity?.Period,
             firstNegativeSavings?.Period,
+            maximumCarryOverDeficit,
+            recovery?.Period,
             scenario[^1].EndingProjectedSavings,
             totalCost,
             financingCost);
@@ -355,7 +369,16 @@ public sealed class SimulationCalculator(
     {
         if (risk.FirstNegativeProjectedSavingsPeriod is SalaryPeriod negative)
         {
-            return $"İlk negatif tahmini birikim dönemi: {negative.Start:dd.MM.yyyy}–{negative.End:dd.MM.yyyy}.";
+            var recovery = risk.RecoveryPeriod is SalaryPeriod recovered
+                ? $" Açık {recovered.Start:dd.MM.yyyy} maaş döneminde kapanıyor."
+                : " Açık gösterilen dönemlerde kapanmıyor.";
+            return $"İlk negatif tahmini birikim dönemi: {negative.Start:dd.MM.yyyy}–{negative.End:dd.MM.yyyy}.{recovery}";
+        }
+
+        if (risk.MaximumCarryOverDeficit > 0m &&
+            risk.RecoveryPeriod is SalaryPeriod openingRecovery)
+        {
+            return $"Devreden finansman açığı {openingRecovery.Start:dd.MM.yyyy} maaş döneminde kapanıyor.";
         }
 
         if (risk.FirstNegativeSavingsCapacityPeriod is SalaryPeriod capacity)

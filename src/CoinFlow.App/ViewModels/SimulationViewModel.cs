@@ -63,6 +63,8 @@ public partial class SimulationViewModel(
     [ObservableProperty] private string lowestSavingsCapacity = "—";
     [ObservableProperty] private string lowestProjectedSavings = "—";
     [ObservableProperty] private string firstNegativePeriod = "Yok";
+    [ObservableProperty] private string maximumCarryOverDeficit = "—";
+    [ObservableProperty] private string recoveryPeriod = "—";
     [ObservableProperty] private string totalScenarioCost = "—";
     [ObservableProperty] private string financingCost = string.Empty;
     [ObservableProperty] private bool hasFinancingCost;
@@ -284,11 +286,18 @@ public partial class SimulationViewModel(
         LowestSavingsCapacity = Money(result.Risk.LowestSavingsCapacity);
         LowestProjectedSavings = Money(result.Risk.LowestProjectedSavings);
         FirstNegativePeriod =
-            result.Risk.FirstNegativeProjectedSavingsPeriod is { } negative
+            result.Risk.FirstDeficitPeriod is { } negative
                 ? SalaryText(negative.Start)
                 : result.Risk.FirstNegativeSavingsCapacityPeriod is { } capacity
                     ? SalaryText(capacity.Start)
                     : "Yok";
+        MaximumCarryOverDeficit = Money(
+            result.Risk.MaximumCarryOverDeficit);
+        RecoveryPeriod = result.Risk.RecoveryPeriod is { } recovery
+            ? SalaryText(recovery.Start)
+            : result.Risk.MaximumCarryOverDeficit > 0m
+                ? "Gösterilen dönemde kapanmıyor"
+                : "Gerekmedi";
         TotalScenarioCost = Money(result.Risk.TotalScenarioCost);
         HasFinancingCost = result.Risk.FinancingCost is not null;
         FinancingCost = result.Risk.FinancingCost is decimal cost
@@ -318,6 +327,9 @@ public partial class SimulationViewModel(
                 Money(row.Scenario.EndingProjectedSavings),
                 Money(row.ProjectedSavingsDifference),
                 Money(row.Scenario.AvailableAfterMandatory),
+                Money(-row.Scenario.CarryOverDeficit),
+                Money(row.Scenario.AvailableAfterCarryOverDeficit),
+                row.Scenario.HasCarryOverDeficit,
                 Money(row.Scenario.EstimatedSavingsCapacity)));
         }
     }

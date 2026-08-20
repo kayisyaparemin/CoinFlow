@@ -49,14 +49,39 @@
                         <VerticalStackLayout Spacing="9">
                             <Label Text="{Binding Period}" FontFamily="OpenSansSemibold" FontSize="17" />
                             <Label Text="{Binding Assignment}" Style="{StaticResource MutedText}" />
-                            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" RowSpacing="6">
-                                <Label Text="Zorunlular sonrası" Style="{StaticResource MutedText}" />
-                                <Label Grid.Column="1" Text="{Binding AvailableAfterMandatory}" FontFamily="OpenSansSemibold" />
-                                <Label Grid.Row="1" Text="Tahmini tasarruf" Style="{StaticResource MutedText}" />
-                                <Label Grid.Row="1" Grid.Column="1" Text="{Binding EstimatedSavings}" FontFamily="OpenSansSemibold" />
-                                <Label Grid.Row="2" Text="Tahmini birikim" Style="{StaticResource MutedText}" />
-                                <Label Grid.Row="2" Grid.Column="1" Text="{Binding EndingProjectedSavings}" FontFamily="OpenSansSemibold" />
-                            </Grid>
+                            <VerticalStackLayout Spacing="6">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <Label Text="Zorunlular sonrası" Style="{StaticResource MutedText}" />
+                                    <Label Grid.Column="1" Text="{Binding AvailableAfterMandatory}" FontFamily="OpenSansSemibold" />
+                                </Grid>
+                                <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding HasCarryOverDeficit}">
+                                    <Label Text="Devreden açık" TextColor="{StaticResource Error}" />
+                                    <Label Grid.Column="1" Text="{Binding CarryOverDeficit}" TextColor="{StaticResource Error}" FontFamily="OpenSansSemibold" />
+                                </Grid>
+                                <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding HasCarryOverDeficit}">
+                                    <Label Text="Açık sonrası kullanılabilir" Style="{StaticResource MutedText}" />
+                                    <Label Grid.Column="1" Text="{Binding AvailableAfterCarryOverDeficit}" FontFamily="OpenSansSemibold" />
+                                </Grid>
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <Label Text="Tahmini yaşam" Style="{StaticResource MutedText}" />
+                                    <Label Grid.Column="1" Text="{Binding LivingBudget}" />
+                                </Grid>
+                                <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding HasPlannedLargeCashExpenses}">
+                                    <Label Text="Büyük planlı ödeme" Style="{StaticResource MutedText}" />
+                                    <Label Grid.Column="1" Text="{Binding PlannedLargeCashExpenses}" />
+                                </Grid>
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <Label Text="Bu dönemin tahmini tasarrufu" Style="{StaticResource MutedText}" />
+                                    <Label Grid.Column="1" Text="{Binding EstimatedSavings}" FontFamily="OpenSansSemibold" />
+                                </Grid>
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <Label Text="Dönem sonu tahmini birikim" Style="{StaticResource MutedText}" />
+                                    <Label Grid.Column="1" Text="{Binding EndingProjectedSavings}" FontFamily="OpenSansSemibold" />
+                                </Grid>
+                            </VerticalStackLayout>
+                            <Label Text="{Binding CarryOverMessage}"
+                                   IsVisible="{Binding HasCarryOverDeficit}"
+                                   Style="{StaticResource MutedText}" />
                             <Label Text="{Binding Notice}" IsVisible="{Binding HasNotice}" TextColor="{StaticResource Error}" FontSize="12" />
                             <Label Text="Detay için dokun" Style="{StaticResource MutedText}" IsVisible="{Binding IsCollapsed}" />
                             <Label Text="{Binding Breakdown}" IsVisible="{Binding IsExpanded}" FontSize="12" />

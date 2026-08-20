@@ -123,6 +123,146 @@ public sealed class FinancialProjectionTests
     }
 
     [Fact]
+    public void CarryOverDeficit_IsVisibleWithoutBeingCountedTwice()
+    {
+        var paymentPlanId = Guid.NewGuid();
+        var plan = BasicPlan(115_000m) with
+        {
+            Settings = new UserSettings
+            {
+                SalaryDay = 10,
+                MonthlyLivingBudget = 30_000m,
+                ProjectionAnchorDate = new DateOnly(2026, 8, 20)
+            },
+            PaymentPlans =
+            [
+                new TemporaryPaymentPlan
+                {
+                    Id = paymentPlanId,
+                    Name = "Exact ödemeler",
+                    Kind = PaymentPlanKind.Temporary,
+                    Installments =
+                    [
+                        new TemporaryPaymentInstallment
+                        {
+                            PlanId = paymentPlanId,
+                            DueDate = new DateOnly(2026, 9, 20),
+                            Amount = 110_987m
+                        },
+                        new TemporaryPaymentInstallment
+                        {
+                            PlanId = paymentPlanId,
+                            DueDate = new DateOnly(2026, 10, 20),
+                            Amount = 50_043m
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var rows = _calculator.Calculate(
+            plan,
+            new DateOnly(2026, 8, 20),
+            2);
+        var current = rows[1];
+
+        Assert.Equal(-25_987m, rows[0].EndingProjectedSavings);
+        Assert.Equal(-25_987m, current.OpeningProjectedSavings);
+        Assert.Equal(115_000m, current.TotalIncome);
+        Assert.Equal(50_043m, current.MandatoryOutflow);
+        Assert.Equal(64_957m, current.AvailableAfterMandatory);
+        Assert.Equal(25_987m, current.CarryOverDeficit);
+        Assert.Equal(38_970m,
+            current.AvailableAfterCarryOverDeficit);
+        Assert.Equal(30_000m, current.LivingBudget);
+        Assert.Equal(34_957m, current.EstimatedSavingsCapacity);
+        Assert.Equal(8_970m, current.EndingProjectedSavings);
+        Assert.True(current.RecoveredCarryOverDeficit);
+        Assert.Single(current.MandatoryItems);
+        Assert.Equal(50_043m, current.MandatoryItems[0].Amount);
+        Assert.Empty(plan.CreditCards);
+        Assert.Empty(plan.Loans);
+    }
+
+    [Fact]
+    public void DeficitContinuesIntoNextOpeningWithoutClampOrFakeObligation()
+    {
+        var plan = BasicPlan(50_000m) with
+        {
+            Settings = new UserSettings
+            {
+                SalaryDay = 10,
+                MonthlyLivingBudget = 30_000m,
+                ProjectionStartingSavings = -25_000m,
+                ProjectionAnchorDate = new DateOnly(2026, 8, 20)
+            }
+        };
+
+        var rows = _calculator.Calculate(
+            plan,
+            new DateOnly(2026, 8, 20),
+            2);
+
+        Assert.Equal(25_000m, rows[0].CarryOverDeficit);
+        Assert.Equal(20_000m, rows[0].CurrentPeriodNetContribution);
+        Assert.Equal(-5_000m, rows[0].EndingProjectedSavings);
+        Assert.Equal(-5_000m, rows[1].OpeningProjectedSavings);
+        Assert.Equal(5_000m, rows[1].CarryOverDeficit);
+        Assert.Empty(rows[0].MandatoryItems);
+        Assert.Empty(rows[1].MandatoryItems);
+    }
+
+    [Fact]
+    public void DeficitRecovery_ProducesPositiveEndingWithoutDoubleCount()
+    {
+        var plan = BasicPlan(70_000m) with
+        {
+            Settings = new UserSettings
+            {
+                SalaryDay = 10,
+                MonthlyLivingBudget = 30_000m,
+                ProjectionStartingSavings = -25_000m,
+                ProjectionAnchorDate = new DateOnly(2026, 8, 20)
+            }
+        };
+
+        var row = Assert.Single(_calculator.Calculate(
+            plan,
+            new DateOnly(2026, 8, 20),
+            1));
+
+        Assert.Equal(25_000m, row.CarryOverDeficit);
+        Assert.Equal(40_000m, row.CurrentPeriodNetContribution);
+        Assert.Equal(15_000m, row.EndingProjectedSavings);
+        Assert.True(row.RecoveredCarryOverDeficit);
+    }
+
+    [Fact]
+    public void PositiveOpeningSavings_DoesNotCreateCarryOverDeficit()
+    {
+        var plan = BasicPlan(50_000m) with
+        {
+            Settings = new UserSettings
+            {
+                SalaryDay = 10,
+                MonthlyLivingBudget = 30_000m,
+                ProjectionStartingSavings = 10_000m,
+                ProjectionAnchorDate = new DateOnly(2026, 8, 20)
+            }
+        };
+
+        var row = Assert.Single(_calculator.Calculate(
+            plan,
+            new DateOnly(2026, 8, 20),
+            1));
+
+        Assert.Equal(0m, row.CarryOverDeficit);
+        Assert.False(row.HasCarryOverDeficit);
+        Assert.Equal(20_000m, row.CurrentPeriodNetContribution);
+        Assert.Equal(30_000m, row.EndingProjectedSavings);
+    }
+
+    [Fact]
     public void LargeCashExpense_ImpactsItsPeriodAndAllFutureSavings()
     {
         var baseline = BasicPlan(50_000m) with
@@ -152,6 +292,9 @@ public sealed class FinancialProjectionTests
             scenario, new DateOnly(2026, 8, 20), 3);
 
         Assert.Equal(350_000m, scenarioRows[0].PlannedLargeCashExpenses);
+        Assert.Equal(
+            baselineRows[0].EstimatedSavingsCapacity - 350_000m,
+            scenarioRows[0].EstimatedSavingsCapacity);
         Assert.Equal(
             baselineRows[0].EndingProjectedSavings - 350_000m,
             scenarioRows[0].EndingProjectedSavings);

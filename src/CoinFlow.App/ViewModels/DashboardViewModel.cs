@@ -22,6 +22,10 @@ public partial class DashboardViewModel(
     [ObservableProperty] private string income = "—";
     [ObservableProperty] private string mandatory = "—";
     [ObservableProperty] private string available = "—";
+    [ObservableProperty] private string carryOverDeficit = "—";
+    [ObservableProperty] private string availableAfterCarryOverDeficit = "—";
+    [ObservableProperty] private string carryOverMessage = string.Empty;
+    [ObservableProperty] private bool hasCarryOverDeficit;
     [ObservableProperty] private string living = "—";
     [ObservableProperty] private string estimatedSavings = "—";
     [ObservableProperty] private string endingSavings = "—";
@@ -96,6 +100,15 @@ public partial class DashboardViewModel(
             Income = Money(current.TotalIncome);
             Mandatory = Money(current.MandatoryOutflow);
             Available = Money(current.AvailableAfterMandatory);
+            CarryOverDeficit = Money(-current.CarryOverDeficit);
+            AvailableAfterCarryOverDeficit = Money(
+                current.AvailableAfterCarryOverDeficit);
+            HasCarryOverDeficit = current.HasCarryOverDeficit;
+            CarryOverMessage = current.HasCarryOverDeficit
+                ? current.RemainingCarryOverDeficit > 0m
+                    ? $"Bu dönem {Money(current.DeficitCoveredThisPeriod)} karşılanıyor; sonraki döneme {Money(current.RemainingCarryOverDeficit)} açık devrediyor."
+                    : $"Devreden {Money(current.CarryOverDeficit)} açık bu dönem tamamen kapanıyor."
+                : string.Empty;
             Living = Money(current.LivingBudget);
             EstimatedSavings = Money(current.EstimatedSavingsCapacity);
             EndingSavings = Money(current.EndingProjectedSavings);
@@ -106,8 +119,8 @@ public partial class DashboardViewModel(
                 dashboard.TightestPeriod.EstimatedSavingsCapacity);
             HasDeficit = current.EstimatedSavingsCapacity < 0m;
             DeficitMessage = HasDeficit
-                ? $"Bu dönemde yaşam bütçesi sonrası {Money(Math.Abs(current.EstimatedSavingsCapacity))} finansman açığı oluşuyor."
-                : $"Bu dönemin tahmini tasarruf kapasitesi {Money(current.EstimatedSavingsCapacity)}.";
+                ? $"Bu dönemde yaşam bütçesi ve büyük planlı ödemeler sonrası {Money(Math.Abs(current.EstimatedSavingsCapacity))} finansman açığı oluşuyor."
+                : $"Bu dönemin tahmini tasarrufu {Money(current.EstimatedSavingsCapacity)}.";
             HasUndeterminedCardPayment =
                 dashboard.HasUndeterminedCardPayments;
             StrategyStatusText = AssignmentModeText;
@@ -188,14 +201,23 @@ public partial class DashboardViewModel(
             (x.PaymentBeforeSalary
                 ? $" • ⚠ {x.AssignedSalaryDate:dd.MM} maaşı; gerçek vade önce"
                 : string.Empty));
+        var calculation = new[]
+        {
+            $"OpeningProjectedSavings: {Money(row.OpeningProjectedSavings, 2)}",
+            $"CarryOverDeficit: {Money(row.CarryOverDeficit, 2)}",
+            $"Income: {Money(row.TotalIncome, 2)}",
+            $"MandatoryOutflow: {Money(row.MandatoryOutflow, 2)}",
+            $"AvailableAfterMandatory: {Money(row.AvailableAfterMandatory, 2)}",
+            $"AvailableAfterCarryOverDeficit: {Money(row.AvailableAfterCarryOverDeficit, 2)}",
+            $"LivingBudget: {Money(row.LivingBudget, 2)}",
+            $"LargeExpenses: {Money(row.PlannedLargeCashExpenses, 2)}",
+            $"CurrentPeriodNetContribution: {Money(row.CurrentPeriodNetContribution, 2)}",
+            $"EndingProjectedSavings: {Money(row.EndingProjectedSavings, 2)}",
+            string.Empty
+        };
         return string.Join(
             Environment.NewLine,
-            incomeLines
-                .Concat(paymentLines)
-                .Append($"Zorunlu toplam: {Money(row.MandatoryOutflow, 2)}")
-                .Append($"Kullanılabilir alan: {Money(row.AvailableAfterMandatory, 2)}")
-                .Append($"Tahmini yaşam: {Money(row.LivingBudget, 2)}")
-                .Append($"Tahmini tasarruf: {Money(row.EstimatedSavingsCapacity, 2)}"));
+            calculation.Concat(incomeLines).Concat(paymentLines));
     }
 
     private static UpcomingPaymentLine ToLine(

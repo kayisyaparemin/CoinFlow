@@ -25,6 +25,8 @@ Tahmini Birikim Kapasitesi = Zorunlu Ödemeler Sonrası - Yaşam Bütçesi - Pla
 Dönem Sonu Tahmini Birikim = Dönem Başı Birikim + Tahmini Birikim Kapasitesi
 ```
 
+Negatif dönem sonu tahmini birikim sonraki maaş dönemine aynen `OpeningProjectedSavings` olarak taşınır. UI bunu **devreden finansman açığı** olarak gösterir. Bu değer yeni kredi, kart borcu veya zorunlu ödeme değildir; yalnız kümülatif planlama başlangıç durumudur ve dönem sonu hesabında ikinci kez çıkarılmaz.
+
 Maaş, tek seferlik gelir, kredi, kart harcaması, kart vadesi, geçici ödeme ve büyük giderlerin tamamı exact date ile ilgili maaş dönemine yerleşir. Ayın 29/30/31'i için takvim sonu kırpma kuralı merkezi olarak uygulanır.
 
 ## Ekranlar

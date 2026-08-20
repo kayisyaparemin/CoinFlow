@@ -134,6 +134,20 @@ public sealed class SalaryPeriodAndIncomeTests
         Assert.Equal(new DateOnly(2027, 4, 10), reached!.PeriodStart);
     }
 
+    [Fact]
+    public void TargetAmount_UsesCumulativeEndingAcrossNegativePeriods()
+    {
+        var rows = new[] { -25_000m, 9_000m, 60_000m, 130_000m }
+            .Select((ending, index) => Projection(index, ending))
+            .ToArray();
+
+        var reached = new TargetAmountCalculator()
+            .FindFirstReached(rows, 100_000m);
+
+        Assert.NotNull(reached);
+        Assert.Equal(new DateOnly(2027, 4, 10), reached!.PeriodStart);
+    }
+
     private static SalaryScheduleEntry Salary(
         decimal amount,
         DateOnly effectiveDate) => new()
@@ -150,4 +164,3 @@ public sealed class SalaryPeriodAndIncomeTests
         0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m,
         0m, 0m, ending, false, false, false, [], [], [], []);
 }
-

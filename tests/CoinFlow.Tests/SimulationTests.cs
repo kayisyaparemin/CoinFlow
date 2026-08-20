@@ -157,6 +157,47 @@ public sealed class SimulationTests
     }
 
     [Fact]
+    public void ScenarioDeficit_CarriesForwardAndReportsRecovery()
+    {
+        var plan = CarryOverPlan();
+        var result = new SimulationCalculator(_projection, _installments)
+            .Calculate(
+                plan,
+                new DateOnly(2026, 8, 20),
+                new SimulationRequest(
+                    SimulationScenarioType.CashPurchase,
+                    "Planlı nakit gider",
+                    45_000m,
+                    new DateOnly(2026, 9, 20)),
+                periodCount: 4);
+
+        Assert.Equal(-25_000m, result.Scenario[0].EndingProjectedSavings);
+        Assert.Equal(-25_000m, result.Scenario[1].OpeningProjectedSavings);
+        Assert.Equal(25_000m, result.Scenario[1].CarryOverDeficit);
+        Assert.Equal(-5_000m, result.Scenario[1].EndingProjectedSavings);
+        Assert.Equal(-5_000m, result.Scenario[2].OpeningProjectedSavings);
+        Assert.Equal(15_000m, result.Scenario[2].EndingProjectedSavings);
+        Assert.Equal(new DateOnly(2026, 9, 10),
+            result.Risk.FirstDeficitPeriod?.Start);
+        Assert.Equal(25_000m, result.Risk.MaximumCarryOverDeficit);
+        Assert.Equal(new DateOnly(2026, 11, 10),
+            result.Risk.RecoveryPeriod?.Start);
+
+        var scenarioPlan = new SimulationCalculator(
+            _projection,
+            _installments).BuildScenarioPlan(
+                plan,
+                new SimulationRequest(
+                    SimulationScenarioType.CashPurchase,
+                    "Planlı nakit gider",
+                    45_000m,
+                    new DateOnly(2026, 9, 20)));
+        Assert.Empty(scenarioPlan.PaymentPlans);
+        Assert.Empty(scenarioPlan.CreditCards);
+        Assert.Single(scenarioPlan.PlannedLargeExpenses);
+    }
+
+    [Fact]
     public void SalaryChange_UsesPeriodStartEffectiveRule()
     {
         var result = new SimulationCalculator(_projection, _installments)
@@ -260,6 +301,32 @@ public sealed class SimulationTests
             DeleteDatabase(path);
         }
     }
+
+    private static FinancialPlan CarryOverPlan() => new()
+    {
+        Settings = new UserSettings
+        {
+            SalaryDay = 10,
+            MonthlyLivingBudget = 30_000m,
+            ProjectionAnchorDate = new DateOnly(2026, 8, 20)
+        },
+        Salaries =
+        [
+            new SalaryScheduleEntry
+            {
+                Amount = 50_000m,
+                EffectiveDate = new DateOnly(2026, 1, 1)
+            }
+        ],
+        PaymentAssignmentStrategies =
+        [
+            new PaymentAssignmentStrategy
+            {
+                Mode = PaymentAssignmentMode.UpcomingPeriod,
+                EffectiveFromSalaryDate = new DateOnly(2026, 9, 10)
+            }
+        ]
+    };
 
     private static void DeleteDatabase(string path)
     {
