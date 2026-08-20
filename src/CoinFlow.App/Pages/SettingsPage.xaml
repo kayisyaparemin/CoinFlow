@@ -18,6 +18,26 @@
             </Border>
 
             <Border>
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Maaş Kullanım Şekli" Style="{StaticResource SectionTitle}" />
+                    <RadioButton Content="Geçmiş dönemi kapatırım"
+                                 GroupName="PaymentAssignmentMode"
+                                 IsChecked="{Binding IsPreviousPeriod, Mode=TwoWay}" />
+                    <Label Text="{Binding PreviousPeriodDescription}"
+                           Margin="34,-8,0,2"
+                           Style="{StaticResource MutedText}" />
+                    <RadioButton Content="Gelecek dönemi karşılarım"
+                                 GroupName="PaymentAssignmentMode"
+                                 IsChecked="{Binding IsUpcomingPeriod, Mode=TwoWay}" />
+                    <Label Text="{Binding UpcomingPeriodDescription}"
+                           Margin="34,-8,0,0"
+                           Style="{StaticResource MutedText}" />
+                    <Label Text="Gerçek kredi, kart ve ödeme vadeleri değişmez; yalnız hangi maaş bütçesinde gösterildikleri değişir."
+                           Style="{StaticResource MutedText}" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border>
                 <VerticalStackLayout Spacing="9">
                     <Label Text="Tahmini Yaşam Bütçesi" Style="{StaticResource SectionTitle}" />
                     <Label Text="Aylık tahmini yaşam bütçesi" Style="{StaticResource FieldLabel}" />

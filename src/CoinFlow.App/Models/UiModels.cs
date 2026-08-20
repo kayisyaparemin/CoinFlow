@@ -75,6 +75,7 @@ public sealed record UpcomingPaymentLine(
 
 public partial class ProjectionLine(
     string period,
+    string assignment,
     string availableAfterMandatory,
     string estimatedSavings,
     string endingProjectedSavings,
@@ -83,6 +84,7 @@ public partial class ProjectionLine(
     bool hasNotice) : ObservableObject
 {
     public string Period { get; } = period;
+    public string Assignment { get; } = assignment;
     public string AvailableAfterMandatory { get; } = availableAfterMandatory;
     public string EstimatedSavings { get; } = estimatedSavings;
     public string EndingProjectedSavings { get; } = endingProjectedSavings;

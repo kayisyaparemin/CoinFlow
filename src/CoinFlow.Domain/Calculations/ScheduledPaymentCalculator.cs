@@ -5,7 +5,6 @@ namespace CoinFlow.Domain.Calculations;
 public sealed class ScheduledPaymentCalculator
 {
     public IReadOnlyList<ObligationItem> GetItems(
-        SalaryPeriod period,
         IEnumerable<TemporaryPaymentPlan> plans)
     {
         var items = new List<ObligationItem>();
@@ -25,7 +24,6 @@ public sealed class ScheduledPaymentCalculator
                 _ => throw new ArgumentOutOfRangeException(nameof(plan.Kind))
             };
             items.AddRange(unpaid
-                .Where(x => period.Contains(x.DueDate))
                 .Select(x => new ObligationItem(
                     plan.Name,
                     type,
@@ -37,4 +35,3 @@ public sealed class ScheduledPaymentCalculator
         return items;
     }
 }
-

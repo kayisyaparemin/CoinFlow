@@ -69,8 +69,8 @@ public sealed class LoanAndObligationTests
         var start = DateOnly.Parse(periodStartText);
         var period = new SalaryPeriod(start, start.AddMonths(1));
         var items = new ScheduledPaymentCalculator().GetItems(
-            period,
-            [TestFactory.EminevimPlan()]);
+            [TestFactory.EminevimPlan()])
+            .Where(x => period.Contains(x.DueDate));
 
         Assert.Equal((decimal)expected, items.Sum(x => x.Amount));
     }
@@ -90,7 +90,9 @@ public sealed class LoanAndObligationTests
         };
         var calculator = new MandatoryPaymentCalculator(
             new LoanScheduleCalculator(),
-            new ScheduledPaymentCalculator());
+            new ScheduledPaymentCalculator(),
+            new PaymentAssignmentResolver(
+                new SalaryPeriodCalculator()));
 
         var result = calculator.Calculate(
             period,
@@ -108,7 +110,9 @@ public sealed class LoanAndObligationTests
                 new ObligationItem(
                     "Kart", ObligationType.CreditCard,
                     new DateOnly(2026, 10, 5), 5_000m)
-            ]);
+            ],
+            10,
+            PaymentAssignmentMode.UpcomingPeriod);
 
         Assert.Equal(1_000m, result.LoanPayments);
         Assert.Equal(5_000m, result.CreditCardPayments);
@@ -165,4 +169,3 @@ public sealed class LoanAndObligationTests
         ]
     };
 }
-

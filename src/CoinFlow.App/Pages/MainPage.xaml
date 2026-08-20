@@ -24,6 +24,8 @@
                 <VerticalStackLayout Spacing="10">
                     <Label Text="BU MAAŞ DÖNEMİ" Style="{StaticResource Eyebrow}" />
                     <Label Text="{Binding CurrentPeriodText}" Style="{StaticResource SectionTitle}" />
+                    <Label Text="{Binding AssignmentModeText}" FontFamily="OpenSansSemibold" />
+                    <Label Text="{Binding PaymentWindowText}" Style="{StaticResource MutedText}" />
                     <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
                         <Label Text="Gelir" Style="{StaticResource MutedText}" />
                         <Label Grid.Column="1" Text="{Binding Income}" FontFamily="OpenSansSemibold" />

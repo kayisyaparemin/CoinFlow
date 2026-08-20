@@ -35,6 +35,7 @@ public static class MauiProgram
                 seedDevelopmentData,
                 services.GetRequiredService<IClock>().Today));
         builder.Services.AddSingleton<SalaryPeriodCalculator>();
+        builder.Services.AddSingleton<PaymentAssignmentResolver>();
         builder.Services.AddSingleton<SalaryResolver>();
         builder.Services.AddSingleton<IncomeProjectionCalculator>();
         builder.Services.AddSingleton<LoanScheduleCalculator>();

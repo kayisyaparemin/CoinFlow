@@ -21,6 +21,9 @@ public sealed class PersistenceAndSeedTests
             Assert.Equal(30_000m, plan.Settings.MonthlyLivingBudget);
             Assert.Equal(0m, plan.Settings.ProjectionStartingSavings);
             Assert.Equal(
+                PaymentAssignmentMode.UpcomingPeriod,
+                plan.Settings.PaymentAssignmentMode);
+            Assert.Equal(
                 [115_000m, 132_250m],
                 plan.Salaries.Select(x => x.Amount).ToArray());
 
@@ -101,6 +104,12 @@ public sealed class PersistenceAndSeedTests
             var salary = (await service.GetFinancialPlanAsync())
                 .Salaries[0];
             await service.DeleteSalaryAsync(salary.Id);
+            var settings = (await service.GetFinancialPlanAsync()).Settings;
+            await service.SaveSettingsAsync(settings with
+            {
+                PaymentAssignmentMode =
+                    PaymentAssignmentMode.PreviousPeriod
+            });
 
             await service.ResetDevelopmentDataAsync();
             var reset = await service.GetFinancialPlanAsync();
@@ -108,6 +117,9 @@ public sealed class PersistenceAndSeedTests
             Assert.Equal(2, reset.Salaries.Count);
             Assert.Single(reset.PaymentPlans);
             Assert.Equal(30_000m, reset.Settings.MonthlyLivingBudget);
+            Assert.Equal(
+                PaymentAssignmentMode.UpcomingPeriod,
+                reset.Settings.PaymentAssignmentMode);
         });
     }
 
@@ -124,7 +136,88 @@ public sealed class PersistenceAndSeedTests
             Assert.Empty(plan.PaymentPlans);
             Assert.Empty(plan.CreditCards);
             Assert.Equal(0m, plan.Settings.MonthlyLivingBudget);
+            Assert.Equal(
+                PaymentAssignmentMode.UpcomingPeriod,
+                plan.Settings.PaymentAssignmentMode);
         });
+    }
+
+    [Fact]
+    public async Task PaymentAssignmentMode_PersistsAcrossReopen()
+    {
+        var path = TempPath();
+        try
+        {
+            await using (var first = new SqliteCoinFlowStore(
+                             path, false, Today))
+            {
+                var service = TestFactory.Service(first);
+                var settings = (await service.GetFinancialPlanAsync())
+                    .Settings;
+                await service.SaveSettingsAsync(settings with
+                {
+                    PaymentAssignmentMode =
+                        PaymentAssignmentMode.PreviousPeriod
+                });
+            }
+
+            await using var second = new SqliteCoinFlowStore(
+                path, false, Today);
+            var reopened = (await TestFactory.Service(second)
+                .GetFinancialPlanAsync()).Settings;
+
+            Assert.Equal(
+                PaymentAssignmentMode.PreviousPeriod,
+                reopened.PaymentAssignmentMode);
+        }
+        finally
+        {
+            DeleteDatabase(path);
+        }
+    }
+
+    [Fact]
+    public async Task LegacySettingsMigration_DefaultsModeOnceAndPreservesValues()
+    {
+        var path = TempPath();
+        SQLitePCL.Batteries_V2.Init();
+        var legacy = new SQLiteAsyncConnection(path);
+        await legacy.ExecuteAsync(
+            """
+            CREATE TABLE settings (
+                Id INTEGER PRIMARY KEY NOT NULL,
+                SalaryDay INTEGER NOT NULL,
+                MonthlyLivingBudget DECIMAL NOT NULL,
+                ProjectionStartingSavings DECIMAL NOT NULL,
+                SchemaVersion INTEGER NOT NULL,
+                DevelopmentSeedVersion INTEGER NOT NULL,
+                GamificationEnabled INTEGER NOT NULL,
+                DevelopmentSeedEnabled INTEGER NOT NULL,
+                TrackingStartedDate TEXT NULL
+            )
+            """);
+        await legacy.ExecuteAsync(
+            "INSERT INTO settings VALUES (1, 15, 42000, 123000, 4, 1, 0, 0, NULL)");
+        await legacy.CloseAsync();
+
+        try
+        {
+            await using var store = new SqliteCoinFlowStore(
+                path, false, Today);
+            var settings = (await TestFactory.Service(store)
+                .GetFinancialPlanAsync()).Settings;
+
+            Assert.Equal(15, settings.SalaryDay);
+            Assert.Equal(42_000m, settings.MonthlyLivingBudget);
+            Assert.Equal(123_000m, settings.ProjectionStartingSavings);
+            Assert.Equal(
+                PaymentAssignmentMode.UpcomingPeriod,
+                settings.PaymentAssignmentMode);
+        }
+        finally
+        {
+            DeleteDatabase(path);
+        }
     }
 
     [Fact]

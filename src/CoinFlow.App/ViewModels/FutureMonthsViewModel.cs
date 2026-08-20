@@ -35,7 +35,8 @@ public partial class FutureMonthsViewModel(
             {
                 var notice = Notice(row);
                 Periods.Add(new ProjectionLine(
-                    PeriodText(row.Period),
+                    SalaryText(row),
+                    AssignmentText(row),
                     Money(row.AvailableAfterMandatory),
                     Money(row.EstimatedSavingsCapacity),
                     Money(row.EndingProjectedSavings),
@@ -90,10 +91,18 @@ public partial class FutureMonthsViewModel(
         };
         var exactSources = row.MandatoryItems.Select(x =>
             $"{x.DueDate:dd.MM.yyyy} • {x.Name}: {Money(x.Amount, 2)}" +
-            (x.IsEstimate ? " (tahmini)" : string.Empty));
+            (x.IsEstimate ? " (tahmini)" : string.Empty) +
+            AssignmentDetail(x));
+        var undeterminedCards = row.CardPaymentStatuses
+            .Where(x => x.Payment is null)
+            .Select(x =>
+                $"{x.PaymentDueDate:dd.MM.yyyy} • {x.CardName}: ödeme belirlenmedi" +
+                (x.PaymentBeforeSalary
+                    ? $" → {x.AssignedSalaryDate.ToString("dd MMM", TurkishCulture)} maaşı • ⚠ Maaştan önce vadesi geliyor"
+                    : string.Empty));
         return string.Join(
             Environment.NewLine,
-            lines.Concat(exactSources));
+            lines.Concat(exactSources).Concat(undeterminedCards));
     }
 
     private static string Notice(SalaryPeriodProjection row)
@@ -115,9 +124,42 @@ public partial class FutureMonthsViewModel(
                 $"Yaşam bütçesi sonrası {Money(Math.Abs(row.EstimatedSavingsCapacity))} açık.");
         }
 
+        if (row.MandatoryItems.Any(x => x.PaymentBeforeSalary) ||
+            row.CardPaymentStatuses.Any(x => x.PaymentBeforeSalary))
+        {
+            notices.Add("⚠ Bazı ödemeler atanmış maaştan önce vadesi geliyor.");
+        }
+
         return string.Join(" ", notices);
     }
 
     private static string PeriodText(SalaryPeriod period) =>
         $"{period.Start.ToString("dd MMM", TurkishCulture)} → {period.End.ToString("dd MMM yyyy", TurkishCulture)}";
+
+    private static string SalaryText(SalaryPeriodProjection row) =>
+        $"{row.PeriodStart.ToString("dd MMMM yyyy", TurkishCulture)} Maaşı";
+
+    private static string AssignmentText(SalaryPeriodProjection row)
+    {
+        var action = row.PaymentAssignmentMode ==
+                     CoinFlow.Domain.Models.PaymentAssignmentMode.PreviousPeriod
+            ? "ödemelerini kapatır"
+            : "ödemelerini karşılar";
+        return $"{row.PaymentWindowStart.ToString("dd MMM", TurkishCulture)}–" +
+               $"{row.PaymentWindowEnd.ToString("dd MMM", TurkishCulture)} {action}";
+    }
+
+    private static string AssignmentDetail(ObligationItem item)
+    {
+        if (item.AssignedSalaryDate == default)
+        {
+            return string.Empty;
+        }
+
+        var assignment =
+            $" → {item.AssignedSalaryDate.ToString("dd MMM", TurkishCulture)} maaşı";
+        return item.PaymentBeforeSalary
+            ? assignment + " • ⚠ Maaştan önce vadesi geliyor"
+            : assignment;
+    }
 }

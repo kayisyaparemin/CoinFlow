@@ -337,6 +337,12 @@ public sealed class CoinFlowService(
                 "Tahmini yaşam bütçesi negatif olamaz.");
         }
 
+        if (!Enum.IsDefined(settings.PaymentAssignmentMode))
+        {
+            throw new InvalidOperationException(
+                "Maaş kullanım şekli geçersiz.");
+        }
+
         return store.SaveSettingsAsync(settings, cancellationToken);
     }
 

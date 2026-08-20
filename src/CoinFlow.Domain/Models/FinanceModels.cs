@@ -38,6 +38,12 @@ public enum PlannedExpenseStatus
     Cancelled = 2
 }
 
+public enum PaymentAssignmentMode
+{
+    UpcomingPeriod = 0,
+    PreviousPeriod = 1
+}
+
 public sealed record SalaryScheduleEntry
 {
     public Guid Id { get; init; } = Guid.NewGuid();
@@ -140,6 +146,8 @@ public sealed record UserSettings
     public int SalaryDay { get; init; } = 10;
     public decimal MonthlyLivingBudget { get; init; }
     public decimal ProjectionStartingSavings { get; init; }
+    public PaymentAssignmentMode PaymentAssignmentMode { get; init; } =
+        PaymentAssignmentMode.UpcomingPeriod;
 }
 
 public sealed record FinancialPlan

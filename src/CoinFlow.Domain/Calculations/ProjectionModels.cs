@@ -11,7 +11,9 @@ public sealed record CreditCardPaymentProjectionStatus(
     decimal? MinimumPayment,
     decimal? Payment,
     CreditCardPaymentResolution Resolution,
-    CreditCardPaymentType? PaymentType);
+    CreditCardPaymentType? PaymentType,
+    DateOnly AssignedSalaryDate = default,
+    bool PaymentBeforeSalary = false);
 
 public sealed record SalaryPeriodProjection(
     DateOnly PeriodStart,
@@ -37,7 +39,11 @@ public sealed record SalaryPeriodProjection(
     IReadOnlyList<IncomeProjectionItem> IncomeItems,
     IReadOnlyList<ObligationItem> MandatoryItems,
     IReadOnlyList<PlannedLargeExpense> LargeExpenseItems,
-    IReadOnlyList<CreditCardPaymentProjectionStatus> CardPaymentStatuses)
+    IReadOnlyList<CreditCardPaymentProjectionStatus> CardPaymentStatuses,
+    PaymentAssignmentMode PaymentAssignmentMode =
+        PaymentAssignmentMode.UpcomingPeriod,
+    DateOnly PaymentWindowStart = default,
+    DateOnly PaymentWindowEnd = default)
 {
     public SalaryPeriod Period => new(PeriodStart, PeriodEnd);
 }

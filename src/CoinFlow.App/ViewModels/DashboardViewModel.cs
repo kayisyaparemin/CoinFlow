@@ -15,6 +15,8 @@ public partial class DashboardViewModel(
         UpcomingPayments { get; } = [];
 
     [ObservableProperty] private string currentPeriodText = "—";
+    [ObservableProperty] private string assignmentModeText = "—";
+    [ObservableProperty] private string paymentWindowText = "—";
     [ObservableProperty] private string income = "—";
     [ObservableProperty] private string mandatory = "—";
     [ObservableProperty] private string available = "—";
@@ -48,7 +50,15 @@ public partial class DashboardViewModel(
             var dashboard = await service.GetDashboardAsync();
             var current = dashboard.CurrentPeriod;
 
-            CurrentPeriodText = PeriodText(current.Period);
+            CurrentPeriodText =
+                $"{current.PeriodStart.ToString("dd MMMM yyyy", TurkishCulture)} Maaşı";
+            AssignmentModeText = current.PaymentAssignmentMode ==
+                                 CoinFlow.Domain.Models.PaymentAssignmentMode.PreviousPeriod
+                ? "Geçmiş dönemi kapatırım"
+                : "Gelecek dönemi karşılarım";
+            PaymentWindowText =
+                $"{current.PaymentWindowStart.ToString("dd MMM", TurkishCulture)}–" +
+                $"{current.PaymentWindowEnd.ToString("dd MMM", TurkishCulture)} ödemeleri";
             Income = Money(current.TotalIncome);
             Mandatory = Money(current.MandatoryOutflow);
             Available = Money(current.AvailableAfterMandatory);
@@ -70,22 +80,26 @@ public partial class DashboardViewModel(
             UpcomingPayments.Clear();
             foreach (var payment in dashboard.UpcomingPayments)
             {
+                var category = payment.IsEstimate
+                    ? "Kart projeksiyonu • tahmini"
+                    : payment.Type switch
+                    {
+                        ObligationType.Loan => "Kredi",
+                        ObligationType.CreditCard => "Kredi kartı",
+                        ObligationType.TemporaryPayment =>
+                            "Geçici ödeme planı",
+                        ObligationType.InstallmentPayment =>
+                            "Taksit / finansman",
+                        _ => "Planlı ödeme"
+                    };
+                var assignmentWarning = payment.PaymentBeforeSalary
+                    ? $" • ⚠ {payment.AssignedSalaryDate.ToString("dd MMM", TurkishCulture)} maaşına atanıyor; gerçek vade {payment.DueDate.ToString("dd MMM", TurkishCulture)}"
+                    : string.Empty;
                 UpcomingPayments.Add(new UpcomingPaymentLine(
                     payment.DueDate.ToString("dd MMM", TurkishCulture),
                     payment.Name,
                     Money(payment.Amount),
-                    payment.IsEstimate
-                        ? "Kart projeksiyonu • tahmini"
-                        : payment.Type switch
-                        {
-                            ObligationType.Loan => "Kredi",
-                            ObligationType.CreditCard => "Kredi kartı",
-                            ObligationType.TemporaryPayment =>
-                                "Geçici ödeme planı",
-                            ObligationType.InstallmentPayment =>
-                                "Taksit / finansman",
-                            _ => "Planlı ödeme"
-                        }));
+                    category + assignmentWarning));
             }
 
             HasUpcomingPayments = UpcomingPayments.Count > 0;
@@ -116,7 +130,10 @@ public partial class DashboardViewModel(
             $"{x.SourceDate:dd.MM} {x.Name}: {Money(x.Amount, 2)}");
         var paymentLines = row.MandatoryItems.Select(x =>
             $"{x.DueDate:dd.MM} {x.Name}: {Money(x.Amount, 2)}" +
-            (x.IsEstimate ? " (tahmini)" : string.Empty));
+            (x.IsEstimate ? " (tahmini)" : string.Empty) +
+            (x.PaymentBeforeSalary
+                ? $" • ⚠ {x.AssignedSalaryDate:dd.MM} maaşı; gerçek vade önce"
+                : string.Empty));
         return string.Join(
             Environment.NewLine,
             incomeLines

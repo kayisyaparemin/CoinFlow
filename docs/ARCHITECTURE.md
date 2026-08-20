@@ -7,12 +7,13 @@ CoinFlow'un merkezi çıktısı `SalaryPeriodProjection` modelidir. Dashboard, 1
 ```text
 FinancialPlan
    ├─ SalaryPeriodCalculator
+   ├─ PaymentAssignmentResolver
    ├─ SalaryResolver + IncomeProjectionCalculator
    ├─ LoanScheduleCalculator
    ├─ CreditCardStatementCalculator
    └─ ScheduledPaymentCalculator
             ↓
- FinancialProjectionCalculator
+ FinancialProjectionCalculator (seçili maaş kullanım şekli)
             ↓
  Dashboard / 12 Aylık / Simulator baseline + scenario
 ```
@@ -32,6 +33,8 @@ Bağımlılık yönü `App → Application → Domain`; `Infrastructure → Appl
 ## Tarih ve para kuralları
 
 - Maaş dönemi `[başlangıç, bitiş)` semantiğine sahiptir.
+- `PaymentAssignmentResolver`, gerçek ödeme tarihini değiştirmeden ödemeyi `UpcomingPeriod` veya `PreviousPeriod` maaş bütçesine atar.
+- `PreviousPeriod` penceresi `(önceki maaş, mevcut maaş]` olduğundan maaş günü ödemesi hiçbir zaman bir ay geriye kaymaz.
 - Maaş günü kısa ayda ayın son gününe kırpılır; aynı kural kredi ve tekrarlı ödeme tarihlerinde kullanılır.
 - Dönem maaşı, dönem başlangıcında yürürlükteki son maaş kaydıdır.
 - Diğer gelir ve tüm yükümlülükler exact date ile tek bir döneme girer.
@@ -52,4 +55,4 @@ Senaryoyu kaydetmek ayrı bir işlemdir. `CoinFlowService.ApplySimulationAsync` 
 
 ## Veri ve migration
 
-Store tüm entity'leri exact-date alanlarıyla round-trip eder. Şema upgrade'i eski kart sütunlarını yeni devreden/dönem içi borç modeline taşır ve kaldırılmış özelliklerin tablolarını temizler. Seed sabit GUID'ler kullanır, yalnız boş development veritabanına uygulanır ve transaction içinde tamamlanır.
+Store tüm entity'leri exact-date alanlarıyla round-trip eder. Şema v5, global `PaymentAssignmentMode` ayarını kalıcılaştırır; eski kurulumların diğer ayarlarını değiştirmeden eksik alanı `UpcomingPeriod` olarak ekler. Şema upgrade'i eski kart sütunlarını yeni devreden/dönem içi borç modeline taşır ve kaldırılmış özelliklerin tablolarını temizler. Seed sabit GUID'ler kullanır, yalnız boş development veritabanına uygulanır ve transaction içinde tamamlanır.

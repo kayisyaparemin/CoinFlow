@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using CoinFlow.App.Models;
 using CoinFlow.Application.Services;
 using CoinFlow.Domain.Calculations;
+using CoinFlow.Domain.Models;
 
 namespace CoinFlow.App.ViewModels;
 
@@ -55,6 +56,7 @@ public partial class SimulationViewModel(
     [ObservableProperty] private string financingCost = string.Empty;
     [ObservableProperty] private bool hasFinancingCost;
     [ObservableProperty] private string friendlySummary = string.Empty;
+    [ObservableProperty] private string assignmentModeText = string.Empty;
 
     public async Task LoadAsync()
     {
@@ -66,6 +68,9 @@ public partial class SimulationViewModel(
                 $"{card.Bank} {card.Name}".Trim(),
                 card.Id));
         }
+
+        AssignmentModeText = AssignmentModeLabel(
+            plan.Settings.PaymentAssignmentMode);
 
         SelectedScenarioType ??= ScenarioTypes[0];
         SelectedCreditCard ??= CreditCards.FirstOrDefault();
@@ -200,15 +205,17 @@ public partial class SimulationViewModel(
         BaselineEnding = Money(baselineEnding);
         ScenarioEnding = Money(scenarioEnding);
         EndingDifference = Money(scenarioEnding - baselineEnding);
-        TightestPeriod = PeriodText(result.Risk.LowestPeriod);
+        AssignmentModeText = AssignmentModeLabel(
+            result.Scenario[0].PaymentAssignmentMode);
+        TightestPeriod = SalaryText(result.Risk.LowestPeriod.Start);
         LowestAvailable = Money(result.Risk.LowestAvailableAfterMandatory);
         LowestSavingsCapacity = Money(result.Risk.LowestSavingsCapacity);
         LowestProjectedSavings = Money(result.Risk.LowestProjectedSavings);
         FirstNegativePeriod =
             result.Risk.FirstNegativeProjectedSavingsPeriod is { } negative
-                ? PeriodText(negative)
+                ? SalaryText(negative.Start)
                 : result.Risk.FirstNegativeSavingsCapacityPeriod is { } capacity
-                    ? PeriodText(capacity)
+                    ? SalaryText(capacity.Start)
                     : "Yok";
         TotalScenarioCost = Money(result.Risk.TotalScenarioCost);
         HasFinancingCost = result.Risk.FinancingCost is not null;
@@ -221,7 +228,7 @@ public partial class SimulationViewModel(
         foreach (var row in result.Rows)
         {
             Results.Add(new SimulationLine(
-                PeriodText(row.Scenario.Period),
+                SalaryText(row.Scenario.PeriodStart),
                 Money(row.Baseline.EndingProjectedSavings),
                 Money(row.Scenario.EndingProjectedSavings),
                 Money(row.ProjectedSavingsDifference),
@@ -230,6 +237,11 @@ public partial class SimulationViewModel(
         }
     }
 
-    private static string PeriodText(SalaryPeriod period) =>
-        $"{period.Start.ToString("dd MMM", TurkishCulture)} → {period.End.ToString("dd MMM yyyy", TurkishCulture)}";
+    private static string SalaryText(DateOnly salaryDate) =>
+        $"{salaryDate.ToString("dd MMMM yyyy", TurkishCulture)} Maaşı";
+
+    private static string AssignmentModeLabel(PaymentAssignmentMode mode) =>
+        mode == PaymentAssignmentMode.PreviousPeriod
+            ? "Maaş kullanımı: Geçmiş dönemi kapatırım"
+            : "Maaş kullanımı: Gelecek dönemi karşılarım";
 }

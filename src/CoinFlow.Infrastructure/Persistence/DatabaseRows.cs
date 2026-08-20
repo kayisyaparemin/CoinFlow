@@ -119,6 +119,7 @@ internal sealed class SettingsRow
     public int SalaryDay { get; set; }
     public decimal MonthlyLivingBudget { get; set; }
     public decimal ProjectionStartingSavings { get; set; }
+    public int PaymentAssignmentMode { get; set; }
     public int SchemaVersion { get; set; }
     public int DevelopmentSeedVersion { get; set; }
 

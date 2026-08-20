@@ -18,7 +18,9 @@ public sealed record ObligationItem(
     decimal Amount,
     bool IsFinalPayment = false,
     bool IsEstimate = false,
-    string Detail = "");
+    string Detail = "",
+    DateOnly AssignedSalaryDate = default,
+    bool PaymentBeforeSalary = false);
 
 public sealed record MandatoryPaymentSummary(
     IReadOnlyList<ObligationItem> Items,
@@ -31,13 +33,16 @@ public sealed record MandatoryPaymentSummary(
 
 public sealed class MandatoryPaymentCalculator(
     LoanScheduleCalculator loanScheduleCalculator,
-    ScheduledPaymentCalculator scheduledPaymentCalculator)
+    ScheduledPaymentCalculator scheduledPaymentCalculator,
+    PaymentAssignmentResolver assignmentResolver)
 {
     public MandatoryPaymentSummary Calculate(
         SalaryPeriod period,
         IEnumerable<Loan> loans,
         IEnumerable<TemporaryPaymentPlan> plans,
-        IEnumerable<ObligationItem> creditCardPayments)
+        IEnumerable<ObligationItem> creditCardPayments,
+        int salaryDay,
+        PaymentAssignmentMode assignmentMode)
     {
         var items = new List<ObligationItem>();
 
@@ -46,7 +51,6 @@ public sealed class MandatoryPaymentCalculator(
             var dates = loanScheduleCalculator.GetPaymentDates(loan);
             var finalDate = dates.LastOrDefault();
             items.AddRange(dates
-                .Where(period.Contains)
                 .Select(date => new ObligationItem(
                     $"{loan.Bank} {loan.Name}".Trim(),
                     ObligationType.Loan,
@@ -55,10 +59,12 @@ public sealed class MandatoryPaymentCalculator(
                     date == finalDate)));
         }
 
-        items.AddRange(scheduledPaymentCalculator.GetItems(period, plans));
-        items.AddRange(creditCardPayments.Where(x => period.Contains(x.DueDate)));
+        items.AddRange(scheduledPaymentCalculator.GetItems(plans));
+        items.AddRange(creditCardPayments);
 
         var ordered = items
+            .Select(item => Assign(item, salaryDay, assignmentMode))
+            .Where(item => item.AssignedSalaryDate == period.Start)
             .OrderBy(x => x.DueDate)
             .ThenBy(x => x.Name)
             .ToArray();
@@ -79,5 +85,21 @@ public sealed class MandatoryPaymentCalculator(
             otherPayments,
             loanPayments + cardPayments + temporaryPayments +
             installmentPayments + otherPayments);
+    }
+
+    private ObligationItem Assign(
+        ObligationItem item,
+        int salaryDay,
+        PaymentAssignmentMode assignmentMode)
+    {
+        var salaryDate = assignmentResolver.ResolveFundingSalaryDate(
+            item.DueDate,
+            salaryDay,
+            assignmentMode);
+        return item with
+        {
+            AssignedSalaryDate = salaryDate,
+            PaymentBeforeSalary = item.DueDate < salaryDate
+        };
     }
 }

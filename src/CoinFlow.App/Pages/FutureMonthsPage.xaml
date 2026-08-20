@@ -7,7 +7,7 @@
         <VerticalStackLayout Spacing="10">
             <Label Text="12 MAAŞ DÖNEMİ" Style="{StaticResource Eyebrow}" />
             <Label Text="İleriye Bakış" Style="{StaticResource PageTitle}" />
-            <Label Text="Takvim ayı değil, maaş gününden sonraki maaş gününe kadar exact-date projeksiyon." Style="{StaticResource MutedText}" />
+            <Label Text="Gerçek ödeme tarihleri korunur; seçili maaş kullanım şekline göre ilgili maaş bütçesine atanır." Style="{StaticResource MutedText}" />
             <Border Padding="14">
                 <VerticalStackLayout Spacing="8">
                     <Label Text="Ne zaman karşılayabilirim?" Style="{StaticResource SectionTitle}" />
@@ -31,6 +31,7 @@
                         </Border.GestureRecognizers>
                         <VerticalStackLayout Spacing="9">
                             <Label Text="{Binding Period}" FontFamily="OpenSansSemibold" FontSize="17" />
+                            <Label Text="{Binding Assignment}" Style="{StaticResource MutedText}" />
                             <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" RowSpacing="6">
                                 <Label Text="Zorunlular sonrası" Style="{StaticResource MutedText}" />
                                 <Label Grid.Column="1" Text="{Binding AvailableAfterMandatory}" FontFamily="OpenSansSemibold" />

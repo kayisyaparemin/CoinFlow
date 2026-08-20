@@ -6,19 +6,27 @@ public sealed class FinancialProjectionCalculator(
     SalaryPeriodCalculator salaryPeriodCalculator,
     IncomeProjectionCalculator incomeProjectionCalculator,
     CreditCardStatementCalculator cardStatementCalculator,
-    MandatoryPaymentCalculator mandatoryPaymentCalculator)
+    MandatoryPaymentCalculator mandatoryPaymentCalculator,
+    PaymentAssignmentResolver assignmentResolver)
 {
     public IReadOnlyList<SalaryPeriodProjection> Calculate(
         FinancialPlan plan,
         DateOnly asOf,
-        int periodCount = 12)
+        int periodCount = 12,
+        PaymentAssignmentMode? assignmentModeOverride = null)
     {
         Validate(plan);
+        var assignmentMode = assignmentModeOverride ??
+                             plan.Settings.PaymentAssignmentMode;
         var periods = salaryPeriodCalculator.GetPeriods(
             asOf,
             plan.Settings.SalaryDay,
             periodCount);
-        var cardBundle = BuildCardPayments(plan.CreditCards, periods[^1].End);
+        var cardBundle = BuildCardPayments(
+            plan.CreditCards,
+            periods[^1].End,
+            plan.Settings.SalaryDay,
+            assignmentMode);
         var result = new List<SalaryPeriodProjection>(periods.Count);
         var openingSavings = plan.Settings.ProjectionStartingSavings;
 
@@ -32,21 +40,30 @@ public sealed class FinancialProjectionCalculator(
                 period,
                 plan.Loans,
                 plan.PaymentPlans,
-                cardBundle.Obligations);
+                cardBundle.Obligations,
+                plan.Settings.SalaryDay,
+                assignmentMode);
             var availableAfterMandatory = income.TotalIncome - mandatory.Total;
             var estimatedSavings = availableAfterMandatory -
                                    plan.Settings.MonthlyLivingBudget;
             var largeExpenses = plan.PlannedLargeExpenses
                 .Where(x => x.Status == PlannedExpenseStatus.Planned)
-                .Where(x => period.Contains(x.ExactDate))
+                .Where(x => assignmentResolver.ResolveFundingSalaryDate(
+                    x.ExactDate,
+                    plan.Settings.SalaryDay,
+                    assignmentMode) == period.Start)
                 .OrderBy(x => x.ExactDate)
                 .ThenBy(x => x.Name)
                 .ToArray();
             var largeExpenseTotal = largeExpenses.Sum(x => x.Amount);
             var endingSavings = openingSavings + estimatedSavings - largeExpenseTotal;
             var statuses = cardBundle.Statuses
-                .Where(x => period.Contains(x.PaymentDueDate))
+                .Where(x => x.AssignedSalaryDate == period.Start)
                 .ToArray();
+            var paymentWindow = assignmentResolver.ResolveWindow(
+                period.Start,
+                plan.Settings.SalaryDay,
+                assignmentMode);
 
             result.Add(new SalaryPeriodProjection(
                 period.Start,
@@ -74,7 +91,10 @@ public sealed class FinancialProjectionCalculator(
                 income.Items,
                 mandatory.Items,
                 largeExpenses,
-                statuses));
+                statuses,
+                assignmentMode,
+                paymentWindow.StartInclusive,
+                paymentWindow.EndInclusive));
 
             openingSavings = endingSavings;
         }
@@ -84,7 +104,9 @@ public sealed class FinancialProjectionCalculator(
 
     private CardPaymentBundle BuildCardPayments(
         IEnumerable<CreditCard> cards,
-        DateOnly horizonEnd)
+        DateOnly horizonEnd,
+        int salaryDay,
+        PaymentAssignmentMode assignmentMode)
     {
         var obligations = new List<ObligationItem>();
         var statuses = new List<CreditCardPaymentProjectionStatus>();
@@ -104,6 +126,11 @@ public sealed class FinancialProjectionCalculator(
                          .Project(card, statementCount, useProjectionFallback: true)
                          .Where(x => x.PaymentDueDate < horizonEnd))
             {
+                var assignedSalaryDate = assignmentResolver
+                    .ResolveFundingSalaryDate(
+                        statement.PaymentDueDate,
+                        salaryDay,
+                        assignmentMode);
                 statuses.Add(new CreditCardPaymentProjectionStatus(
                     card.Id,
                     cardName,
@@ -113,7 +140,9 @@ public sealed class FinancialProjectionCalculator(
                     statement.MinimumPayment,
                     statement.Payment,
                     statement.PaymentResolution,
-                    statement.AppliedPaymentType));
+                    statement.AppliedPaymentType,
+                    assignedSalaryDate,
+                    statement.PaymentDueDate < assignedSalaryDate));
 
                 if (statement.Payment is decimal payment)
                 {
@@ -142,6 +171,11 @@ public sealed class FinancialProjectionCalculator(
     private static void Validate(FinancialPlan plan)
     {
         CalendarRules.ValidateDay(plan.Settings.SalaryDay);
+        if (!Enum.IsDefined(plan.Settings.PaymentAssignmentMode))
+        {
+            throw new InvalidOperationException(
+                "Maaş kullanım şekli geçersiz.");
+        }
         if (plan.Settings.MonthlyLivingBudget < 0m)
         {
             throw new InvalidOperationException(
@@ -168,4 +202,3 @@ public sealed class FinancialProjectionCalculator(
         IReadOnlyList<ObligationItem> Obligations,
         IReadOnlyList<CreditCardPaymentProjectionStatus> Statuses);
 }
-

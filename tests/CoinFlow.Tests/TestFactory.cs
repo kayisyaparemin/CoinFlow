@@ -10,15 +10,20 @@ internal static class TestFactory
     public static FinancialProjectionCalculator ProjectionCalculator()
     {
         var salaryPeriods = new SalaryPeriodCalculator();
+        var assignment = new PaymentAssignmentResolver(salaryPeriods);
         var income = new IncomeProjectionCalculator(new SalaryResolver());
         var loans = new LoanScheduleCalculator();
         var scheduled = new ScheduledPaymentCalculator();
-        var mandatory = new MandatoryPaymentCalculator(loans, scheduled);
+        var mandatory = new MandatoryPaymentCalculator(
+            loans,
+            scheduled,
+            assignment);
         return new FinancialProjectionCalculator(
             salaryPeriods,
             income,
             new CreditCardStatementCalculator(),
-            mandatory);
+            mandatory,
+            assignment);
     }
 
     public static CoinFlowService Service(
@@ -48,7 +53,8 @@ internal static class TestFactory
         {
             SalaryDay = 10,
             MonthlyLivingBudget = 30_000m,
-            ProjectionStartingSavings = 0m
+            ProjectionStartingSavings = 0m,
+            PaymentAssignmentMode = PaymentAssignmentMode.UpcomingPeriod
         },
         Salaries =
         [
@@ -172,4 +178,3 @@ internal static class TestFactory
         public DateTimeOffset UtcNow { get; } = utcNow;
     }
 }
-

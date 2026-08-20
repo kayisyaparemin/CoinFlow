@@ -14,3 +14,8 @@
 - [x] Domain, simulator ve SQLite test paketini tamamla
 - [x] Android Release build'i doğrula
 - [x] Son APK publish, imza/package/hash ve repository taramasını raporla
+- [x] Global Upcoming/Previous ödeme-maaş atama tercihini ekle
+- [x] Exact ödeme takvimi ile maaş bütçesi atamasını ayrı motorlarda tut
+- [x] Ayarlar ekranına dinamik örnekli maaş kullanım şekli seçimini ekle
+- [x] Maaştan önce vadesi gelen ödemeler için bilgi/risk uyarısı ekle
+- [x] Assignment mode persistence ve legacy settings migration testlerini ekle

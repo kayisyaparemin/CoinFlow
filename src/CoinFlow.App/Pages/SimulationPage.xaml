@@ -8,6 +8,7 @@
             <Label Text="PLANLAMADAN ÖNCE DENE" Style="{StaticResource Eyebrow}" />
             <Label Text="Simülatör" Style="{StaticResource PageTitle}" />
             <Label Text="Baseline ve yeni plan aynı 12 dönem projection engine'iyle hesaplanır. Simüle Et veritabanına kayıt yazmaz." Style="{StaticResource MutedText}" />
+            <Label Text="{Binding AssignmentModeText}" FontFamily="OpenSansSemibold" />
 
             <Border>
                 <VerticalStackLayout Spacing="9">

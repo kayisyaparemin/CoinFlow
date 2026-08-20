@@ -9,7 +9,7 @@ namespace CoinFlow.Infrastructure.Persistence;
 public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
 {
     private const string DateFormat = "yyyy-MM-dd";
-    private const int CurrentSchemaVersion = 4;
+    private const int CurrentSchemaVersion = 5;
     private readonly SQLiteAsyncConnection _database;
     private readonly bool _seedDevelopmentData;
     private readonly DateOnly _migrationDate;
@@ -87,6 +87,8 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
                     await DevelopmentDataSeeder.SeedAsync(_database);
                     settings.MonthlyLivingBudget = 30_000m;
                     settings.ProjectionStartingSavings = 0m;
+                    settings.PaymentAssignmentMode =
+                        (int)PaymentAssignmentMode.UpcomingPeriod;
                 }
 
                 settings.DevelopmentSeedVersion =
@@ -133,6 +135,8 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
             var settings = await _database.Table<SettingsRow>().FirstAsync();
             settings.MonthlyLivingBudget = 30_000m;
             settings.ProjectionStartingSavings = 0m;
+            settings.PaymentAssignmentMode =
+                (int)PaymentAssignmentMode.UpcomingPeriod;
             settings.DevelopmentSeedVersion =
                 DevelopmentDataSeeder.CurrentSeedVersion;
             await _database.UpdateAsync(settings);
@@ -148,7 +152,9 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         {
             SalaryDay = row.SalaryDay,
             MonthlyLivingBudget = row.MonthlyLivingBudget,
-            ProjectionStartingSavings = row.ProjectionStartingSavings
+            ProjectionStartingSavings = row.ProjectionStartingSavings,
+            PaymentAssignmentMode =
+                (PaymentAssignmentMode)row.PaymentAssignmentMode
         };
     }
 
@@ -162,6 +168,8 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         row.MonthlyLivingBudget = settings.MonthlyLivingBudget;
         row.ProjectionStartingSavings =
             settings.ProjectionStartingSavings;
+        row.PaymentAssignmentMode =
+            (int)settings.PaymentAssignmentMode;
         await _database.UpdateAsync(row);
     }
 
@@ -632,6 +640,8 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         SalaryDay = 10,
         MonthlyLivingBudget = _seedDevelopmentData ? 30_000m : 0m,
         ProjectionStartingSavings = 0m,
+        PaymentAssignmentMode =
+            (int)PaymentAssignmentMode.UpcomingPeriod,
         SchemaVersion = CurrentSchemaVersion,
         DevelopmentSeedVersion = 0,
         DevelopmentSeedEnabled = _seedDevelopmentData,

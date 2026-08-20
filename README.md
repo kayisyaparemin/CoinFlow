@@ -8,6 +8,13 @@ Uygulama mikro harcama takibi yapmaz. Ana kavramlar maaş dönemi, toplam gelir,
 
 Her maaş dönemi `[başlangıç, sonraki maaş günü)` aralığıdır. Dönem başlangıcı dahildir, sonraki maaş günü dahil değildir.
 
+Kullanıcı, ödemelerin maaş bütçesine nasıl atanacağını global olarak seçebilir:
+
+- **Gelecek dönemi karşılarım:** Maaş tarihi dahil, sonraki maaş tarihi hariç ödemeler aynı maaşa atanır.
+- **Geçmiş dönemi kapatırım:** Önceki maaş tarihinden sonraki ödemeler mevcut maaşa atanır; maaş günündeki ödeme geriye kaymaz.
+
+Kredi, kart ve planların gerçek ödeme tarihleri bu tercihten etkilenmez. `PaymentAssignmentResolver` yalnız bütçe atamasını yapar; maaştan önce vadesi gelen ödemeler ayrıca uyarı olarak gösterilir.
+
 ```text
 Toplam Gelir = Maaş + Döneme denk gelen diğer gelirler
 Zorunlu Ödeme = Krediler + Kart ödemeleri + geçici/taksitli/diğer planlı ödemeler
@@ -27,7 +34,7 @@ Alt navigasyon tam olarak dört ana bölüm içerir:
 3. **Simülatör:** Nakit alışveriş, tek çekim/taksitli kart, finansman, nakit borç, ileri tarihli tek/tekrarlı ödeme, gelecek gelir ve maaş değişimi senaryoları.
 4. **Gelir & Ödemeler:** Maaş, diğer gelir, kredi, kredi kartı, geçici/taksitli ödeme ve büyük gider yönetimi.
 
-Ayarlar, ikincil bir rota olarak maaş günü, aylık yaşam bütçesi ve başlangıç birikimini düzenler. Development build'de kanonik veriyi yeniden yükleme seçeneği bulunur.
+Ayarlar, ikincil bir rota olarak maaş günü, maaş kullanım şekli, aylık yaşam bütçesi ve başlangıç birikimini düzenler. Development build'de kanonik veriyi yeniden yükleme seçeneği bulunur.
 
 ## Mimari
 
@@ -76,7 +83,7 @@ dotnet publish src/CoinFlow.App/CoinFlow.App.csproj -f net8.0-android -c Release
 
 ## Migration
 
-SQLite şema sürümü 4'tür. Mevcut kullanıcı verisi yerinde yükseltilir; eski kart aggregate alanları yeni kart modeline aktarılır. Kaldırılan mikro harcama, snapshot ve acil fon tabloları upgrade sırasında düşürülür. Development verisini kanonik duruma getirmek için ayarlardaki açık onaylı sıfırlama kullanılabilir.
+SQLite şema sürümü 5'tir. Mevcut kullanıcı verisi yerinde yükseltilir; eski kart aggregate alanları yeni kart modeline aktarılır ve ödeme atama tercihi olmayan kurulumlar bir kez `UpcomingPeriod` varsayılanını alır. Kaldırılan mikro harcama, snapshot ve acil fon tabloları upgrade sırasında düşürülür. Development verisini kanonik duruma getirmek için ayarlardaki açık onaylı sıfırlama kullanılabilir.
 
 ## CI/CD
 
