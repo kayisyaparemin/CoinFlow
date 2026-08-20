@@ -21,25 +21,25 @@ public partial class CommitmentsViewModel(
         PaymentStrategies { get; } =
     [
         new("Her ekstrede bana sor", CreditCardPaymentStrategy.AskEachStatement),
-        new("Sürekli asgari", CreditCardPaymentStrategy.Minimum),
-        new("Ekstre tamamını öde", CreditCardPaymentStrategy.FullStatement),
+        new("Her ekstrede asgari öde", CreditCardPaymentStrategy.Minimum),
+        new("Ekstrenin tamamını öde", CreditCardPaymentStrategy.FullStatement),
         new("Sabit tutar öde", CreditCardPaymentStrategy.FixedAmount)
     ];
 
     public ObservableCollection<SelectionOption<ProjectionFallbackStrategy>>
         ProjectionFallbackStrategies { get; } =
     [
-        new("Tahmin yapma", ProjectionFallbackStrategy.None),
-        new("Asgari varsay", ProjectionFallbackStrategy.Minimum),
-        new("Tam ödeme varsay", ProjectionFallbackStrategy.FullStatement),
-        new("Sabit tutar varsay", ProjectionFallbackStrategy.FixedAmount)
+        new("Hesaba katma", ProjectionFallbackStrategy.None),
+        new("Asgari ödeme üzerinden hesapla", ProjectionFallbackStrategy.Minimum),
+        new("Ekstrenin tamamı üzerinden hesapla", ProjectionFallbackStrategy.FullStatement),
+        new("Sabit tutar üzerinden hesapla", ProjectionFallbackStrategy.FixedAmount)
     ];
 
     public ObservableCollection<SelectionOption<CreditCardPaymentType>>
         PaymentPlanTypes { get; } =
     [
-        new("Asgari", CreditCardPaymentType.Minimum),
-        new("Ekstre tamamı", CreditCardPaymentType.FullStatement),
+        new("Asgari ödeme", CreditCardPaymentType.Minimum),
+        new("Ekstrenin tamamı", CreditCardPaymentType.FullStatement),
         new("Özel tutar", CreditCardPaymentType.FixedAmount)
     ];
 
@@ -160,7 +160,7 @@ public partial class CommitmentsViewModel(
                                 paymentPlan.OriginalAmount is decimal original &&
                                 paymentPlan.TotalRepaymentAmount is decimal repayment
                 ? $"Ana tutar: {Money(original)} • Toplam geri ödeme: {Money(repayment)} • {paymentPlan.Installments.Count} ödeme"
-                : $"{paymentPlan.Installments.Count(x => !x.IsPaid)} ödeme • exact tarihli";
+                : $"{paymentPlan.Installments.Count(x => !x.IsPaid)} ödeme • tarihleri belli";
             _allItems.Add(new FinancialRecordLine(
                 paymentPlan.Id,
                 ManagementSection.Payment,
@@ -172,9 +172,9 @@ public partial class CommitmentsViewModel(
                 Money(paymentPlan.Installments.Where(x => !x.IsPaid).Sum(x => x.Amount)),
                 paymentPlan.Kind switch
                 {
-                    PaymentPlanKind.Temporary => "Geçici plan",
+                    PaymentPlanKind.Temporary => "Geçici ödeme planı",
                     PaymentPlanKind.Installment => "Taksit / finansman",
-                    PaymentPlanKind.Recurring => "Dönemsel ödeme",
+                    PaymentPlanKind.Recurring => "Düzenli ödeme",
                     _ => "Planlı ödeme"
                 }));
         }
@@ -186,7 +186,7 @@ public partial class CommitmentsViewModel(
                 1,
                 useProjectionFallback: true)[0];
             var paymentText = upcoming.Payment is decimal payment
-                ? $"Yaklaşan tahmini ödeme: {Money(payment)} • {upcoming.PaymentDueDate:dd.MM.yyyy}"
+                ? $"Yaklaşan tahmini ödeme: {Money(payment)} • Son ödeme: {upcoming.PaymentDueDate:dd.MM.yyyy}"
                 : "Yaklaşan ödeme henüz belirlenmedi";
             _allItems.Add(new FinancialRecordLine(
                 card.Id,
@@ -195,7 +195,7 @@ public partial class CommitmentsViewModel(
                 $"{card.Bank} {card.Name}".Trim(),
                 paymentText,
                 Money(card.KnownTotalDebt),
-                $"Ödeme: {StrategyLabel(card.PaymentStrategy)} • Projeksiyon: {FallbackLabel(card.ProjectionFallbackStrategy)}"));
+                $"Ödeme tercihi: {StrategyLabel(card.PaymentStrategy)} • Henüz karar vermediğim ekstrelerde: {FallbackLabel(card.ProjectionFallbackStrategy)}"));
         }
 
         foreach (var expense in plan.PlannedLargeExpenses)
@@ -207,7 +207,7 @@ public partial class CommitmentsViewModel(
                 expense.Name,
                 $"{expense.ExactDate:dd.MM.yyyy} • {expense.Note}",
                 Money(expense.Amount),
-                "Büyük planlı ödeme"));
+                "Planlı büyük ödeme"));
         }
 
         RefreshRecordTypes();
@@ -224,7 +224,7 @@ public partial class CommitmentsViewModel(
         try
         {
             await service.CompleteInitialPaymentStrategySetupAsync(mode);
-            SetStatus("Maaş kullanım düzeni kaydedildi; projeksiyon hazır.");
+            SetStatus("Maaş kullanım düzeni kaydedildi; 12 aylık plan hazır.");
             return true;
         }
         catch (Exception exception)
@@ -311,8 +311,8 @@ public partial class CommitmentsViewModel(
         try
         {
             var parsed = RequirePositive(
-                ParseMoney(CardChargeAmount, "Kart charge tutarı"),
-                "Kart charge tutarı");
+                ParseMoney(CardChargeAmount, "Kart harcaması tutarı"),
+                "Kart harcaması tutarı");
             var id = Guid.NewGuid();
             CardFutureCharges.Add(new DatedAmountLine(
                 id,
@@ -337,7 +337,7 @@ public partial class CommitmentsViewModel(
         try
         {
             var type = SelectedPaymentPlanType?.Value
-                ?? throw new InvalidOperationException("Ödeme şekli seçilmelidir.");
+                ?? throw new InvalidOperationException("Ödeme tercihi seçmelisin.");
             var parsed = type == CreditCardPaymentType.FixedAmount
                 ? RequirePositive(
                     ParseMoney(CardPaymentPlanAmount, "Özel ödeme tutarı"),
@@ -387,7 +387,7 @@ public partial class CommitmentsViewModel(
         RefreshRecordTypes();
         SelectedRecordType = RecordTypes.Single(x => x.Value == "card");
         IsEditingCard = true;
-        SaveButtonText = "Kartı güncelle";
+        SaveButtonText = "Değişiklikleri Kaydet";
         Name = card.Name;
         Bank = card.Bank;
         CardLimit = card.Limit.ToString("N2", TurkishCulture);
@@ -556,7 +556,7 @@ public partial class CommitmentsViewModel(
     {
         if (PlanInstallments.Count == 0)
         {
-            throw new InvalidOperationException("En az bir exact ödeme ekleyin.");
+            throw new InvalidOperationException("En az bir ödeme eklemelisin.");
         }
 
         var id = Guid.NewGuid();
@@ -616,8 +616,8 @@ public partial class CommitmentsViewModel(
                 fallback == ProjectionFallbackStrategy.FixedAmount
                     ? RequirePositive(ParseMoney(
                         ProjectionFallbackFixedAmount,
-                        "Projeksiyon sabit tutarı"),
-                        "Projeksiyon sabit tutarı")
+                        "Gelecek hesaplamada kullanılacak sabit tutar"),
+                        "Gelecek hesaplamada kullanılacak sabit tutar")
                     : null,
             Charges = CardFutureCharges
                 .OrderBy(x => x.Date)
@@ -660,7 +660,7 @@ public partial class CommitmentsViewModel(
             RecordTypes.Add(new SelectionOption<string>("Kredi kartı", "card"));
             RecordTypes.Add(new SelectionOption<string>("Geçici ödeme planı", "temporary"));
             RecordTypes.Add(new SelectionOption<string>("Taksit / finansman", "installment"));
-            RecordTypes.Add(new SelectionOption<string>("Büyük planlı ödeme", "large"));
+            RecordTypes.Add(new SelectionOption<string>("Planlı büyük ödeme", "large"));
         }
 
         SelectedRecordType =
@@ -714,8 +714,8 @@ public partial class CommitmentsViewModel(
         strategy switch
         {
             CreditCardPaymentStrategy.AskEachStatement => "Her ekstrede sor",
-            CreditCardPaymentStrategy.Minimum => "Sürekli asgari",
-            CreditCardPaymentStrategy.FullStatement => "Ekstre tamamı",
+            CreditCardPaymentStrategy.Minimum => "Her ekstrede asgari öde",
+            CreditCardPaymentStrategy.FullStatement => "Ekstrenin tamamını öde",
             CreditCardPaymentStrategy.FixedAmount => "Sabit tutar",
             _ => "—"
         };
@@ -723,10 +723,10 @@ public partial class CommitmentsViewModel(
     private static string FallbackLabel(ProjectionFallbackStrategy strategy) =>
         strategy switch
         {
-            ProjectionFallbackStrategy.None => "Belirsiz",
-            ProjectionFallbackStrategy.Minimum => "Asgari varsayılıyor",
-            ProjectionFallbackStrategy.FullStatement => "Tam ödeme varsayılıyor",
-            ProjectionFallbackStrategy.FixedAmount => "Sabit tutar varsayılıyor",
+            ProjectionFallbackStrategy.None => "Hesaba katma",
+            ProjectionFallbackStrategy.Minimum => "Asgari ödeme üzerinden hesapla",
+            ProjectionFallbackStrategy.FullStatement => "Ekstrenin tamamı üzerinden hesapla",
+            ProjectionFallbackStrategy.FixedAmount => "Sabit tutar üzerinden hesapla",
             _ => "—"
         };
 }

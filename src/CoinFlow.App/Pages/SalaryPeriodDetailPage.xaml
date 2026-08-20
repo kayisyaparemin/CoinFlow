@@ -154,10 +154,10 @@
                 <Border IsVisible="{Binding Detail.HasComparison}">
                     <VerticalStackLayout Spacing="13">
                         <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="14">
-                            <Label Text="Mevcut Plan / Senaryo"
+                            <Label Text="Mevcut Plan / Yeni Plan"
                                    Style="{StaticResource SectionTitle}" />
                             <Label Grid.Column="1" Text="MEVCUT" Style="{StaticResource Eyebrow}" />
-                            <Label Grid.Column="2" Text="SENARYO" Style="{StaticResource Eyebrow}" />
+                            <Label Grid.Column="2" Text="YENİ PLAN" Style="{StaticResource Eyebrow}" />
                         </Grid>
                         <VerticalStackLayout BindableLayout.ItemsSource="{Binding Detail.ComparisonRows}"
                                              Spacing="12">
@@ -167,11 +167,11 @@
                                         <Label Text="{Binding Label}" FontFamily="OpenSansSemibold" />
                                         <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
                                             <VerticalStackLayout>
-                                                <Label Text="Mevcut" Style="{StaticResource MutedText}" />
+                                                <Label Text="Mevcut Plan" Style="{StaticResource MutedText}" />
                                                 <Label Text="{Binding BaselineText}" />
                                             </VerticalStackLayout>
                                             <VerticalStackLayout Grid.Column="1">
-                                                <Label Text="Planla" Style="{StaticResource MutedText}" />
+                                                <Label Text="Yeni Plan" Style="{StaticResource MutedText}" />
                                                 <Label Text="{Binding ScenarioText}" FontFamily="OpenSansSemibold" />
                                             </VerticalStackLayout>
                                             <VerticalStackLayout Grid.Column="2">
@@ -396,7 +396,7 @@
                                                     Margin="0,0,6,3"
                                                     IsVisible="{Binding IsBeforeFundingSalary}"
                                                     BackgroundColor="{StaticResource WarningSurface}">
-                                                <Label Text="Erken Vade"
+                                                <Label Text="Maaştan Önce"
                                                        FontSize="11"
                                                        TextColor="{StaticResource WarningText}" />
                                             </Border>
@@ -422,10 +422,10 @@
                             </DataTemplate>
                         </BindableLayout.ItemTemplate>
                     </VerticalStackLayout>
-                    <Label Text="Erken Vade: Gerçek vade tarihi, seçili düzende atandığı maaştan önce."
+                    <Label Text="Maaştan Önce: Son ödeme tarihi, bu ödemeyi karşılayan maaştan önce."
                            IsVisible="{Binding Detail.HasBeforeSalaryPayments}"
                            Style="{StaticResource MutedText}" />
-                    <Label Text="Tahmini: Gerçek kart ödeme planı girilmediği için projection fallback kullanıldı."
+                    <Label Text="Tahmini: Gerçek kart ödeme planı girilmediği için seçtiğin gelecek hesaplama tercihi kullanıldı."
                            IsVisible="{Binding Detail.HasEstimatedPayments}"
                            Style="{StaticResource MutedText}" />
                 </VerticalStackLayout>

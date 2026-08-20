@@ -5,7 +5,7 @@
              Title="Ayarlar">
     <ScrollView>
         <VerticalStackLayout Padding="20,18,20,36" Spacing="16">
-            <Label Text="PROJEKSİYON AYARLARI" Style="{StaticResource Eyebrow}" />
+            <Label Text="PLANLAMA AYARLARI" Style="{StaticResource Eyebrow}" />
             <Label Text="Ayarlar" Style="{StaticResource PageTitle}" />
 
             <Border>
@@ -35,7 +35,7 @@
                     <Button Text="Maaş Ekle ve Düzeni Seç"
                             IsVisible="{Binding HasNoStrategy}"
                             Command="{Binding OpenCommitmentsCommand}" />
-                    <Label Text="Gerçek kredi, kart ve ödeme vadeleri değişmez; yeni kayıt yalnız seçilen maaştan sonraki bütçe atamalarını etkiler."
+                    <Label Text="Ödeme tarihleri değişmez; seçtiğin düzen yalnızca hangi maaşın hangi ödemeleri karşılayacağını belirler."
                            Style="{StaticResource MutedText}" />
                 </VerticalStackLayout>
             </Border>
@@ -62,8 +62,8 @@
 
             <Border>
                 <VerticalStackLayout Spacing="9">
-                    <Label Text="Tahmini Yaşam Bütçesi" Style="{StaticResource SectionTitle}" />
-                    <Label Text="Aylık tahmini yaşam bütçesi" Style="{StaticResource FieldLabel}" />
+                    <Label Text="Aylık Tahmini Yaşam Bütçesi" Style="{StaticResource SectionTitle}" />
+                    <Label Text="Aylık tutar" Style="{StaticResource FieldLabel}" />
                     <Entry Text="{Binding MonthlyLivingBudget}" Keyboard="Numeric" />
                     <Label Text="Yemek, market, yakıt ve tek tek takip edilmeyen günlük yaşam giderlerinin yaklaşık toplamı." Style="{StaticResource MutedText}" />
                 </VerticalStackLayout>
@@ -71,13 +71,13 @@
 
             <Border>
                 <VerticalStackLayout Spacing="9">
-                    <Label Text="Tahmini Birikim Başlangıcı" Style="{StaticResource SectionTitle}" />
-                    <Label Text="Projeksiyon başlangıç birikimi" Style="{StaticResource FieldLabel}" />
+                    <Label Text="Planlama Başlangıç Birikimi" Style="{StaticResource SectionTitle}" />
+                    <Label Text="Planlama başlangıç birikimi" Style="{StaticResource FieldLabel}" />
                     <Entry Text="{Binding ProjectionStartingSavings}" Keyboard="Numeric" />
                     <Label Text="Bu tutar yalnızca gelecek tahminlerinin başlangıç noktasıdır; gerçek banka bakiyesi olarak takip edilmez." Style="{StaticResource MutedText}" />
-                    <Label Text="Planlama başlangıç tarihi" Style="{StaticResource FieldLabel}" />
+                    <Label Text="Planlama Başlangıç Tarihi" Style="{StaticResource FieldLabel}" />
                     <Label Text="{Binding ProjectionAnchorText}" FontFamily="OpenSansSemibold" />
-                    <Label Text="Bu kalıcı snapshot sınırıdır; banka bakiyesi veya günlük harcama takibi değildir." Style="{StaticResource MutedText}" />
+                    <Label Text="Bu tarihten önceki hareketler gelecek planına dahil edilmez." Style="{StaticResource MutedText}" />
                     <Button Text="Ayarları Kaydet" Command="{Binding SaveCommand}" />
                 </VerticalStackLayout>
             </Border>
@@ -89,7 +89,7 @@
                     <Entry Text="{Binding CreditCardCarryInterestRate}" Keyboard="Numeric" />
                     <Label Text="Finansman açığı faizi (%)" Style="{StaticResource FieldLabel}" />
                     <Entry Text="{Binding DeficitFinancingInterestRate}" Keyboard="Numeric" />
-                    <Label Text="Bu oranlar gelecek projeksiyonu için kullanılan yaklaşık aylık faiz varsayımlarıdır. Banka faiz, vergi ve ücretlerini birebir temsil etmeyebilir."
+                    <Label Text="Bu oranlar gelecek tahminleri için kullanılan yaklaşık aylık faiz varsayımlarıdır. Banka faiz, vergi ve ücretlerini birebir temsil etmeyebilir."
                            Style="{StaticResource MutedText}" />
                     <Button Text="Faiz Varsayımlarını Kaydet" Command="{Binding SaveCommand}" />
                 </VerticalStackLayout>
@@ -111,7 +111,7 @@
 
             <Border IsVisible="{Binding IsDevelopment}">
                 <VerticalStackLayout Spacing="8">
-                    <Label Text="Development Verisi" Style="{StaticResource SectionTitle}" />
+                    <Label Text="Geliştirme Sürümü" Style="{StaticResource SectionTitle}" />
                     <Border BackgroundColor="{StaticResource SoftPink}" Padding="12">
                         <VerticalStackLayout Spacing="7">
                             <Label Text="Verileri Sil" FontFamily="OpenSansSemibold" />
@@ -124,10 +124,10 @@
                     </Border>
                     <Border BackgroundColor="{StaticResource SoftSky}" Padding="12">
                         <VerticalStackLayout Spacing="7">
-                            <Label Text="Seed Data Yükle" FontFamily="OpenSansSemibold" />
-                            <Label Text="Canonical development verisini boş veya mevcut development veritabanına yükler. Tekrar çalıştırmak duplicate üretmez."
+                            <Label Text="Test Verisini Yükle" FontFamily="OpenSansSemibold" />
+                            <Label Text="Örnek finans kayıtlarını yükler. Aynı kayıtları yeniden oluşturmaz."
                                    Style="{StaticResource MutedText}" />
-                            <Button Text="Seed Data Yükle"
+                            <Button Text="Test Verisini Yükle"
                                     Clicked="OnLoadCanonicalSeedClicked" />
                         </VerticalStackLayout>
                     </Border>

@@ -20,9 +20,9 @@ public partial class SimulationViewModel(
         new("Kredi kartı taksitli", SimulationScenarioType.CreditCardInstallmentPurchase),
         new("Finansman / kredi", SimulationScenarioType.FinancingLoan),
         new("Nakit borç", SimulationScenarioType.CashDebt),
-        new("Gelecek toplu ödeme", SimulationScenarioType.FutureOneTimePayment),
-        new("Dönemsel ödeme", SimulationScenarioType.RecurringPayment),
-        new("Gelecek gelir", SimulationScenarioType.FutureIncome),
+        new("Tek seferlik ödeme", SimulationScenarioType.FutureOneTimePayment),
+        new("Düzenli ödeme", SimulationScenarioType.RecurringPayment),
+        new("Tek seferlik gelir", SimulationScenarioType.FutureIncome),
         new("Maaş değişikliği", SimulationScenarioType.SalaryChange),
         new("Maaş kullanım düzeni değişikliği", SimulationScenarioType.PaymentStrategyChange),
         new("Kart ekstresini tamamen kapat", SimulationScenarioType.CreditCardFullPayment)
@@ -82,7 +82,7 @@ public partial class SimulationViewModel(
     [ObservableProperty] private string scenarioInterest = "—";
     [ObservableProperty] private string interestDifference = "—";
     [ObservableProperty] private string interestDifferenceTitle =
-        "Ek faiz maliyeti";
+        "Ek Faiz Yükü";
     [ObservableProperty] private string friendlySummary = string.Empty;
     [ObservableProperty] private string assignmentModeText = string.Empty;
     [ObservableProperty] private bool hasStrategyTransitionSummary;
@@ -99,7 +99,7 @@ public partial class SimulationViewModel(
     private bool isPlanApplied;
     [ObservableProperty] private string applyButtonText = "Planı Uygula";
     [ObservableProperty] private string applyConfirmationText =
-        "Bu simülasyon gerçek finans planına eklenecek.";
+        "Bu plan gerçek finans planına eklenecek.";
 
     public bool CanApplyPlan =>
         HasResults && !IsApplyingPlan && !IsPlanApplied;
@@ -223,33 +223,33 @@ public partial class SimulationViewModel(
         IsCardPayoff = type == SimulationScenarioType.CreditCardFullPayment;
         NeedsAmount = !IsStrategyChange && !IsCardPayoff;
         StartDateLabel = IsCardPayoff
-            ? "Tam ödeme / son ödeme tarihi"
+            ? "Tam ödeme tarihi"
             : "Başlangıç / işlem tarihi";
         IsRegularScenario = !IsStrategyChange;
         ScenarioDescription = type switch
         {
             SimulationScenarioType.CashPurchase =>
-                "Büyük nakit gideri exact tarihinde tahmini birikimden düşer.",
+                "Tutar, seçtiğin tarihte tahmini birikimden düşer.",
             SimulationScenarioType.CreditCardSinglePayment =>
-                "Harcama gerçek kart kesim ve son ödeme tarihleriyle hesaplanır.",
+                "Harcama, kartının ekstre kesim ve son ödeme tarihlerine göre hesaplanır.",
             SimulationScenarioType.CreditCardInstallmentPurchase =>
-                "Taksit posting tarihleri gerçek kart statement motoruna eklenir.",
+                "Taksitler ilgili kart ekstrelerine yansıtılır.",
             SimulationScenarioType.FinancingLoan =>
-                "Toplam geri ödeme exact tarihlerle taksit planına dönüşür.",
+                "Toplam geri ödeme, ilk ödeme tarihinden başlayarak taksitlere bölünür.",
             SimulationScenarioType.CashDebt =>
-                "Faizsiz borç tutarı ödeme sayısına exact toplamla bölünür.",
+                "Borç tutarı, seçtiğin ödeme sayısına kuruş farkı bırakmadan bölünür.",
             SimulationScenarioType.FutureOneTimePayment =>
-                "Toplu ödeme exact tarihinde zorunlu ödemeye eklenir.",
+                "Ödeme, seçtiğin tarihte zorunlu ödemelere eklenir.",
             SimulationScenarioType.RecurringPayment =>
                 "Girilen tutar, belirtilen dönem sayısı boyunca aylık tekrarlanır.",
             SimulationScenarioType.FutureIncome =>
-                "Gelir exact tarihinde ilgili maaş dönemine eklenir.",
+                "Gelir, seçtiğin tarihin dahil olduğu maaş dönemine eklenir.",
             SimulationScenarioType.SalaryChange =>
-                "Yeni maaş, effective date dönem başlangıcına ulaştığında geçerli olur.",
+                "Yeni maaş, seçtiğin tarihten itibaren kullanılır.",
             SimulationScenarioType.PaymentStrategyChange =>
-                "Yeni düzen yalnız seçilen maaştan itibaren history'ye eklenmiş gibi hesaplanır; simülasyon veritabanını değiştirmez.",
+                "Yeni düzen yalnızca seçtiğin maaştan itibaren hesaplanır; Simüle Et finans kayıtlarını değiştirmez.",
             SimulationScenarioType.CreditCardFullPayment =>
-                "Seçilen son ödeme tarihinde ekstre tamamı ödenir; sonraki carry faizi ve faiz tasarrufu baseline ile karşılaştırılır.",
+                "Seçilen tarihte ekstrenin tamamı ödenir; sonraki kart faizi ve faiz tasarrufu Mevcut Plan ile karşılaştırılır.",
             _ => string.Empty
         };
         HasResults = false;
@@ -310,7 +310,7 @@ public partial class SimulationViewModel(
     {
         if (_lastRequest is null || !HasResults)
         {
-            SetStatus("Önce bir simülasyon hesaplayın.");
+            SetStatus("Önce Simüle Et ile sonucu hesaplamalısın.");
             return null;
         }
 
@@ -333,7 +333,7 @@ public partial class SimulationViewModel(
                 confirmed: true);
             LastApplyResult = result;
             IsPlanApplied = true;
-            ApplyButtonText = "Plan uygulandı";
+            ApplyButtonText = "Plan Uygulandı";
             SetStatus(result.Message);
             return result;
         }
@@ -352,7 +352,7 @@ public partial class SimulationViewModel(
     private SimulationRequest BuildRequest()
     {
         var type = SelectedScenarioType?.Value
-            ?? throw new InvalidOperationException("Senaryo türü seçilmelidir.");
+            ?? throw new InvalidOperationException("Plan türü seçmelisin.");
         var count = NeedsPaymentCount
             ? int.TryParse(PaymentCount, out var parsed)
                 ? parsed
@@ -370,7 +370,7 @@ public partial class SimulationViewModel(
             IsStrategyChange
                 ? SelectedStrategySalaryDate?.Value ??
                   throw new InvalidOperationException(
-                      "Geçerli maaş tarihi seçilmelidir.")
+                      "Planın başlayacağı maaşı seçmelisin.")
                 : DateOnly.FromDateTime(StartDate),
             count,
             NeedsFirstPayment
@@ -378,7 +378,7 @@ public partial class SimulationViewModel(
                 : null,
             IsCard
                 ? SelectedCreditCard?.Value ??
-                  throw new InvalidOperationException("Kredi kartı seçilmelidir.")
+                  throw new InvalidOperationException("Bir kredi kartı seçmelisin.")
                 : null,
             repayment,
             IsStrategyChange ? SelectedStrategyMode?.Value : null,
@@ -407,10 +407,10 @@ public partial class SimulationViewModel(
                 SimulationScenarioType.RecurringPayment =>
                 $"{request.PaymentCount} ödeme\nİlk ödeme: {request.FirstPaymentDate:dd MMMM yyyy}",
             SimulationScenarioType.PaymentStrategyChange =>
-                $"Geçerli maaş: {request.EffectiveSalaryDate:dd MMMM yyyy}",
+                $"Başlangıç maaşı: {request.EffectiveSalaryDate:dd MMMM yyyy}",
             _ => $"Tarih: {request.StartDate:dd MMMM yyyy}"
         };
-        return $"Bu simülasyon gerçek finans planına eklenecek.\n\n{summary}\n{detail}";
+        return $"Bu plan gerçek finans planına eklenecek.\n\n{summary}\n{detail}";
     }
 
     private void ResetApplyState(bool clearRequest)
@@ -473,8 +473,8 @@ public partial class SimulationViewModel(
         ScenarioInterest = Money(
             result.ScenarioInterest.TotalInterestCost);
         InterestDifferenceTitle = result.AdditionalInterestCost < 0m
-            ? "Tahmini faiz tasarrufu"
-            : "Ek faiz maliyeti";
+            ? "Tahmini Faiz Tasarrufu"
+            : "Ek Faiz Yükü";
         InterestDifference = Money(
             result.AdditionalInterestCost < 0m
                 ? result.InterestSaving
@@ -487,7 +487,7 @@ public partial class SimulationViewModel(
             ? string.Empty
             : string.Join(Environment.NewLine,
                 $"Geçiş maaşı: {SalaryText(transition.PeriodStart)}",
-                $"Normal zorunlu yük: {Money(result.Baseline.Single(x => x.PeriodStart == transition.PeriodStart).MandatoryOutflow)}",
+                $"Normal zorunlu ödemeler: {Money(result.Baseline.Single(x => x.PeriodStart == transition.PeriodStart).MandatoryOutflow)}",
                 $"Geçmiş düzenden kapanacak: {Money(transition.TransitionCatchUpAmount)}",
                 $"İleri dönem için ayrılacak: {Money(transition.ForwardFundedAmount)}",
                 $"Toplam geçiş yükü: {Money(transition.MandatoryOutflow)}",

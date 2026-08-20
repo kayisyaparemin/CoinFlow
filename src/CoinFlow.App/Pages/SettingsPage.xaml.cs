@@ -49,7 +49,7 @@ public partial class SettingsPage : ContentPage
         {
             await DisplayAlert(
                 "Tamamlandı",
-                "Canonical development verisi yüklendi.",
+                "Test verisi yüklendi.",
                 "Tamam");
         }
     }

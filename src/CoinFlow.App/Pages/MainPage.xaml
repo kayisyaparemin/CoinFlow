@@ -45,16 +45,16 @@
                         <Label Grid.Column="1" Text="{Binding Income}" FontFamily="OpenSansSemibold" />
                         <Label Grid.Row="1" Text="Zorunlu ödemeler" Style="{StaticResource MutedText}" />
                         <Label Grid.Row="1" Grid.Column="1" Text="{Binding Mandatory}" />
-                        <Label Grid.Row="2" Text="Zorunlular sonrası alan" FontFamily="OpenSansSemibold" />
+                        <Label Grid.Row="2" Text="Zorunlular sonrası" FontFamily="OpenSansSemibold" />
                         <Label Grid.Row="2" Grid.Column="1" Text="{Binding Available}" FontFamily="OpenSansSemibold" />
-                        <Label Grid.Row="3" Text="Devreden finansman açığı"
+                        <Label Grid.Row="3" Text="Devreden açık"
                                IsVisible="{Binding HasCarryOverDeficit}"
                                TextColor="{StaticResource Error}" />
                         <Label Grid.Row="3" Grid.Column="1" Text="{Binding CarryOverDeficit}"
                                IsVisible="{Binding HasCarryOverDeficit}"
                                TextColor="{StaticResource Error}"
                                FontFamily="OpenSansSemibold" />
-                        <Label Grid.Row="4" Text="Açık sonrası kullanılabilir"
+                        <Label Grid.Row="4" Text="Açık kapatıldıktan sonra kalan"
                                IsVisible="{Binding HasCarryOverDeficit}"
                                Style="{StaticResource MutedText}" />
                         <Label Grid.Row="4" Grid.Column="1" Text="{Binding AvailableAfterCarryOverDeficit}"
@@ -69,7 +69,7 @@
                            IsVisible="{Binding HasCarryOverDeficit}"
                            Style="{StaticResource MutedText}" />
                     <BoxView HeightRequest="1" Color="{StaticResource Line}" />
-                    <Label Text="Tahmini dönem sonu birikim" Style="{StaticResource MutedText}" />
+                    <Label Text="Dönem sonu tahmini birikim" Style="{StaticResource MutedText}" />
                     <Label Text="{Binding EndingSavings}" Style="{StaticResource HeroNumber}" />
                     <Label Text="{Binding DeficitMessage}" TextColor="{StaticResource Error}" IsVisible="{Binding HasDeficit}" />
                 </VerticalStackLayout>
@@ -78,7 +78,7 @@
             <Border IsVisible="{Binding HasPreFirstSalaryPayments}" BackgroundColor="{StaticResource SoftPink}">
                 <VerticalStackLayout Spacing="9">
                     <Label Text="Sonraki Maaştan Önce" Style="{StaticResource SectionTitle}" />
-                    <Label Text="Bu exact-date ödemeler ilk maaş bütçesine eklenmez; maaştan önce yaklaşan yükümlülüklerdir." Style="{StaticResource MutedText}" />
+                    <Label Text="Bu ödemelerin son ödeme tarihi bir sonraki maaştan önce." Style="{StaticResource MutedText}" />
                     <VerticalStackLayout BindableLayout.ItemsSource="{Binding PreFirstSalaryPayments}" Spacing="7">
                         <BindableLayout.ItemTemplate>
                             <DataTemplate>
@@ -103,12 +103,12 @@
             </Border>
 
             <Border IsVisible="{Binding HasUndeterminedCardPayment}" BackgroundColor="{StaticResource SoftPink}">
-                <Label Text="Bazı kart ödemeleri henüz seçilmedi. Bu dönemlerin projeksiyonu eksik olabilir." />
+                <Label Text="Bazı kart ödemeleri henüz seçilmedi. Bu dönemlerin tahmini eksik olabilir." />
             </Border>
 
             <VerticalStackLayout Spacing="10">
                 <Label Text="Sonraki Maaş Planındaki Ödemeler" Style="{StaticResource SectionTitle}" />
-                <Label Text="Yaklaşan exact-date ödeme bulunmuyor."
+                <Label Text="Yaklaşan planlı ödeme bulunmuyor."
                        Style="{StaticResource MutedText}"
                        IsVisible="{Binding HasNoUpcomingPayments}" />
                 <VerticalStackLayout BindableLayout.ItemsSource="{Binding UpcomingPayments}" Spacing="8">
@@ -146,13 +146,13 @@
                             <Label Grid.Row="1" Grid.Column="1" Text="{Binding TwelveMonthDeficitInterest}" />
                         </Grid>
                     </VerticalStackLayout>
-                    <Button Text="Simülasyon Yap" Command="{Binding OpenSimulationCommand}" />
+                    <Button Text="Simülatörü Aç" Command="{Binding OpenSimulationCommand}" />
                 </VerticalStackLayout>
             </Border>
 
             <Border IsVisible="{Binding IsDevelopment}">
                 <VerticalStackLayout Spacing="6">
-                    <Label Text="HESAPLAMA DETAYLARI • DEVELOPMENT" Style="{StaticResource Eyebrow}" />
+                    <Label Text="HESAPLAMA DETAYLARI • GELİŞTİRME" Style="{StaticResource Eyebrow}" />
                     <Label Text="{Binding CalculationDetails}" FontSize="12" />
                 </VerticalStackLayout>
             </Border>

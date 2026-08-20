@@ -216,10 +216,10 @@ public sealed class FinancialProjectionCalculator(
                         Detail: statement.PaymentResolution switch
                         {
                             CreditCardPaymentResolution.ProjectionFallback =>
-                                "Projeksiyon varsayımı",
+                                "Gelecek hesaplama tercihi",
                             CreditCardPaymentResolution.DueDateOverride =>
-                                "Due-date ödeme planı",
-                            _ => "Kart ödeme stratejisi"
+                                "Ekstre ödeme planı",
+                            _ => "Kart ödeme tercihi"
                         },
                         PaymentId: card.Id));
                 }

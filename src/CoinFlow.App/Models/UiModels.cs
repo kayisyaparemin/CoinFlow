@@ -60,8 +60,8 @@ public sealed record CardPaymentPlanLine(
 
     public string PaymentText => PaymentType switch
     {
-        CreditCardPaymentType.Minimum => "Asgari",
-        CreditCardPaymentType.FullStatement => "Ekstre tamamı",
+        CreditCardPaymentType.Minimum => "Asgari ödeme",
+        CreditCardPaymentType.FullStatement => "Ekstrenin tamamı",
         CreditCardPaymentType.FixedAmount =>
             $"{Amount.GetValueOrDefault().ToString("N2", CultureInfo.GetCultureInfo("tr-TR"))} TL",
         _ => "—"

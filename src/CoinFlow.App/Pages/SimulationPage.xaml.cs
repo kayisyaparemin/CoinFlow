@@ -25,7 +25,7 @@ public partial class SimulationPage : ContentPage
     private async void OnApplyPlanClicked(object? sender, EventArgs eventArgs)
     {
         var confirmed = await DisplayAlert(
-            "Planı uygula",
+            "Planı Uygula",
             _viewModel.ApplyConfirmationText,
             "Planı Uygula",
             "Vazgeç");
@@ -38,7 +38,7 @@ public partial class SimulationPage : ContentPage
         if (result is not null)
         {
             var showRecord = await DisplayAlert(
-                "Plan uygulandı",
+                "Plan Uygulandı",
                 result.Message,
                 result.Destination == SimulationApplyDestination.Settings
                     ? "Ayarlarda Gör"

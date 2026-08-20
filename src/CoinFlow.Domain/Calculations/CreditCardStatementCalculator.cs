@@ -266,7 +266,7 @@ public sealed class CreditCardStatementCalculator
     {
         if (card.BalanceAsOfDate == default)
         {
-            throw new InvalidOperationException("Kart bakiye referans tarihi gereklidir.");
+            throw new InvalidOperationException("Kart bakiye tarihi gereklidir.");
         }
 
         CalendarRules.ValidateDay(card.StatementClosingDay);
@@ -290,14 +290,14 @@ public sealed class CreditCardStatementCalculator
             card.FixedPaymentAmount is null or <= 0m)
         {
             throw new InvalidOperationException(
-                "Sabit ödeme stratejisi için pozitif tutar gereklidir.");
+                "Sabit ödeme tercihi için 0'dan büyük bir tutar gereklidir.");
         }
 
         if (card.ProjectionFallbackStrategy == ProjectionFallbackStrategy.FixedAmount &&
             card.ProjectionFallbackFixedAmount is null or <= 0m)
         {
             throw new InvalidOperationException(
-                "Sabit projeksiyon varsayımı için pozitif tutar gereklidir.");
+                "Gelecek hesaplamalarda sabit tutar kullanmak için 0'dan büyük bir tutar gereklidir.");
         }
 
         if (card.PaymentPlans.Any(x =>
@@ -305,7 +305,7 @@ public sealed class CreditCardStatementCalculator
                 x.Amount is null or <= 0m))
         {
             throw new InvalidOperationException(
-                "Özel kart ödemesi için pozitif tutar gereklidir.");
+                "Özel kart ödemesi için 0'dan büyük bir tutar gereklidir.");
         }
 
         if (card.PaymentPlans.GroupBy(x => x.DueDate).Any(x => x.Count() > 1))

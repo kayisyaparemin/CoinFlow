@@ -20,7 +20,7 @@ public partial class FutureMonthsViewModel(
     [ObservableProperty] private bool hasProjection;
     [ObservableProperty] private bool hasNoProjection = true;
     [ObservableProperty] private string emptyStateMessage =
-        "Projeksiyon oluşturmak için önce maaş bilgisi ekle.";
+        "12 aylık planı oluşturmak için önce maaş bilgisi ekle.";
     [ObservableProperty] private string totalCreditCardInterest = "—";
     [ObservableProperty] private string totalDeficitInterest = "—";
     [ObservableProperty] private string totalInterestCost = "—";
@@ -78,8 +78,8 @@ public partial class FutureMonthsViewModel(
             HasInterestSummary = interest.TotalInterestCost > 0m;
             HasTargetResult = false;
             EmptyStateMessage = plan.Salaries.Count == 0
-                ? "Projeksiyon oluşturmak için önce maaş bilgisi ekle."
-                : "Projeksiyon için maaş kullanım düzenini seç.";
+                ? "12 aylık planı oluşturmak için önce maaş bilgisi ekle."
+                : "12 aylık plan için maaş kullanım düzenini seç.";
         }
         catch (Exception exception)
         {

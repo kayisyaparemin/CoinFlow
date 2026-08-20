@@ -15,7 +15,7 @@ public sealed class PaymentAssignmentStrategyResolver(
             .ThenByDescending(x => x.CreatedAt)
             .FirstOrDefault();
         return strategy ?? throw new InvalidOperationException(
-            $"{salaryDate:dd.MM.yyyy} maaşı için ödeme atama düzeni bulunamadı.");
+            $"{salaryDate:dd.MM.yyyy} maaşı için maaş kullanım düzeni bulunamadı.");
     }
 
     public bool IsSalaryDate(DateOnly date, int salaryDay) =>
@@ -38,7 +38,7 @@ public sealed class PaymentAssignmentStrategyResolver(
                 !IsSalaryDate(x.EffectiveFromSalaryDate, salaryDay)))
         {
             throw new InvalidOperationException(
-                "Maaş kullanım düzeninin effective tarihi gerçek bir maaş tarihi olmalıdır.");
+                "Maaş kullanım düzeninin geçerlilik tarihi bir maaş tarihi olmalıdır.");
         }
 
         if (strategies
@@ -53,7 +53,7 @@ public sealed class PaymentAssignmentStrategyResolver(
                 x.EffectiveFromSalaryDate > firstProjectionSalary))
         {
             throw new InvalidOperationException(
-                "İlk projection maaşını kapsayan bir kullanım düzeni gereklidir.");
+                "İlk maaş dönemini kapsayan bir maaş kullanım düzeni gereklidir.");
         }
     }
 }

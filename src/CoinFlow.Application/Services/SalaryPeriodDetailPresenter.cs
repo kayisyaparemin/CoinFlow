@@ -17,7 +17,7 @@ public sealed class SalaryPeriodDetailPresenter
         if (baseline is not null && baseline.Period != scenario.Period)
         {
             throw new InvalidOperationException(
-                "Baseline ve senaryo aynı maaş dönemine ait olmalıdır.");
+                "Mevcut Plan ile Yeni Plan aynı maaş dönemine ait olmalıdır.");
         }
 
         var flow = BuildFlow(scenario);
@@ -123,7 +123,7 @@ public sealed class SalaryPeriodDetailPresenter
                 -row.CarryOverDeficit,
                 DetailSemanticType.Deficit));
             result.Add(new DetailMetric(
-                "Açık sonrası kullanılabilir",
+                "Açık kapatıldıktan sonra kalan",
                 row.AvailableAfterCarryOverDeficit,
                 DetailSemanticType.Projection));
         }
@@ -131,7 +131,7 @@ public sealed class SalaryPeriodDetailPresenter
         if (row.LivingBudget > 0m)
         {
             result.Add(new DetailMetric(
-                "Tahmini yaşam",
+                "Tahmini yaşam gideri",
                 -row.LivingBudget,
                 DetailSemanticType.Expense));
         }
@@ -139,7 +139,7 @@ public sealed class SalaryPeriodDetailPresenter
         if (row.PlannedLargeCashExpenses > 0m)
         {
             result.Add(new DetailMetric(
-                "Büyük planlı ödeme",
+                "Planlı büyük ödeme",
                 -row.PlannedLargeCashExpenses,
                 DetailSemanticType.Expense));
         }
@@ -176,7 +176,7 @@ public sealed class SalaryPeriodDetailPresenter
                 row.CreditCardPayments,
                 DetailSemanticType.Mandatory),
             new DetailMetric(
-                "Geçici Planlar",
+                "Geçici Ödeme Planları",
                 row.TemporaryPayments,
                 DetailSemanticType.Mandatory),
             new DetailMetric(
@@ -184,7 +184,7 @@ public sealed class SalaryPeriodDetailPresenter
                 row.InstallmentPayments,
                 DetailSemanticType.Mandatory),
             new DetailMetric(
-                "Diğer Planlı",
+                "Diğer Planlı Ödemeler",
                 row.OtherScheduledPayments,
                 DetailSemanticType.Mandatory)
         };
@@ -203,7 +203,7 @@ public sealed class SalaryPeriodDetailPresenter
         if (row.CardInterestGenerated > 0m)
         {
             result.Add(new DetailMetric(
-                "Kart devreden borç faizi",
+                "Devreden kart borcu faizi",
                 row.CardInterestGenerated,
                 DetailSemanticType.Interest));
         }
@@ -277,7 +277,7 @@ public sealed class SalaryPeriodDetailPresenter
             new DetailPaymentRow(
                 expense.ExactDate,
                 expense.Name,
-                "Büyük Planlı Ödeme",
+                "Planlı Büyük Ödeme",
                 expense.Amount,
                 DetailSemanticType.Expense,
                 row.PeriodStart,
@@ -324,7 +324,7 @@ public sealed class SalaryPeriodDetailPresenter
         ObligationType.TemporaryPayment => "Geçici Plan",
         ObligationType.InstallmentPayment => "Taksit / Finansman",
         ObligationType.OtherScheduledPayment => "Planlı Ödeme",
-        ObligationType.PlannedLargeExpense => "Büyük Planlı Ödeme",
+        ObligationType.PlannedLargeExpense => "Planlı Büyük Ödeme",
         _ => "Ödeme"
     };
 

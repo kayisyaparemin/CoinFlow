@@ -159,7 +159,7 @@ public sealed class CoinFlowService(
                 x.EffectiveFromSalaryDate == strategyDate))
         {
             throw new InvalidOperationException(
-                "Bu maaş tarihinde zaten bir kullanım düzeni var. Mevcut history kaydı değiştirilemez.");
+                "Bu maaş tarihinde zaten bir kullanım düzeni var. Önceki kayıt değiştirilemez.");
         }
 
         var scenario = simulationCalculator.BuildScenarioPlan(current, request);
@@ -177,7 +177,7 @@ public sealed class CoinFlowService(
                     request,
                     expense.Id,
                     SimulationApplyDestination.Payments,
-                    "Plan ödeme planına eklendi.");
+                    "Plan finans planına eklendi.");
                 break;
             case SimulationScenarioType.CreditCardSinglePayment:
             case SimulationScenarioType.CreditCardInstallmentPurchase:
@@ -204,7 +204,7 @@ public sealed class CoinFlowService(
                     request,
                     paymentPlan.Id,
                     SimulationApplyDestination.Payments,
-                    "Plan ödeme planına eklendi.");
+                    "Plan finans planına eklendi.");
                 break;
             case SimulationScenarioType.FutureIncome:
                 var income = scenario.OtherIncomes.Single(x =>
@@ -216,7 +216,7 @@ public sealed class CoinFlowService(
                     request,
                     income.Id,
                     SimulationApplyDestination.Income,
-                    "Plan gelir planına eklendi.");
+                    "Gelir finans planına eklendi.");
                 break;
             case SimulationScenarioType.SalaryChange:
                 var salary = scenario.Salaries.Single(x =>
@@ -228,7 +228,7 @@ public sealed class CoinFlowService(
                     request,
                     salary.Id,
                     SimulationApplyDestination.SalaryHistory,
-                    "Yeni maaş salary history'ye eklendi.");
+                    "Maaş değişikliği kaydedildi.");
                 break;
             case SimulationScenarioType.PaymentStrategyChange:
                 var strategy = scenario.PaymentAssignmentStrategies.Single(x =>
@@ -241,7 +241,7 @@ public sealed class CoinFlowService(
                     request,
                     strategy.Id,
                     SimulationApplyDestination.Settings,
-                    "Yeni maaş kullanım düzeni history'ye eklendi.");
+                    "Maaş kullanım düzeni kaydedildi.");
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(request.Type));
@@ -260,7 +260,7 @@ public sealed class CoinFlowService(
             SimulationScenarioType.CashPurchase
                 when plan.PlannedLargeExpenses.Any(x => x.Id == entityId) =>
                 AppliedResult(request, entityId, SimulationApplyDestination.Payments,
-                    "Plan daha önce ödeme planına eklendi."),
+                    "Plan daha önce finans planına eklendi."),
             SimulationScenarioType.CreditCardSinglePayment or
                 SimulationScenarioType.CreditCardInstallmentPurchase
                 when plan.CreditCards.Any(card =>
@@ -283,19 +283,19 @@ public sealed class CoinFlowService(
                 SimulationScenarioType.RecurringPayment
                 when plan.PaymentPlans.Any(x => x.Id == entityId) =>
                 AppliedResult(request, entityId, SimulationApplyDestination.Payments,
-                    "Plan daha önce ödeme planına eklendi."),
+                    "Plan daha önce finans planına eklendi."),
             SimulationScenarioType.FutureIncome
                 when plan.OtherIncomes.Any(x => x.Id == entityId) =>
                 AppliedResult(request, entityId, SimulationApplyDestination.Income,
-                    "Plan daha önce gelir planına eklendi."),
+                    "Gelir daha önce finans planına eklendi."),
             SimulationScenarioType.SalaryChange
                 when plan.Salaries.Any(x => x.Id == entityId) =>
                 AppliedResult(request, entityId, SimulationApplyDestination.SalaryHistory,
-                    "Maaş planı daha önce history'ye eklendi."),
+                    "Maaş değişikliği daha önce kaydedildi."),
             SimulationScenarioType.PaymentStrategyChange
                 when plan.PaymentAssignmentStrategies.Any(x => x.Id == entityId) =>
                 AppliedResult(request, entityId, SimulationApplyDestination.Settings,
-                    "Düzen değişikliği daha önce history'ye eklendi."),
+                    "Maaş kullanım düzeni değişikliği daha önce kaydedildi."),
             _ => null
         };
     }
@@ -455,7 +455,7 @@ public sealed class CoinFlowService(
         if (expense.Amount <= 0m)
         {
             throw new InvalidOperationException(
-                "Büyük planlı ödeme tutarı pozitif olmalıdır.");
+                "Planlı büyük ödeme tutarı 0'dan büyük olmalı.");
         }
 
         return store.UpsertPlannedLargeExpenseAsync(
@@ -691,7 +691,7 @@ public sealed class CoinFlowService(
         if (isHistoricalCorrection && !confirmedHistoricalCorrection)
         {
             throw new InvalidOperationException(
-                "Geçmiş kayıt düzeltmesi projection geçmişini değiştirir ve ayrı onay gerektirir.");
+                "Geçmiş bir kararı düzeltmek önceki plan sonuçlarını değiştirir ve ayrı onay gerektirir.");
         }
 
         var conflicting = plan.PaymentAssignmentStrategies.FirstOrDefault(x =>
@@ -815,7 +815,7 @@ public sealed class CoinFlowService(
             card.ProjectionFallbackFixedAmount is null or <= 0m)
         {
             throw new InvalidOperationException(
-                "Sabit projeksiyon varsayımı için pozitif tutar gereklidir.");
+                "Gelecek hesaplamalarda sabit tutar kullanmak için 0'dan büyük bir tutar gereklidir.");
         }
 
         if (card.PaymentPlans.Any(x =>

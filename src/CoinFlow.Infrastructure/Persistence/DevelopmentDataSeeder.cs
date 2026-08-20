@@ -146,7 +146,7 @@ internal static class DevelopmentDataSeeder
                 CreatedAt = new DateTimeOffset(
                         2026, 8, 20, 0, 0, 0, TimeSpan.Zero)
                     .ToString("O"),
-                Note = "Canonical development düzeni"
+                Note = "Test verisi düzeni"
             });
     }
 }

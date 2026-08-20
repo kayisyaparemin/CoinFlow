@@ -270,7 +270,7 @@ public sealed class SimulationCalculator(
         if (request.CreditCardId is null)
         {
             throw new InvalidOperationException(
-                "Kredi kartı senaryosu için kart seçilmelidir.");
+                "Bu plan için bir kredi kartı seçmelisin.");
         }
 
         var card = plan.CreditCards
@@ -318,7 +318,7 @@ public sealed class SimulationCalculator(
         if (request.CreditCardId is null)
         {
             throw new InvalidOperationException(
-                "Tam kart ödeme senaryosu için kart seçilmelidir.");
+                "Tam ödeme planı için bir kredi kartı seçmelisin.");
         }
 
         var card = plan.CreditCards.SingleOrDefault(x =>
@@ -470,7 +470,7 @@ public sealed class SimulationCalculator(
         var interestMessage = additionalInterestCost switch
         {
             > 0m =>
-                $" Bu plan 12 aylık tahmini faiz maliyetini {additionalInterestCost:N2} TL artırıyor.",
+                $" Bu plan 12 aylık tahmini faiz yükünü {additionalInterestCost:N2} TL artırıyor.",
             < 0m =>
                 $" Bu plan 12 ayda yaklaşık {Math.Abs(additionalInterestCost):N2} TL faiz tasarrufu sağlıyor.",
             _ => " Bu plan 12 aylık tahmini faiz yükünü değiştirmiyor."
@@ -480,13 +480,13 @@ public sealed class SimulationCalculator(
             var recovery = risk.RecoveryPeriod is SalaryPeriod recovered
                 ? $" Açık {recovered.Start:dd.MM.yyyy} maaş döneminde kapanıyor."
                 : " Açık gösterilen dönemlerde kapanmıyor.";
-            return $"İlk negatif tahmini birikim dönemi: {negative.Start:dd.MM.yyyy}–{negative.End:dd.MM.yyyy}.{recovery}{interestMessage}";
+            return $"İlk açık verilen dönem: {negative.Start:dd.MM.yyyy}–{negative.End:dd.MM.yyyy}.{recovery}{interestMessage}";
         }
 
         if (risk.MaximumCarryOverDeficit > 0m &&
             risk.RecoveryPeriod is SalaryPeriod openingRecovery)
         {
-            return $"Devreden finansman açığı {openingRecovery.Start:dd.MM.yyyy} maaş döneminde kapanıyor.{interestMessage}";
+            return $"Devreden açık {openingRecovery.Start:dd.MM.yyyy} maaş döneminde kapanıyor.{interestMessage}";
         }
 
         if (risk.FirstNegativeSavingsCapacityPeriod is SalaryPeriod capacity)
@@ -502,7 +502,7 @@ public sealed class SimulationCalculator(
     {
         if (string.IsNullOrWhiteSpace(request.Name))
         {
-            throw new InvalidOperationException("Senaryo adı gereklidir.");
+            throw new InvalidOperationException("Plan adı gereklidir.");
         }
 
         if (request.Type is not SimulationScenarioType.PaymentStrategyChange and
@@ -511,7 +511,7 @@ public sealed class SimulationCalculator(
         {
             throw new ArgumentOutOfRangeException(
                 nameof(request),
-                "Senaryo tutarı sıfırdan büyük olmalıdır.");
+                "Plan tutarı 0'dan büyük olmalı.");
         }
 
         if (request.Type == SimulationScenarioType.PaymentStrategyChange &&
@@ -538,7 +538,7 @@ public sealed class SimulationCalculator(
             request.CreditCardId is null)
         {
             throw new InvalidOperationException(
-                "Tam kart ödeme senaryosu için kart seçilmelidir.");
+                "Tam ödeme planı için bir kredi kartı seçmelisin.");
         }
 
         if (request.Type == SimulationScenarioType.FinancingLoan &&

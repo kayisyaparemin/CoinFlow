@@ -66,7 +66,7 @@ public sealed class SalaryFundingPlanner(
         if (salaryPeriods.Count == 0)
         {
             throw new ArgumentException(
-                "En az bir projection maaş dönemi gereklidir.",
+                "En az bir maaş dönemi gereklidir.",
                 nameof(salaryPeriods));
         }
 

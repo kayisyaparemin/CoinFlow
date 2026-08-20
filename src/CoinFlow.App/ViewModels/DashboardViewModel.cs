@@ -82,7 +82,7 @@ public partial class DashboardViewModel(
                 UpcomingPayments.Clear();
                 EmptyStateMessage = plan.Salaries.Count == 0
                     ? "Henüz finansal plan oluşturulmadı. Başlamak için maaşını ekle."
-                    : "Maaş kullanım düzenini seçerek projeksiyonu tamamla.";
+                    : "Maaş kullanım düzenini seçerek 12 aylık planı tamamla.";
                 EmptyStateAction = plan.Salaries.Count == 0
                     ? "Maaş Ekle"
                     : "Düzeni Seç";
@@ -132,7 +132,7 @@ public partial class DashboardViewModel(
                 dashboard.TightestPeriod.EstimatedSavingsCapacity);
             HasDeficit = current.EstimatedSavingsCapacity < 0m;
             DeficitMessage = HasDeficit
-                ? $"Bu dönemde yaşam bütçesi ve büyük planlı ödemeler sonrası {Money(Math.Abs(current.EstimatedSavingsCapacity))} finansman açığı oluşuyor."
+                ? $"Bu dönemde yaşam bütçesi ve planlı büyük ödemeler sonrası {Money(Math.Abs(current.EstimatedSavingsCapacity))} finansman açığı oluşuyor."
                 : $"Bu dönemin tahmini tasarrufu {Money(current.EstimatedSavingsCapacity)}.";
             HasUndeterminedCardPayment =
                 dashboard.HasUndeterminedCardPayments;
@@ -148,7 +148,7 @@ public partial class DashboardViewModel(
             {
                 PreFirstSalaryPayments.Add(ToLine(
                     payment,
-                    "Sonraki maaştan önce vadesi geliyor"));
+                    "Son ödeme tarihi maaştan önce"));
             }
             HasPreFirstSalaryPayments = PreFirstSalaryPayments.Count > 0;
 
@@ -157,7 +157,7 @@ public partial class DashboardViewModel(
                          !x.IsPreFirstSalaryObligation))
             {
                 var category = payment.IsEstimate
-                    ? "Kart projeksiyonu • tahmini"
+                    ? "Kart ödemesi • Tahmini"
                     : payment.Type switch
                     {
                         ObligationType.Loan => "Kredi",
@@ -169,7 +169,7 @@ public partial class DashboardViewModel(
                         _ => "Planlı ödeme"
                     };
                 var assignmentWarning = payment.PaymentBeforeSalary
-                    ? $" • ⚠ {payment.AssignedSalaryDate.ToString("dd MMM", TurkishCulture)} maaşına atanıyor; gerçek vade {payment.DueDate.ToString("dd MMM", TurkishCulture)}"
+                    ? $" • ⚠ Karşılayan maaş: {payment.AssignedSalaryDate.ToString("dd MMM", TurkishCulture)}; son ödeme: {payment.DueDate.ToString("dd MMM", TurkishCulture)}"
                     : string.Empty;
                 UpcomingPayments.Add(new UpcomingPaymentLine(
                     payment.DueDate.ToString("dd MMM", TurkishCulture),

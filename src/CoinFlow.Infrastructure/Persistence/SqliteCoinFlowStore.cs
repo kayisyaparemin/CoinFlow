@@ -161,7 +161,7 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         if (!_developmentFeaturesEnabled)
         {
             throw new InvalidOperationException(
-                "Canonical seed yalnızca development build'de yüklenebilir.");
+                "Test verisi yalnızca geliştirme sürümünde yüklenebilir.");
         }
 
         cancellationToken.ThrowIfCancellationRequested();

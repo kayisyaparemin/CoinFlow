@@ -14,7 +14,7 @@ public sealed class LoanScheduleCalculator
 
         if (loan.NextPaymentDate == default)
         {
-            throw new InvalidOperationException("Kredinin exact ilk/sonraki ödeme tarihi gereklidir.");
+            throw new InvalidOperationException("Kredinin ilk veya sonraki ödeme tarihi gereklidir.");
         }
 
         if (loan.RemainingInstallmentCount < 1)

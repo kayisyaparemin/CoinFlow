@@ -82,7 +82,7 @@ public sealed class SalaryPeriodDetailPresenterTests
         Assert.Collection(
             detail.MandatoryRows,
             item => Assert.Equal("Krediler", item.Label),
-            item => Assert.Equal("Geçici Planlar", item.Label));
+            item => Assert.Equal("Geçici Ödeme Planları", item.Label));
         Assert.All(detail.MandatoryRows,
             item => Assert.NotEqual(0m, item.Amount));
         Assert.Equal(4, detail.PaymentRows.Count);

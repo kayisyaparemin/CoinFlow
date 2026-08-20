@@ -76,7 +76,7 @@ public partial class SettingsViewModel(
         CurrentStrategySinceText = overview.Current is null
             ? plan.Salaries.Count == 0
                 ? "İlk maaşını eklediğinde kullanım düzenini seçersin."
-                : "Maaş kullanım düzenini seçerek projeksiyonu tamamla."
+                : "Maaş kullanım düzenini seçerek 12 aylık planı tamamla."
             : overview.Current.EffectiveFromSalaryDate >
               DateOnly.FromDateTime(DateTime.Today)
                 ? $"{overview.Current.EffectiveFromSalaryDate.ToString("dd MMMM yyyy", TurkishCulture)} maaşından itibaren"
@@ -152,10 +152,10 @@ public partial class SettingsViewModel(
                 SelectedEffectiveSalary?.Value ?? throw new InvalidOperationException(
                     "Geçerli maaş tarihi seçilmelidir."));
             PreviewText = string.Join(Environment.NewLine,
-                $"Geçerli maaş: {preview.EffectiveSalaryDate:dd.MM.yyyy}",
-                $"Mevcut: {ModeText(preview.CurrentMode)}",
-                $"Yeni: {ModeText(preview.NewMode)}",
-                $"Normal zorunlu yük: {Money(preview.Baseline.MandatoryOutflow)}",
+                $"Başlangıç maaşı: {preview.EffectiveSalaryDate:dd.MM.yyyy}",
+                $"Mevcut düzen: {ModeText(preview.CurrentMode)}",
+                $"Yeni düzen: {ModeText(preview.NewMode)}",
+                $"Normal zorunlu ödemeler: {Money(preview.Baseline.MandatoryOutflow)}",
                 $"Geçmiş düzenden kapanacak: {Money(preview.Scenario.TransitionCatchUpAmount)}",
                 $"Yeni dönem için ayrılacak: {Money(preview.Scenario.ForwardFundedAmount)}",
                 $"Toplam geçiş yükü: {Money(preview.TotalTransitionBurden)}",
@@ -244,7 +244,7 @@ public partial class SettingsViewModel(
                     "Aylık tahmini yaşam bütçesi"),
                 ProjectionStartingSavings = ParseMoney(
                     ProjectionStartingSavings,
-                    "Projeksiyon başlangıç birikimi"),
+                    "Planlama başlangıç birikimi"),
                 ProjectionAnchorDate = _projectionAnchorDate,
                 CreditCardCarryInterestRate = ParseRate(
                     CreditCardCarryInterestRate,
@@ -265,7 +265,7 @@ public partial class SettingsViewModel(
     {
         if (!IsDevelopment)
         {
-            SetStatus("Bu işlem yalnızca development build'de kullanılabilir.");
+            SetStatus("Bu işlem yalnızca geliştirme sürümünde kullanılabilir.");
             return false;
         }
 
@@ -287,7 +287,7 @@ public partial class SettingsViewModel(
     {
         if (!IsDevelopment)
         {
-            SetStatus("Bu işlem yalnızca development build'de kullanılabilir.");
+            SetStatus("Bu işlem yalnızca geliştirme sürümünde kullanılabilir.");
             return false;
         }
 
@@ -295,7 +295,7 @@ public partial class SettingsViewModel(
         {
             await service.LoadCanonicalDevelopmentDataAsync();
             await LoadAsync();
-            SetStatus("Canonical development verisi yüklendi.");
+            SetStatus("Test verisi yüklendi.");
             return true;
         }
         catch (Exception exception)

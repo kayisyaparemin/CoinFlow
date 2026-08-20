@@ -13,7 +13,7 @@ public static class BuildInfo
     public static string Version => AppInfo.Current.VersionString;
     public static string Commit => Metadata("CoinFlowCommit", "local");
     public static string BuildNumber => Metadata("CoinFlowBuildNumber", AppInfo.Current.BuildString);
-    public static string Channel => IsDevelopment ? "Development Build" : "Stable Release";
+    public static string Channel => IsDevelopment ? "Geliştirme Sürümü" : "Kararlı Sürüm";
 
     private static string Metadata(string key, string fallback) =>
         typeof(BuildInfo).Assembly

@@ -8,12 +8,12 @@
         <VerticalStackLayout Spacing="10">
             <Label Text="12 MAAŞ DÖNEMİ" Style="{StaticResource Eyebrow}" />
             <Label Text="İleriye Bakış" Style="{StaticResource PageTitle}" />
-            <Label Text="Gerçek ödeme tarihleri korunur; seçili maaş kullanım şekline göre ilgili maaş bütçesine atanır." Style="{StaticResource MutedText}" />
+            <Label Text="Önümüzdeki 12 maaş dönemindeki gelir, ödeme ve tahmini birikimini gör." Style="{StaticResource MutedText}" />
             <Border Padding="14"
                     IsVisible="{Binding HasInterestSummary}"
                     BackgroundColor="{StaticResource SoftPink}">
                 <VerticalStackLayout Spacing="6">
-                    <Label Text="12 Aylık Faiz Yükü" Style="{StaticResource SectionTitle}" />
+                    <Label Text="12 Aylık Tahmini Faiz Yükü" Style="{StaticResource SectionTitle}" />
                     <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" RowSpacing="5">
                         <Label Text="Kredi kartı" Style="{StaticResource MutedText}" />
                         <Label Grid.Column="1" Text="{Binding TotalCreditCardInterest}" />
@@ -43,7 +43,7 @@
                 BackgroundColor="{StaticResource SoftSky}"
                 VerticalOptions="Start">
             <VerticalStackLayout Spacing="10">
-                <Label Text="Henüz projeksiyon yok."
+                <Label Text="Henüz 12 aylık plan yok."
                        Style="{StaticResource SectionTitle}" />
                 <Label Text="{Binding EmptyStateMessage}"
                        Style="{StaticResource MutedText}" />
@@ -79,11 +79,11 @@
                                     <Label Grid.Column="1" Text="{Binding CarryOverDeficit}" TextColor="{StaticResource Error}" FontFamily="OpenSansSemibold" />
                                 </Grid>
                                 <Grid ColumnDefinitions="*,Auto">
-                                    <Label Text="Bu dönemin tasarrufu" Style="{StaticResource MutedText}" />
+                                    <Label Text="Tahmini tasarruf" Style="{StaticResource MutedText}" />
                                     <Label Grid.Column="1" Text="{Binding EstimatedSavings}" FontFamily="OpenSansSemibold" />
                                 </Grid>
                                 <Grid ColumnDefinitions="*,Auto">
-                                    <Label Text="Dönem sonu birikim" Style="{StaticResource MutedText}" />
+                                    <Label Text="Dönem sonu tahmini birikim" Style="{StaticResource MutedText}" />
                                     <Label Grid.Column="1"
                                            Text="{Binding EndingProjectedSavings}"
                                            FontFamily="OpenSansSemibold"
