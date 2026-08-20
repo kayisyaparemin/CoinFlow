@@ -5,80 +5,133 @@ namespace CoinFlow.Infrastructure.Persistence;
 
 internal static class DevelopmentDataSeeder
 {
+    internal const int CurrentSeedVersion = 1;
+
+    private static readonly Guid Salary2026Id =
+        Guid.Parse("10000000-0000-0000-0000-000000000001");
+    private static readonly Guid Salary2027Id =
+        Guid.Parse("10000000-0000-0000-0000-000000000002");
+    private static readonly Guid GarantiLoanId =
+        Guid.Parse("20000000-0000-0000-0000-000000000001");
+    private static readonly Guid BurganLoanId =
+        Guid.Parse("20000000-0000-0000-0000-000000000002");
+    private static readonly Guid EminevimPlanId =
+        Guid.Parse("30000000-0000-0000-0000-000000000001");
+    private static readonly Guid AxessCardId =
+        Guid.Parse("40000000-0000-0000-0000-000000000001");
+
     public static async Task SeedAsync(SQLiteAsyncConnection database)
     {
         var salaries = new[]
         {
-            new SalaryScheduleEntry { NetAmount = 115_000m, EffectiveFrom = new DateOnly(2026, 1, 1), Note = "Başlangıç maaşı" },
-            new SalaryScheduleEntry { NetAmount = 132_250m, EffectiveFrom = new DateOnly(2027, 1, 1), Note = "%15 zam" }
+            new SalaryScheduleEntry
+            {
+                Id = Salary2026Id,
+                Amount = 115_000m,
+                EffectiveDate = new DateOnly(2026, 1, 1),
+                Description = "Maaş"
+            },
+            new SalaryScheduleEntry
+            {
+                Id = Salary2027Id,
+                Amount = 132_250m,
+                EffectiveDate = new DateOnly(2027, 1, 1),
+                Description = "Planlanan maaş"
+            }
         };
         foreach (var salary in salaries)
         {
-            await database.InsertAsync(SqliteCoinFlowStore.ToRow(salary));
+            await database.InsertOrReplaceAsync(
+                SqliteCoinFlowStore.ToRow(salary));
         }
 
         var loans = new[]
         {
             new Loan
             {
-                Name = "Garanti kredi", Bank = "Garanti", MonthlyInstallment = 14_501.23m,
-                PaymentDay = 7, StartDate = new DateOnly(2026, 9, 7), InstallmentCount = 22
+                Id = GarantiLoanId,
+                Name = "borç kapama",
+                Bank = "Garanti BBVA",
+                MonthlyPayment = 14_501.23m,
+                PaymentDay = 7,
+                NextPaymentDate = new DateOnly(2026, 9, 7),
+                RemainingInstallmentCount = 22,
+                RemainingDebt = 190_188m
             },
             new Loan
             {
-                Name = "On Dijital", Bank = "Burgan", MonthlyInstallment = 7_374.59m,
-                PaymentDay = 18, StartDate = new DateOnly(2026, 9, 18), InstallmentCount = 9
+                Id = BurganLoanId,
+                Name = "On Dijital",
+                Bank = "Burgan Bank",
+                MonthlyPayment = 7_374.59m,
+                PaymentDay = 18,
+                NextPaymentDate = new DateOnly(2026, 9, 18),
+                RemainingInstallmentCount = 9,
+                RemainingDebt = 55_777m
             }
         };
         foreach (var loan in loans)
         {
-            await database.InsertAsync(SqliteCoinFlowStore.ToRow(loan));
+            await database.InsertOrReplaceAsync(
+                SqliteCoinFlowStore.ToRow(loan));
         }
 
-        var cardId = Guid.NewGuid();
-        var cardCharges = new[]
+        await database.InsertOrReplaceAsync(new PaymentPlanRow
         {
-            (new DateOnly(2026, 9, 28), 15_538.36m),
-            (new DateOnly(2026, 10, 30), 9_102.90m),
-            (new DateOnly(2026, 11, 28), 2_624.55m)
+            Id = EminevimPlanId.ToString("D"),
+            Name = "Eminevim",
+            Kind = (int)PaymentPlanKind.Temporary
+        });
+        var eminevim = new[]
+        {
+            ("30000000-0000-0000-0000-000000000011", new DateOnly(2026, 9, 20), 28_167.40m),
+            ("30000000-0000-0000-0000-000000000012", new DateOnly(2026, 10, 20), 28_167.40m),
+            ("30000000-0000-0000-0000-000000000013", new DateOnly(2026, 11, 20), 55_492.20m)
         };
-        const decimal statementRemaining = 35_201.77m;
-        const decimal cycleSpending = 61_283.91m;
+        foreach (var (id, dueDate, amount) in eminevim)
+        {
+            await database.InsertOrReplaceAsync(new PaymentInstallmentRow
+            {
+                Id = id,
+                PlanId = EminevimPlanId.ToString("D"),
+                DueDate = SqliteCoinFlowStore.FormatDate(dueDate),
+                Amount = amount
+            });
+        }
+
         var card = new CreditCard
         {
-            Id = cardId,
+            Id = AxessCardId,
             Name = "Axess",
             Bank = "Akbank",
-            Limit = 200_000m,
-            CurrentTotalDebt = statementRemaining + cycleSpending + cardCharges.Sum(x => x.Item2),
-            CarriedBalance = statementRemaining,
-            UnbilledSpending = cycleSpending,
-            BalanceAsOfDate = new DateOnly(2026, 8, 19),
+            Limit = 607_350m,
+            CarriedBalance = 35_201.77m,
+            UnbilledSpending = 61_283.91m,
+            BalanceAsOfDate = new DateOnly(2026, 8, 20),
             StatementClosingDay = 25,
             PaymentDueDay = 5,
             MinimumPaymentRate = 0.40m,
             PaymentStrategy = CreditCardPaymentStrategy.AskEachStatement,
             ProjectionFallbackStrategy = ProjectionFallbackStrategy.Minimum
         };
-        await database.InsertAsync(SqliteCoinFlowStore.ToRow(card));
-        foreach (var (date, amount) in cardCharges)
-        {
-            await database.InsertAsync(SqliteCoinFlowStore.ToRow(new CardCharge
-            {
-                CreditCardId = cardId,
-                Description = "Gelecek dönem taksiti",
-                PostingDate = date,
-                Amount = amount
-            }));
-        }
+        await database.InsertOrReplaceAsync(SqliteCoinFlowStore.ToRow(card));
 
-        await database.InsertAsync(SqliteCoinFlowStore.ToRow(new SpendableBalanceSnapshot
+        var cardCharges = new[]
         {
-            Amount = 11_000m,
-            SnapshotDate = new DateOnly(2026, 8, 19),
-            SalaryPeriodStart = new DateOnly(2026, 8, 10),
-            CreatedAtUtc = new DateTimeOffset(2026, 8, 19, 12, 0, 0, TimeSpan.Zero),
-            Note = "Development current actual örneği"
-        }));
+            ("40000000-0000-0000-0000-000000000011", new DateOnly(2026, 9, 28), 15_538.36m),
+            ("40000000-0000-0000-0000-000000000012", new DateOnly(2026, 10, 30), 9_102.90m),
+            ("40000000-0000-0000-0000-000000000013", new DateOnly(2026, 11, 28), 2_624.55m)
+        };
+        foreach (var (id, postingDate, amount) in cardCharges)
+        {
+            await database.InsertOrReplaceAsync(new CardInstallmentRow
+            {
+                Id = id,
+                CreditCardId = AxessCardId.ToString("D"),
+                Description = "Gelecek taksit",
+                DueDate = SqliteCoinFlowStore.FormatDate(postingDate),
+                Amount = amount
+            });
+        }
     }
 }

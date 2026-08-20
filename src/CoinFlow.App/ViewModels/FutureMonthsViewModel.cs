@@ -1,45 +1,123 @@
 using System.Collections.ObjectModel;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CoinFlow.App.Models;
 using CoinFlow.Application.Services;
+using CoinFlow.Domain.Calculations;
 
 namespace CoinFlow.App.ViewModels;
 
-public partial class FutureMonthsViewModel(CoinFlowService service) : ViewModelBase
+public partial class FutureMonthsViewModel(
+    CoinFlowService service) : ViewModelBase
 {
-    public ObservableCollection<ProjectionLine> Months { get; } = [];
+    public ObservableCollection<ProjectionLine> Periods { get; } = [];
+
+    [ObservableProperty] private string targetAmount = string.Empty;
+    [ObservableProperty] private string targetResult = string.Empty;
+    [ObservableProperty] private bool hasTargetResult;
 
     [RelayCommand]
     public async Task LoadAsync()
     {
+        if (IsBusy)
+        {
+            return;
+        }
+
         try
         {
             IsBusy = true;
             SetStatus(string.Empty);
-            var rows = await service.GetFutureMonthsAsync();
-            Months.Clear();
+            var rows = await service.GetFuturePeriodsAsync(
+                periodCount: 12);
+            Periods.Clear();
             foreach (var row in rows)
             {
-                var isUndetermined = row.HasUndeterminedCardPayments;
-                Months.Add(new ProjectionLine(
-                    $"{row.Period.Start:dd MMM yyyy} → {row.Period.End:dd MMM yyyy}".ToUpper(TurkishCulture),
-                    Money(row.Salary),
-                    isUndetermined ? "Kesin değil" : Money(row.TotalObligations, 2),
-                    isUndetermined ? "Kesin değil" : Money(row.ProjectedSpendable, 2),
-                    row.ActualRemaining is null ? string.Empty : Money(row.ActualRemaining.Value, 2),
-                    row.ActualRemaining is not null,
-                    isUndetermined ? "Kesin değil" : Money(row.ProjectedDailyCoin, 2),
-                    $"Kredi {Money(row.LoanPayments)} • Kart {(isUndetermined ? "Henüz seçilmedi" : Money(row.CardPayments))} • Geçici {Money(row.TemporaryPayments)} • Planlı {Money(row.PlannedInstallments)}",
-                    string.Join(" ", row.Highlights)));
+                var notice = Notice(row);
+                Periods.Add(new ProjectionLine(
+                    PeriodText(row.Period),
+                    Money(row.AvailableAfterMandatory),
+                    Money(row.EstimatedSavingsCapacity),
+                    Money(row.EndingProjectedSavings),
+                    Breakdown(row),
+                    notice,
+                    !string.IsNullOrWhiteSpace(notice)));
             }
         }
         catch (Exception exception)
         {
-            SetStatus($"Projeksiyon yüklenemedi: {exception.Message}");
+            SetStatus(exception.Message);
         }
         finally
         {
             IsBusy = false;
         }
     }
+
+    [RelayCommand]
+    private async Task FindTargetAsync()
+    {
+        try
+        {
+            var target = ParseMoney(TargetAmount, "Hedef tutar");
+            var reached = await service.FindTargetPeriodAsync(target);
+            TargetResult = reached is null
+                ? $"{Money(target)} seviyesine gösterilen 12 maaş döneminde henüz ulaşılamıyor."
+                : $"{Money(target)} tahmini birikim seviyesine {PeriodText(reached.Period)} döneminde ulaşıyorsun.";
+            HasTargetResult = true;
+            SetStatus(string.Empty);
+        }
+        catch (Exception exception)
+        {
+            HasTargetResult = false;
+            SetStatus(exception.Message);
+        }
+    }
+
+    private static string Breakdown(SalaryPeriodProjection row)
+    {
+        var lines = new[]
+        {
+            $"Gelir: {Money(row.TotalIncome)}",
+            $"Krediler: {Money(row.LoanPayments)}",
+            $"Kartlar: {Money(row.CreditCardPayments)}",
+            $"Geçici planlar: {Money(row.TemporaryPayments)}",
+            $"Taksit / finansman: {Money(row.InstallmentPayments)}",
+            $"Diğer planlı: {Money(row.OtherScheduledPayments)}",
+            $"Zorunlu toplam: {Money(row.MandatoryOutflow)}",
+            $"Tahmini yaşam gideri: {Money(row.LivingBudget)}",
+            $"Büyük planlı ödeme: {Money(row.PlannedLargeCashExpenses)}"
+        };
+        var exactSources = row.MandatoryItems.Select(x =>
+            $"{x.DueDate:dd.MM.yyyy} • {x.Name}: {Money(x.Amount, 2)}" +
+            (x.IsEstimate ? " (tahmini)" : string.Empty));
+        return string.Join(
+            Environment.NewLine,
+            lines.Concat(exactSources));
+    }
+
+    private static string Notice(SalaryPeriodProjection row)
+    {
+        var notices = new List<string>();
+        if (row.HasUndeterminedCardPayment)
+        {
+            notices.Add("Kart ödemesi henüz belirlenmedi.");
+        }
+
+        if (row.IsEstimatedCardPayment)
+        {
+            notices.Add("Kart ödemesinde projeksiyon varsayımı kullanıldı.");
+        }
+
+        if (row.EstimatedSavingsCapacity < 0m)
+        {
+            notices.Add(
+                $"Yaşam bütçesi sonrası {Money(Math.Abs(row.EstimatedSavingsCapacity))} açık.");
+        }
+
+        return string.Join(" ", notices);
+    }
+
+    private static string PeriodText(SalaryPeriod period) =>
+        $"{period.Start.ToString("dd MMM", TurkishCulture)} → {period.End.ToString("dd MMM yyyy", TurkishCulture)}";
 }

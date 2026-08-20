@@ -8,56 +8,38 @@ public sealed record SalaryPeriod(DateOnly Start, DateOnly End)
     public bool Contains(DateOnly date) => date >= Start && date < End;
 }
 
-public enum ObligationType
-{
-    Loan,
-    TemporaryPayment,
-    PlannedInstallment,
-    CreditCard,
-    EmergencyFund
-}
-
-public sealed record ObligationItem(
-    string Name,
-    ObligationType Type,
-    DateOnly DueDate,
-    decimal Amount,
-    bool IsFinalPayment = false,
-    bool IsEstimate = false);
-
-public sealed record SalaryPeriodSummary(
-    SalaryPeriod Period,
-    decimal Salary,
-    IReadOnlyList<ObligationItem> Obligations,
-    decimal TotalObligations,
-    decimal SpendableBudget,
-    decimal DailyCoin);
-
 public sealed class SalaryPeriodCalculator
 {
     public SalaryPeriod GetPeriod(DateOnly date, int salaryDay)
     {
         CalendarRules.ValidateDay(salaryDay);
-        var currentMonthSalary = CalendarRules.ResolveDay(date.Year, date.Month, salaryDay);
-
-        if (date >= currentMonthSalary)
+        var currentMonthSalaryDate = CalendarRules.ResolveDay(date.Year, date.Month, salaryDay);
+        if (date >= currentMonthSalaryDate)
         {
             return new SalaryPeriod(
-                currentMonthSalary,
-                CalendarRules.AddMonthsKeepingDay(currentMonthSalary, 1, salaryDay));
+                currentMonthSalaryDate,
+                CalendarRules.AddMonthsKeepingDay(currentMonthSalaryDate, 1, salaryDay));
         }
 
-        var previous = CalendarRules.AddMonthsKeepingDay(currentMonthSalary, -1, salaryDay);
-        return new SalaryPeriod(previous, currentMonthSalary);
+        var previousSalaryDate = CalendarRules.AddMonthsKeepingDay(currentMonthSalaryDate, -1, salaryDay);
+        return new SalaryPeriod(previousSalaryDate, currentMonthSalaryDate);
     }
 
-    public decimal ResolveSalary(DateOnly periodStart, IEnumerable<SalaryScheduleEntry> schedule)
+    public IReadOnlyList<SalaryPeriod> GetPeriods(DateOnly asOf, int salaryDay, int count)
     {
-        return schedule
-            .Where(x => x.EffectiveFrom <= periodStart)
-            .OrderByDescending(x => x.EffectiveFrom)
-            .Select(x => x.NetAmount)
-            .FirstOrDefault();
-    }
+        if (count is < 1 or > 60)
+        {
+            throw new ArgumentOutOfRangeException(nameof(count), "Dönem sayısı 1 ile 60 arasında olmalıdır.");
+        }
 
+        var first = GetPeriod(asOf, salaryDay);
+        return Enumerable.Range(0, count)
+            .Select(index =>
+            {
+                var start = CalendarRules.AddMonthsKeepingDay(first.Start, index, salaryDay);
+                var end = CalendarRules.AddMonthsKeepingDay(first.Start, index + 1, salaryDay);
+                return new SalaryPeriod(start, end);
+            })
+            .ToArray();
+    }
 }

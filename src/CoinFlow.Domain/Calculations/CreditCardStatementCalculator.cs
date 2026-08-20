@@ -23,17 +23,12 @@ public sealed record CreditCardStatementProjection(
     CreditCardPaymentType? AppliedPaymentType)
 {
     public bool IsPaymentDetermined => Payment is not null;
-    public bool UsesProjectionFallback => PaymentResolution == CreditCardPaymentResolution.ProjectionFallback;
+    public bool UsesProjectionFallback =>
+        PaymentResolution == CreditCardPaymentResolution.ProjectionFallback;
 }
 
-public sealed class CreditCardProjectionCalculator
+public sealed class CreditCardStatementCalculator
 {
-    public static decimal DeriveCurrentTotalDebt(CreditCard card)
-    {
-        ValidateMoney(card);
-        return card.CarriedBalance + card.UnbilledSpending + card.Charges.Sum(x => x.Amount);
-    }
-
     public IReadOnlyList<CreditCardStatementProjection> Project(
         CreditCard card,
         int statementCount,
@@ -45,29 +40,33 @@ public sealed class CreditCardProjectionCalculator
         }
 
         Validate(card);
-        var anchor = card.BalanceAsOfDate == default
-            ? throw new InvalidOperationException("Kart bakiye referans tarihi gereklidir.")
-            : card.BalanceAsOfDate;
-        var closeDate = ResolveStatementCloseOnOrAfter(anchor, card.StatementClosingDay);
-        var firstClose = closeDate;
+        var firstClose = ResolveStatementCloseOnOrAfter(
+            card.BalanceAsOfDate,
+            card.StatementClosingDay);
+        var closeDate = firstClose;
         var assignedCharges = card.Charges
-            .GroupBy(x => ResolveChargeStatementClose(x.PostingDate, firstClose, card.StatementClosingDay))
+            .GroupBy(x => ResolveChargeStatementClose(
+                x.PostingDate,
+                firstClose,
+                card.StatementClosingDay))
             .ToDictionary(x => x.Key, x => x.Sum(charge => charge.Amount));
         decimal? carried = card.CarriedBalance;
         var result = new List<CreditCardStatementProjection>(statementCount);
 
         for (var index = 0; index < statementCount; index++)
         {
-            var charges = assignedCharges.GetValueOrDefault(closeDate);
+            var newCharges = assignedCharges.GetValueOrDefault(closeDate);
             if (index == 0)
             {
-                charges += card.UnbilledSpending;
+                newCharges += card.UnbilledSpending;
             }
 
-            decimal? statementBalance = carried is null ? null : carried.Value + charges;
+            decimal? statementBalance = carried is null
+                ? null
+                : carried.Value + newCharges;
             decimal? minimumPayment = statementBalance is null
                 ? null
-                : RoundPayment(statementBalance.Value * card.MinimumPaymentRate);
+                : RoundMoney(statementBalance.Value * card.MinimumPaymentRate);
             var dueDate = ResolvePaymentDueDate(closeDate, card.PaymentDueDay);
             var decision = ResolvePayment(
                 card,
@@ -83,7 +82,7 @@ public sealed class CreditCardProjectionCalculator
                 closeDate,
                 dueDate,
                 carried,
-                charges,
+                newCharges,
                 statementBalance,
                 minimumPayment,
                 decision.Payment,
@@ -92,30 +91,38 @@ public sealed class CreditCardProjectionCalculator
                 decision.PaymentType));
 
             carried = carriedAfterPayment;
-            closeDate = CalendarRules.AddMonthsKeepingDay(closeDate, 1, card.StatementClosingDay);
+            closeDate = CalendarRules.AddMonthsKeepingDay(
+                closeDate,
+                1,
+                card.StatementClosingDay);
         }
 
         return result;
     }
 
-    public static DateOnly ResolveStatementCloseOnOrAfter(DateOnly date, int closingDay)
+    public static DateOnly ResolveStatementCloseOnOrAfter(
+        DateOnly date,
+        int statementClosingDay)
     {
-        var close = CalendarRules.ResolveDay(date.Year, date.Month, closingDay);
-        return close >= date
-            ? close
-            : CalendarRules.AddMonthsKeepingDay(close, 1, closingDay);
+        CalendarRules.ValidateDay(statementClosingDay);
+        var closeDate = CalendarRules.ResolveDay(date.Year, date.Month, statementClosingDay);
+        return closeDate >= date
+            ? closeDate
+            : CalendarRules.AddMonthsKeepingDay(closeDate, 1, statementClosingDay);
     }
 
     public static DateOnly ResolveChargeStatementClose(
         DateOnly postingDate,
         DateOnly firstProjectionClose,
-        int closingDay)
+        int statementClosingDay)
     {
-        var close = ResolveStatementCloseOnOrAfter(postingDate, closingDay);
-        return close < firstProjectionClose ? firstProjectionClose : close;
+        var closeDate = ResolveStatementCloseOnOrAfter(postingDate, statementClosingDay);
+        return closeDate < firstProjectionClose ? firstProjectionClose : closeDate;
     }
 
-    public static DateOnly ResolvePaymentDueDate(DateOnly statementCloseDate, int paymentDueDay)
+    public static DateOnly ResolvePaymentDueDate(
+        DateOnly statementCloseDate,
+        int paymentDueDay)
     {
         CalendarRules.ValidateDay(paymentDueDay);
         var sameMonth = CalendarRules.ResolveDay(
@@ -134,7 +141,7 @@ public sealed class CreditCardProjectionCalculator
         decimal? minimumPayment,
         bool useProjectionFallback)
     {
-        var paymentOverride = card.PaymentPlans.FirstOrDefault(x => x.DueDate == dueDate);
+        var paymentOverride = card.PaymentPlans.SingleOrDefault(x => x.DueDate == dueDate);
         if (paymentOverride is not null)
         {
             return new PaymentDecision(
@@ -151,7 +158,11 @@ public sealed class CreditCardProjectionCalculator
         if (strategyType is not null)
         {
             return new PaymentDecision(
-                CalculatePayment(strategyType.Value, card.FixedPaymentAmount, statementBalance, minimumPayment),
+                CalculatePayment(
+                    strategyType.Value,
+                    card.FixedPaymentAmount,
+                    statementBalance,
+                    minimumPayment),
                 CreditCardPaymentResolution.GeneralStrategy,
                 strategyType);
         }
@@ -171,7 +182,10 @@ public sealed class CreditCardProjectionCalculator
                 fallbackType);
         }
 
-        return new PaymentDecision(null, CreditCardPaymentResolution.Undetermined, null);
+        return new PaymentDecision(
+            null,
+            CreditCardPaymentResolution.Undetermined,
+            null);
     }
 
     private static decimal? CalculatePayment(
@@ -190,14 +204,19 @@ public sealed class CreditCardProjectionCalculator
             CreditCardPaymentType.Minimum => minimumPayment.Value,
             CreditCardPaymentType.FullStatement => statementBalance.Value,
             CreditCardPaymentType.FixedAmount => Math.Max(
-                fixedAmount ?? throw new InvalidOperationException("Sabit kart ödeme tutarı gereklidir."),
+                fixedAmount ?? throw new InvalidOperationException(
+                    "Sabit kart ödeme tutarı gereklidir."),
                 minimumPayment.Value),
             _ => throw new ArgumentOutOfRangeException(nameof(paymentType))
         };
-        return Math.Min(statementBalance.Value, Math.Max(0m, RoundPayment(requested)));
+
+        return Math.Min(
+            statementBalance.Value,
+            Math.Max(0m, RoundMoney(requested)));
     }
 
-    private static CreditCardPaymentType? ToPaymentType(CreditCardPaymentStrategy strategy) => strategy switch
+    private static CreditCardPaymentType? ToPaymentType(
+        CreditCardPaymentStrategy strategy) => strategy switch
     {
         CreditCardPaymentStrategy.AskEachStatement => null,
         CreditCardPaymentStrategy.Minimum => CreditCardPaymentType.Minimum,
@@ -206,7 +225,8 @@ public sealed class CreditCardProjectionCalculator
         _ => throw new ArgumentOutOfRangeException(nameof(strategy))
     };
 
-    private static CreditCardPaymentType? ToPaymentType(ProjectionFallbackStrategy strategy) => strategy switch
+    private static CreditCardPaymentType? ToPaymentType(
+        ProjectionFallbackStrategy strategy) => strategy switch
     {
         ProjectionFallbackStrategy.None => null,
         ProjectionFallbackStrategy.Minimum => CreditCardPaymentType.Minimum,
@@ -215,50 +235,59 @@ public sealed class CreditCardProjectionCalculator
         _ => throw new ArgumentOutOfRangeException(nameof(strategy))
     };
 
-    private static decimal RoundPayment(decimal amount) =>
+    private static decimal RoundMoney(decimal amount) =>
         decimal.Round(amount, 2, MidpointRounding.AwayFromZero);
 
     private static void Validate(CreditCard card)
     {
+        if (card.BalanceAsOfDate == default)
+        {
+            throw new InvalidOperationException("Kart bakiye referans tarihi gereklidir.");
+        }
+
         CalendarRules.ValidateDay(card.StatementClosingDay);
         CalendarRules.ValidateDay(card.PaymentDueDay);
         if (card.MinimumPaymentRate is < 0m or > 1m)
         {
-            throw new ArgumentOutOfRangeException(nameof(card), "Asgari ödeme oranı 0 ile 1 arasında olmalıdır.");
+            throw new ArgumentOutOfRangeException(
+                nameof(card),
+                "Asgari ödeme oranı 0 ile 1 arasında olmalıdır.");
         }
 
-        ValidateMoney(card);
+        if (card.CarriedBalance < 0m ||
+            card.UnbilledSpending < 0m ||
+            card.Charges.Any(x => x.Amount < 0m))
+        {
+            throw new InvalidOperationException(
+                "Kart borç bileşenleri negatif olamaz.");
+        }
+
         if (card.PaymentStrategy == CreditCardPaymentStrategy.FixedAmount &&
             card.FixedPaymentAmount is null or <= 0m)
         {
-            throw new InvalidOperationException("Sabit ödeme stratejisi için pozitif tutar gereklidir.");
+            throw new InvalidOperationException(
+                "Sabit ödeme stratejisi için pozitif tutar gereklidir.");
         }
 
         if (card.ProjectionFallbackStrategy == ProjectionFallbackStrategy.FixedAmount &&
             card.ProjectionFallbackFixedAmount is null or <= 0m)
         {
-            throw new InvalidOperationException("Sabit projeksiyon varsayımı için pozitif tutar gereklidir.");
+            throw new InvalidOperationException(
+                "Sabit projeksiyon varsayımı için pozitif tutar gereklidir.");
         }
 
         if (card.PaymentPlans.Any(x =>
-                x.PaymentType == CreditCardPaymentType.FixedAmount && x.Amount is null or <= 0m))
+                x.PaymentType == CreditCardPaymentType.FixedAmount &&
+                x.Amount is null or <= 0m))
         {
-            throw new InvalidOperationException("Özel kart ödemesi için pozitif tutar gereklidir.");
+            throw new InvalidOperationException(
+                "Özel kart ödemesi için pozitif tutar gereklidir.");
         }
 
         if (card.PaymentPlans.GroupBy(x => x.DueDate).Any(x => x.Count() > 1))
         {
-            throw new InvalidOperationException("Aynı son ödeme tarihi için yalnızca bir özel kart planı olabilir.");
-        }
-    }
-
-    private static void ValidateMoney(CreditCard card)
-    {
-        if (card.CarriedBalance < 0m ||
-            card.UnbilledSpending < 0m ||
-            card.Charges.Any(x => x.Amount < 0m))
-        {
-            throw new InvalidOperationException("Kart borç bileşenleri negatif olamaz.");
+            throw new InvalidOperationException(
+                "Aynı son ödeme tarihi için yalnızca bir özel kart planı olabilir.");
         }
     }
 

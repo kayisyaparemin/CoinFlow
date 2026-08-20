@@ -1,77 +1,61 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             xmlns:vm="clr-namespace:CoinFlow.App.ViewModels"
              x:Class="CoinFlow.App.Pages.SettingsPage"
-             x:DataType="vm:SettingsViewModel"
              Title="Ayarlar">
     <ScrollView>
-        <VerticalStackLayout Padding="20,28,20,40" Spacing="14">
-            <Label Text="KONTROL SENDE" Style="{StaticResource Eyebrow}" />
+        <VerticalStackLayout Padding="20,18,20,36" Spacing="16">
+            <Label Text="PROJEKSİYON AYARLARI" Style="{StaticResource Eyebrow}" />
             <Label Text="Ayarlar" Style="{StaticResource PageTitle}" />
 
             <Border>
-                <VerticalStackLayout Spacing="10">
-                    <Label Text="Hesaplama" Style="{StaticResource SectionTitle}" />
+                <VerticalStackLayout Spacing="9">
+                    <Label Text="Maaş Dönemi" Style="{StaticResource SectionTitle}" />
                     <Label Text="Maaş günü" Style="{StaticResource FieldLabel}" />
                     <Entry Text="{Binding SalaryDay}" Keyboard="Numeric" />
-                    <Grid ColumnDefinitions="*,Auto">
-                        <VerticalStackLayout>
-                            <Label Text="Oyunlaştırma dili" FontFamily="OpenSansSemibold" />
-                            <Label Text="Coin, farm ve birikim mesajlarını kullan." Style="{StaticResource MutedText}" />
-                        </VerticalStackLayout>
-                        <Switch Grid.Column="1" IsToggled="{Binding GamificationEnabled}" />
-                    </Grid>
+                    <Label Text="Seçilen gün ayda yoksa ayın son günü kullanılır." Style="{StaticResource MutedText}" />
                 </VerticalStackLayout>
             </Border>
 
             <Border>
                 <VerticalStackLayout Spacing="9">
-                    <Label Text="Acil durum tamponu" Style="{StaticResource SectionTitle}" />
-                    <Label Text="Hedef" Style="{StaticResource FieldLabel}" />
-                    <Entry Text="{Binding BufferTarget}" Keyboard="Numeric" />
-                    <Label Text="Mevcut" Style="{StaticResource FieldLabel}" />
-                    <Entry Text="{Binding BufferCurrent}" Keyboard="Numeric" />
-                    <Label Text="Her maaş döneminde ayrılacak" Style="{StaticResource FieldLabel}" />
-                    <Entry Text="{Binding PeriodContribution}" Keyboard="Numeric" />
-                    <Label Text="Katkı hedefte kalan tutarla sınırlandırılır. Hedef dolunca gelecek katkı otomatik sıfır olur." Style="{StaticResource MutedText}" />
-                    <Button Text="Ayarları kaydet" Command="{Binding SaveCommand}" />
+                    <Label Text="Tahmini Yaşam Bütçesi" Style="{StaticResource SectionTitle}" />
+                    <Label Text="Aylık tahmini yaşam bütçesi" Style="{StaticResource FieldLabel}" />
+                    <Entry Text="{Binding MonthlyLivingBudget}" Keyboard="Numeric" />
+                    <Label Text="Yemek, market, yakıt ve tek tek takip edilmeyen günlük yaşam giderlerinin yaklaşık toplamı." Style="{StaticResource MutedText}" />
                 </VerticalStackLayout>
             </Border>
-
-            <Border BackgroundColor="{StaticResource Mint}" StrokeThickness="0">
-                <VerticalStackLayout Spacing="8">
-                    <Label Text="Tampona özel aktarım" Style="{StaticResource SectionTitle}" />
-                    <Label Text="Planlanan dönem katkısına kadar olan bölüm ikinci kez serbest bakiyeden düşülmez; yalnızca plan üstü kısım harcama sayılır." Style="{StaticResource MutedText}" />
-                    <Entry Text="{Binding TransferAmount}" Placeholder="Tutar" Keyboard="Numeric" />
-                    <Button Text="Tampona aktar" Command="{Binding TransferCommand}" />
-                </VerticalStackLayout>
-            </Border>
-            <Label Text="{Binding StatusMessage}" IsVisible="{Binding HasStatus}" TextColor="{StaticResource MintStrong}" />
 
             <Border>
-                <VerticalStackLayout Spacing="5">
+                <VerticalStackLayout Spacing="9">
+                    <Label Text="Tahmini Birikim Başlangıcı" Style="{StaticResource SectionTitle}" />
+                    <Label Text="Projeksiyon başlangıç birikimi" Style="{StaticResource FieldLabel}" />
+                    <Entry Text="{Binding ProjectionStartingSavings}" Keyboard="Numeric" />
+                    <Label Text="Bu tutar yalnızca gelecek tahminlerinin başlangıç noktasıdır; gerçek banka bakiyesi olarak takip edilmez." Style="{StaticResource MutedText}" />
+                    <Button Text="Ayarları Kaydet" Command="{Binding SaveCommand}" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Label Text="{Binding StatusMessage}" IsVisible="{Binding HasStatus}" TextColor="{StaticResource Error}" />
+
+            <Border>
+                <VerticalStackLayout Spacing="6">
                     <Label Text="Hakkında" Style="{StaticResource SectionTitle}" />
-                    <Border IsVisible="{Binding IsDevelopment}" BackgroundColor="{StaticResource Sun}" StrokeThickness="0" HorizontalOptions="Start" Padding="10,5">
-                        <Label Text="DEVELOPMENT BUILD" Style="{StaticResource Eyebrow}" />
-                    </Border>
                     <Label Text="CoinFlow" FontFamily="OpenSansSemibold" FontSize="20" />
                     <Label Text="{Binding BuildChannel}" Style="{StaticResource MutedText}" />
                     <Label Text="{Binding VersionText}" />
                     <Label Text="{Binding CommitText}" IsVisible="{Binding IsDevelopment}" />
                     <Label Text="{Binding BuildText}" IsVisible="{Binding IsDevelopment}" />
-                    <Label Text="Tamamen çevrimdışı. Veriler yalnızca bu cihazda saklanır." Style="{StaticResource MutedText}" Margin="0,8,0,0" />
+                    <Label Text="Veriler yalnızca bu cihazda saklanır." Style="{StaticResource MutedText}" />
                 </VerticalStackLayout>
             </Border>
 
-            <Border BackgroundColor="{StaticResource SoftPink}" Stroke="{StaticResource Error}">
-                <VerticalStackLayout Spacing="9">
-                    <Label Text="Verileri sıfırla" Style="{StaticResource SectionTitle}" />
-                    <Label Text="Maaşlar, krediler, kartlar, planlar, harcamalar, tampon ve uygulama ayarları kalıcı olarak silinir." Style="{StaticResource MutedText}" />
-                    <Button Text="Tüm verileri sıfırla"
-                            Clicked="OnResetAllDataClicked"
-                            BackgroundColor="{StaticResource SoftPeach}"
-                            TextColor="{StaticResource Error}" />
+            <Border IsVisible="{Binding IsDevelopment}" BackgroundColor="{StaticResource SoftPink}">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Development Verisi" Style="{StaticResource SectionTitle}" />
+                    <Label Text="Development veritabanını temizler, schema migration'larını çalıştırır ve canonical seed'i yeniden yükler." Style="{StaticResource MutedText}" />
+                    <Button Text="Development verisini sıfırla ve seed'i yeniden yükle"
+                            Clicked="OnResetDevelopmentDataClicked" />
                 </VerticalStackLayout>
             </Border>
         </VerticalStackLayout>

@@ -7,36 +7,28 @@ public sealed class LoanScheduleCalculator
     public IReadOnlyList<DateOnly> GetPaymentDates(Loan loan)
     {
         CalendarRules.ValidateDay(loan.PaymentDay);
-        if (loan.MonthlyInstallment < 0m)
+        if (loan.MonthlyPayment <= 0m)
         {
-            throw new ArgumentOutOfRangeException(nameof(loan), "Kredi taksiti negatif olamaz.");
+            throw new ArgumentOutOfRangeException(nameof(loan), "Kredi taksiti sıfırdan büyük olmalıdır.");
         }
 
-        var first = CalendarRules.ResolveDay(loan.StartDate.Year, loan.StartDate.Month, loan.PaymentDay);
-        if (first < loan.StartDate)
+        if (loan.NextPaymentDate == default)
         {
-            first = CalendarRules.AddMonthsKeepingDay(first, 1, loan.PaymentDay);
+            throw new InvalidOperationException("Kredinin exact ilk/sonraki ödeme tarihi gereklidir.");
         }
 
-        if (loan.InstallmentCount is > 0)
-        {
-            return Enumerable.Range(0, loan.InstallmentCount.Value)
-                .Select(i => CalendarRules.AddMonthsKeepingDay(first, i, loan.PaymentDay))
-                .Where(x => loan.EndDate is null || x <= loan.EndDate.Value)
-                .ToArray();
-        }
-
-        if (loan.EndDate is null || loan.EndDate < first)
+        if (loan.RemainingInstallmentCount < 1)
         {
             return [];
         }
 
-        var dates = new List<DateOnly>();
-        for (var date = first; date <= loan.EndDate; date = CalendarRules.AddMonthsKeepingDay(date, 1, loan.PaymentDay))
-        {
-            dates.Add(date);
-        }
-
-        return dates;
+        return Enumerable.Range(0, loan.RemainingInstallmentCount)
+            .Select(index => index == 0
+                ? loan.NextPaymentDate
+                : CalendarRules.AddMonthsKeepingDay(
+                    loan.NextPaymentDate,
+                    index,
+                    loan.PaymentDay))
+            .ToArray();
     }
 }

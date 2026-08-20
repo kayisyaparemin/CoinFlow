@@ -7,70 +7,110 @@ using CoinFlow.Domain.Calculations;
 
 namespace CoinFlow.App.ViewModels;
 
-public partial class SimulationViewModel(CoinFlowService service) : ViewModelBase
+public partial class SimulationViewModel(
+    CoinFlowService service) : ViewModelBase
 {
-    public ObservableCollection<SelectionOption<PurchaseFundingMethod>> FundingMethods { get; } =
+    public ObservableCollection<SelectionOption<SimulationScenarioType>>
+        ScenarioTypes { get; } =
     [
-        new("Kredi kartı ile alma", PurchaseFundingMethod.CreditCard),
-        new("Nakit borç ile alma", PurchaseFundingMethod.CashDebt),
-        new("Krediyle alma", PurchaseFundingMethod.BankLoan),
-        new("Nakit ile alma", PurchaseFundingMethod.Cash)
+        new("Nakit satın alma", SimulationScenarioType.CashPurchase),
+        new("Karttan tek çekim", SimulationScenarioType.CreditCardSinglePayment),
+        new("Kredi kartı taksitli", SimulationScenarioType.CreditCardInstallmentPurchase),
+        new("Finansman / kredi", SimulationScenarioType.FinancingLoan),
+        new("Nakit borç", SimulationScenarioType.CashDebt),
+        new("Gelecek toplu ödeme", SimulationScenarioType.FutureOneTimePayment),
+        new("Dönemsel ödeme", SimulationScenarioType.RecurringPayment),
+        new("Gelecek gelir", SimulationScenarioType.FutureIncome),
+        new("Maaş değişikliği", SimulationScenarioType.SalaryChange)
     ];
 
     public ObservableCollection<SelectionOption<Guid>> CreditCards { get; } = [];
+    public ObservableCollection<SimulationLine> Results { get; } = [];
+
+    private SimulationRequest? _lastRequest;
 
     [ObservableProperty] private string name = "Beyaz eşya";
-    [ObservableProperty] private string totalAmount = "120000";
-    [ObservableProperty] private SelectionOption<PurchaseFundingMethod>? selectedFundingMethod;
+    [ObservableProperty] private string amount = "120000";
+    [ObservableProperty] private SelectionOption<SimulationScenarioType>? selectedScenarioType;
     [ObservableProperty] private SelectionOption<Guid>? selectedCreditCard;
-    [ObservableProperty] private DateTime purchaseDate = DateTime.Today;
-    [ObservableProperty] private string installmentCount = "9";
+    [ObservableProperty] private DateTime startDate = DateTime.Today;
+    [ObservableProperty] private string paymentCount = "9";
     [ObservableProperty] private DateTime firstPaymentDate = DateTime.Today.AddMonths(1);
-    [ObservableProperty] private string totalRepaymentAmount = string.Empty;
-    [ObservableProperty] private bool isCreditCard = true;
-    [ObservableProperty] private bool isFinanced = true;
-    [ObservableProperty] private bool isDebtOrLoan;
-    [ObservableProperty] private string methodDescription = string.Empty;
-    [ObservableProperty] private string summaryText = string.Empty;
-    [ObservableProperty] private string explanation = string.Empty;
+    [ObservableProperty] private string totalRepaymentAmount = "145000";
+    [ObservableProperty] private bool isCard;
+    [ObservableProperty] private bool needsPaymentCount;
+    [ObservableProperty] private bool needsFirstPayment;
+    [ObservableProperty] private bool isFinancing;
+    [ObservableProperty] private string scenarioDescription = string.Empty;
     [ObservableProperty] private bool hasResults;
-
-    public ObservableCollection<SimulationLine> Results { get; } = [];
+    [ObservableProperty] private string baselineEnding = "—";
+    [ObservableProperty] private string scenarioEnding = "—";
+    [ObservableProperty] private string endingDifference = "—";
+    [ObservableProperty] private string tightestPeriod = "—";
+    [ObservableProperty] private string lowestAvailable = "—";
+    [ObservableProperty] private string lowestSavingsCapacity = "—";
+    [ObservableProperty] private string lowestProjectedSavings = "—";
+    [ObservableProperty] private string firstNegativePeriod = "Yok";
+    [ObservableProperty] private string totalScenarioCost = "—";
+    [ObservableProperty] private string financingCost = string.Empty;
+    [ObservableProperty] private bool hasFinancingCost;
+    [ObservableProperty] private string friendlySummary = string.Empty;
 
     public async Task LoadAsync()
     {
-        SelectedFundingMethod ??= FundingMethods[0];
-        var selectedCardId = SelectedCreditCard?.Value;
-        var data = await service.GetFinanceDataAsync();
+        var plan = await service.GetFinancialPlanAsync();
         CreditCards.Clear();
-        foreach (var card in data.CreditCards)
+        foreach (var card in plan.CreditCards)
         {
-            var available = Math.Max(0m, card.Limit - card.CurrentTotalDebt);
             CreditCards.Add(new SelectionOption<Guid>(
-                $"{card.Bank} {card.Name} • Borç {Money(card.CurrentTotalDebt)} • Kullanılabilir {Money(available)}".Trim(),
+                $"{card.Bank} {card.Name}".Trim(),
                 card.Id));
         }
 
-        SelectedCreditCard = CreditCards.FirstOrDefault(x => x.Value == selectedCardId)
-            ?? CreditCards.FirstOrDefault();
+        SelectedScenarioType ??= ScenarioTypes[0];
+        SelectedCreditCard ??= CreditCards.FirstOrDefault();
     }
 
-    partial void OnSelectedFundingMethodChanged(SelectionOption<PurchaseFundingMethod>? value)
+    partial void OnSelectedScenarioTypeChanged(
+        SelectionOption<SimulationScenarioType>? value)
     {
-        var method = value?.Value ?? PurchaseFundingMethod.CreditCard;
-        IsCreditCard = method == PurchaseFundingMethod.CreditCard;
-        IsFinanced = method != PurchaseFundingMethod.Cash;
-        IsDebtOrLoan = method is PurchaseFundingMethod.CashDebt or PurchaseFundingMethod.BankLoan;
-        MethodDescription = method switch
+        var type = value?.Value ?? SimulationScenarioType.CashPurchase;
+        IsCard = type is
+            SimulationScenarioType.CreditCardSinglePayment or
+            SimulationScenarioType.CreditCardInstallmentPurchase;
+        NeedsPaymentCount = type is
+            SimulationScenarioType.CreditCardInstallmentPurchase or
+            SimulationScenarioType.FinancingLoan or
+            SimulationScenarioType.CashDebt or
+            SimulationScenarioType.RecurringPayment;
+        NeedsFirstPayment = type is
+            SimulationScenarioType.FinancingLoan or
+            SimulationScenarioType.CashDebt or
+            SimulationScenarioType.RecurringPayment;
+        IsFinancing = type == SimulationScenarioType.FinancingLoan;
+        ScenarioDescription = type switch
         {
-            PurchaseFundingMethod.CreditCard => "Taksitler alışveriş tarihinden itibaren exact posting tarihleriyle kartın gerçek kesim ve son ödeme döngüsüne yerleştirilir.",
-            PurchaseFundingMethod.CashDebt => "Alışveriş anında nakit azalmaz; borç geri ödemeleri mevcut zorunlu ödemelere eklenir.",
-            PurchaseFundingMethod.BankLoan => "Faiz ve masraflar dahil toplam geri ödeme, seçilen vadeye bölünerek mevcut kredilere eklenir.",
-            PurchaseFundingMethod.Cash => "Tutar, alışveriş tarihini içeren maaş döneminin serbest parasından tek seferde düşülür.",
+            SimulationScenarioType.CashPurchase =>
+                "Büyük nakit gideri exact tarihinde tahmini birikimden düşer.",
+            SimulationScenarioType.CreditCardSinglePayment =>
+                "Harcama gerçek kart kesim ve son ödeme tarihleriyle hesaplanır.",
+            SimulationScenarioType.CreditCardInstallmentPurchase =>
+                "Taksit posting tarihleri gerçek kart statement motoruna eklenir.",
+            SimulationScenarioType.FinancingLoan =>
+                "Toplam geri ödeme exact tarihlerle taksit planına dönüşür.",
+            SimulationScenarioType.CashDebt =>
+                "Faizsiz borç tutarı ödeme sayısına exact toplamla bölünür.",
+            SimulationScenarioType.FutureOneTimePayment =>
+                "Toplu ödeme exact tarihinde zorunlu ödemeye eklenir.",
+            SimulationScenarioType.RecurringPayment =>
+                "Girilen tutar, belirtilen dönem sayısı boyunca aylık tekrarlanır.",
+            SimulationScenarioType.FutureIncome =>
+                "Gelir exact tarihinde ilgili maaş dönemine eklenir.",
+            SimulationScenarioType.SalaryChange =>
+                "Yeni maaş, effective date dönem başlangıcına ulaştığında geçerli olur.",
             _ => string.Empty
         };
         HasResults = false;
-        Results.Clear();
     }
 
     [RelayCommand]
@@ -85,48 +125,10 @@ public partial class SimulationViewModel(CoinFlowService service) : ViewModelBas
         {
             IsBusy = true;
             SetStatus(string.Empty);
-            var method = SelectedFundingMethod?.Value ?? PurchaseFundingMethod.CreditCard;
-            var count = 1;
-            if (method != PurchaseFundingMethod.Cash && !int.TryParse(InstallmentCount, out count))
-            {
-                throw new InvalidOperationException("Taksit sayısı geçerli bir tam sayı olmalıdır.");
-            }
-
-            decimal? repaymentTotal = null;
-            if (IsDebtOrLoan && !string.IsNullOrWhiteSpace(TotalRepaymentAmount))
-            {
-                repaymentTotal = ParseMoney(TotalRepaymentAmount, "Toplam geri ödeme");
-            }
-
-            var result = await service.SimulatePurchaseAsync(new PurchaseSimulationRequest(
-                Name.Trim(),
-                ParseMoney(TotalAmount, "Toplam tutar"),
-                method,
-                DateOnly.FromDateTime(PurchaseDate),
-                count,
-                method == PurchaseFundingMethod.Cash
-                    ? DateOnly.FromDateTime(PurchaseDate)
-                    : DateOnly.FromDateTime(FirstPaymentDate),
-                IsCreditCard ? SelectedCreditCard?.Value : null,
-                repaymentTotal));
-
-            Results.Clear();
-            foreach (var row in result.Rows)
-            {
-                Results.Add(new SimulationLine(
-                    $"{row.PeriodStart:dd MMM yyyy} → {row.PeriodEnd:dd MMM yyyy}".ToUpper(TurkishCulture),
-                    Money(row.BaselineObligations),
-                    Money(row.BaselineSpendable),
-                    Money(row.NewPayment, 2),
-                    Money(row.ResultingObligations, 2),
-                    Money(row.ResultingSpendable, 2),
-                    Money(row.RemainingNewDebt, 2)));
-            }
-
-            SummaryText = $"Mevcut 12 dönemlik zorunlu ödeme: {Money(result.ExistingObligationsInHorizon)} • " +
-                          $"Bu seçimden doğan 12 aylık ek ödeme: {Money(result.NewPaymentsInHorizon, 2)} • " +
-                          $"12. dönem sonunda kalan yeni borç: {Money(result.RemainingNewDebtAfterHorizon, 2)}";
-            Explanation = result.Explanation;
+            var request = BuildRequest();
+            var result = await service.SimulateAsync(request);
+            _lastRequest = request;
+            Populate(result);
             HasResults = true;
         }
         catch (Exception exception)
@@ -139,4 +141,95 @@ public partial class SimulationViewModel(CoinFlowService service) : ViewModelBas
             IsBusy = false;
         }
     }
+
+    public async Task<bool> ApplyLastPlanAsync()
+    {
+        if (_lastRequest is null || !HasResults)
+        {
+            SetStatus("Önce bir simülasyon hesaplayın.");
+            return false;
+        }
+
+        try
+        {
+            await service.ApplySimulationAsync(
+                _lastRequest,
+                confirmed: true);
+            SetStatus("Plan finansal kayıtlarına uygulandı.");
+            return true;
+        }
+        catch (Exception exception)
+        {
+            SetStatus(exception.Message);
+            return false;
+        }
+    }
+
+    private SimulationRequest BuildRequest()
+    {
+        var type = SelectedScenarioType?.Value
+            ?? throw new InvalidOperationException("Senaryo türü seçilmelidir.");
+        var count = NeedsPaymentCount
+            ? int.TryParse(PaymentCount, out var parsed)
+                ? parsed
+                : throw new InvalidOperationException("Ödeme sayısı geçerli olmalıdır.")
+            : 1;
+        decimal? repayment = IsFinancing
+            ? ParseMoney(TotalRepaymentAmount, "Toplam geri ödeme")
+            : null;
+        return new SimulationRequest(
+            type,
+            Name,
+            ParseMoney(Amount, "Tutar"),
+            DateOnly.FromDateTime(StartDate),
+            count,
+            NeedsFirstPayment
+                ? DateOnly.FromDateTime(FirstPaymentDate)
+                : null,
+            IsCard
+                ? SelectedCreditCard?.Value ??
+                  throw new InvalidOperationException("Kredi kartı seçilmelidir.")
+                : null,
+            repayment);
+    }
+
+    private void Populate(SimulationResult result)
+    {
+        var baselineEnding = result.Baseline[^1].EndingProjectedSavings;
+        var scenarioEnding = result.Risk.EndingProjectedSavings;
+        BaselineEnding = Money(baselineEnding);
+        ScenarioEnding = Money(scenarioEnding);
+        EndingDifference = Money(scenarioEnding - baselineEnding);
+        TightestPeriod = PeriodText(result.Risk.LowestPeriod);
+        LowestAvailable = Money(result.Risk.LowestAvailableAfterMandatory);
+        LowestSavingsCapacity = Money(result.Risk.LowestSavingsCapacity);
+        LowestProjectedSavings = Money(result.Risk.LowestProjectedSavings);
+        FirstNegativePeriod =
+            result.Risk.FirstNegativeProjectedSavingsPeriod is { } negative
+                ? PeriodText(negative)
+                : result.Risk.FirstNegativeSavingsCapacityPeriod is { } capacity
+                    ? PeriodText(capacity)
+                    : "Yok";
+        TotalScenarioCost = Money(result.Risk.TotalScenarioCost);
+        HasFinancingCost = result.Risk.FinancingCost is not null;
+        FinancingCost = result.Risk.FinancingCost is decimal cost
+            ? Money(cost)
+            : string.Empty;
+        FriendlySummary = result.FriendlySummary;
+
+        Results.Clear();
+        foreach (var row in result.Rows)
+        {
+            Results.Add(new SimulationLine(
+                PeriodText(row.Scenario.Period),
+                Money(row.Baseline.EndingProjectedSavings),
+                Money(row.Scenario.EndingProjectedSavings),
+                Money(row.ProjectedSavingsDifference),
+                Money(row.Scenario.AvailableAfterMandatory),
+                Money(row.Scenario.EstimatedSavingsCapacity)));
+        }
+    }
+
+    private static string PeriodText(SalaryPeriod period) =>
+        $"{period.Start.ToString("dd MMM", TurkishCulture)} → {period.End.ToString("dd MMM yyyy", TurkishCulture)}";
 }

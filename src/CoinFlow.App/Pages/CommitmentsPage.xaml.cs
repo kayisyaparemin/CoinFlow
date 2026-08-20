@@ -19,23 +19,29 @@ public partial class CommitmentsPage : ContentPage
         await _viewModel.LoadAsync();
     }
 
-    private void OnRemovePlanInstallmentClicked(object? sender, EventArgs eventArgs)
+    private void OnRemovePlanPaymentClicked(
+        object? sender,
+        EventArgs eventArgs)
     {
         if (sender is Button { CommandParameter: DatedAmountLine line })
         {
-            _viewModel.RemovePlanInstallment(line);
+            _viewModel.RemovePlanPayment(line);
         }
     }
 
-    private void OnRemoveCardFuturePaymentClicked(object? sender, EventArgs eventArgs)
+    private void OnRemoveCardChargeClicked(
+        object? sender,
+        EventArgs eventArgs)
     {
         if (sender is Button { CommandParameter: DatedAmountLine line })
         {
-            _viewModel.RemoveCardFuturePayment(line);
+            _viewModel.RemoveCardCharge(line);
         }
     }
 
-    private void OnRemoveCardPaymentPlanClicked(object? sender, EventArgs eventArgs)
+    private void OnRemoveCardPaymentPlanClicked(
+        object? sender,
+        EventArgs eventArgs)
     {
         if (sender is Button { CommandParameter: CardPaymentPlanLine line })
         {
@@ -43,9 +49,15 @@ public partial class CommitmentsPage : ContentPage
         }
     }
 
-    private async void OnEditCardClicked(object? sender, EventArgs eventArgs)
+    private async void OnEditCardClicked(
+        object? sender,
+        EventArgs eventArgs)
     {
-        if (sender is not Button { CommandParameter: CommitmentSummaryLine item } || !item.CanEdit)
+        if (sender is not Button
+            {
+                CommandParameter: FinancialRecordLine item
+            } ||
+            !item.CanEditCard)
         {
             return;
         }
@@ -54,9 +66,14 @@ public partial class CommitmentsPage : ContentPage
         await PageScroll.ScrollToAsync(0, 0, true);
     }
 
-    private async void OnDeleteClicked(object? sender, EventArgs eventArgs)
+    private async void OnDeleteClicked(
+        object? sender,
+        EventArgs eventArgs)
     {
-        if (sender is not Button { CommandParameter: CommitmentSummaryLine item })
+        if (sender is not Button
+            {
+                CommandParameter: FinancialRecordLine item
+            })
         {
             return;
         }

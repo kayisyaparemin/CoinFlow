@@ -11,6 +11,15 @@ internal sealed class SalaryRow
     public string Note { get; set; } = string.Empty;
 }
 
+[Table("other_incomes")]
+internal sealed class OtherIncomeRow
+{
+    [PrimaryKey] public string Id { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    [Indexed] public string ExactDate { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+}
+
 [Table("loans")]
 internal sealed class LoanRow
 {
@@ -81,21 +90,6 @@ internal sealed class CardInstallmentRow
     public decimal Amount { get; set; }
 }
 
-[Table("expenses")]
-internal sealed class ExpenseRow
-{
-    [PrimaryKey] public string Id { get; set; } = string.Empty;
-    public decimal Amount { get; set; }
-    [Indexed] public string Date { get; set; } = string.Empty;
-    public int Category { get; set; }
-    public int PaymentType { get; set; }
-    public string Note { get; set; } = string.Empty;
-    public string? CreditCardId { get; set; }
-    public int? InstallmentCount { get; set; }
-    public string? FirstInstallmentDate { get; set; }
-    public string? CreatedAtUtc { get; set; }
-}
-
 [Table("credit_card_payment_plans")]
 internal sealed class CreditCardPaymentPlanRow
 {
@@ -107,15 +101,15 @@ internal sealed class CreditCardPaymentPlanRow
     public decimal? Amount { get; set; }
 }
 
-[Table("spendable_balance_snapshots")]
-internal sealed class SpendableBalanceSnapshotRow
+[Table("planned_large_expenses")]
+internal sealed class PlannedLargeExpenseRow
 {
     [PrimaryKey] public string Id { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
     public decimal Amount { get; set; }
-    [Indexed] public string SnapshotDate { get; set; } = string.Empty;
-    [Indexed] public string SalaryPeriodStart { get; set; } = string.Empty;
-    public string CreatedAtUtc { get; set; } = string.Empty;
+    [Indexed] public string ExactDate { get; set; } = string.Empty;
     public string Note { get; set; } = string.Empty;
+    public int Status { get; set; }
 }
 
 [Table("settings")]
@@ -123,27 +117,14 @@ internal sealed class SettingsRow
 {
     [PrimaryKey] public int Id { get; set; } = 1;
     public int SalaryDay { get; set; }
-    public bool GamificationEnabled { get; set; }
+    public decimal MonthlyLivingBudget { get; set; }
+    public decimal ProjectionStartingSavings { get; set; }
+    public int SchemaVersion { get; set; }
+    public int DevelopmentSeedVersion { get; set; }
+
+    // Legacy columns remain mapped so upgrades can write existing NOT NULL tables.
+    [Column("GamificationEnabled")]
+    public bool LegacyRemovedFeatureFlag { get; set; }
     public bool DevelopmentSeedEnabled { get; set; }
     public string? TrackingStartedDate { get; set; }
-}
-
-[Table("emergency_fund")]
-internal sealed class EmergencyFundRow
-{
-    [PrimaryKey] public string Id { get; set; } = string.Empty;
-    public decimal TargetAmount { get; set; }
-    public decimal CurrentAmount { get; set; }
-    public decimal PlannedPeriodContribution { get; set; }
-}
-
-[Table("emergency_fund_transfers")]
-internal sealed class EmergencyFundTransferRow
-{
-    [PrimaryKey] public string Id { get; set; } = string.Empty;
-    [Indexed] public string TransferDate { get; set; } = string.Empty;
-    [Indexed] public string SalaryPeriodStart { get; set; } = string.Empty;
-    public decimal Amount { get; set; }
-    public decimal CoveredPlannedAmount { get; set; }
-    public string CreatedAtUtc { get; set; } = string.Empty;
 }

@@ -1,4 +1,6 @@
 using System.Globalization;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using CoinFlow.Domain.Models;
 
 namespace CoinFlow.App.Models;
@@ -8,30 +10,43 @@ public sealed record SelectionOption<T>(string Label, T Value)
     public override string ToString() => Label;
 }
 
-public enum CommitmentKind
+public enum ManagementSection
 {
-    Salary,
-    Loan,
-    PaymentPlan,
-    CreditCard
+    Income,
+    Payment
 }
 
-public sealed record CommitmentSummaryLine(
+public enum FinancialRecordKind
+{
+    Salary,
+    OtherIncome,
+    Loan,
+    CreditCard,
+    TemporaryPlan,
+    InstallmentPlan,
+    LargeExpense
+}
+
+public sealed record FinancialRecordLine(
     Guid Id,
-    CommitmentKind Kind,
+    ManagementSection Section,
+    FinancialRecordKind Kind,
     string Title,
     string Subtitle,
     string Amount,
     string Badge = "")
 {
-    public bool CanEdit => Kind == CommitmentKind.CreditCard;
+    public bool CanEditCard => Kind == FinancialRecordKind.CreditCard;
 }
 
-public sealed record DatedAmountLine(Guid Id, DateOnly Date, decimal Amount)
+public sealed record DatedAmountLine(
+    Guid Id,
+    DateOnly Date,
+    decimal Amount)
 {
     public string DateText => Date.ToString("dd.MM.yyyy");
-
-    public string AmountText => $"{Amount.ToString("N2", CultureInfo.GetCultureInfo("tr-TR"))} TL";
+    public string AmountText =>
+        $"{Amount.ToString("N2", CultureInfo.GetCultureInfo("tr-TR"))} TL";
 }
 
 public sealed record CardPaymentPlanLine(
@@ -44,30 +59,51 @@ public sealed record CardPaymentPlanLine(
 
     public string PaymentText => PaymentType switch
     {
-        CreditCardPaymentType.Minimum => "Asgari ödeme",
-        CreditCardPaymentType.FullStatement => "Ekstrenin tamamı",
+        CreditCardPaymentType.Minimum => "Asgari",
+        CreditCardPaymentType.FullStatement => "Ekstre tamamı",
         CreditCardPaymentType.FixedAmount =>
             $"{Amount.GetValueOrDefault().ToString("N2", CultureInfo.GetCultureInfo("tr-TR"))} TL",
         _ => "—"
     };
 }
 
-public sealed record ProjectionLine(
-    string Period,
-    string Salary,
-    string Obligations,
-    string ProjectedSpendable,
-    string ActualRemaining,
-    bool HasActualRemaining,
-    string ProjectedDailyCoin,
-    string Breakdown,
-    string Highlight);
+public sealed record UpcomingPaymentLine(
+    string Date,
+    string Name,
+    string Amount,
+    string Detail);
+
+public partial class ProjectionLine(
+    string period,
+    string availableAfterMandatory,
+    string estimatedSavings,
+    string endingProjectedSavings,
+    string breakdown,
+    string notice,
+    bool hasNotice) : ObservableObject
+{
+    public string Period { get; } = period;
+    public string AvailableAfterMandatory { get; } = availableAfterMandatory;
+    public string EstimatedSavings { get; } = estimatedSavings;
+    public string EndingProjectedSavings { get; } = endingProjectedSavings;
+    public string Breakdown { get; } = breakdown;
+    public string Notice { get; } = notice;
+    public bool HasNotice { get; } = hasNotice;
+
+    [ObservableProperty] private bool isExpanded;
+    public bool IsCollapsed => !IsExpanded;
+
+    partial void OnIsExpandedChanged(bool value) =>
+        OnPropertyChanged(nameof(IsCollapsed));
+
+    [RelayCommand]
+    private void Toggle() => IsExpanded = !IsExpanded;
+}
 
 public sealed record SimulationLine(
-    string Month,
-    string CurrentObligations,
-    string CurrentSpendable,
-    string NewPayment,
-    string ResultingObligations,
-    string ResultingSpendable,
-    string RemainingDebt);
+    string Period,
+    string BaselineSavings,
+    string ScenarioSavings,
+    string Difference,
+    string AvailableAfterMandatory,
+    string SavingsCapacity);

@@ -6,17 +6,12 @@ using CoinFlow.Domain.Models;
 
 namespace CoinFlow.App.ViewModels;
 
-public partial class SettingsViewModel(CoinFlowService service) : ViewModelBase
+public partial class SettingsViewModel(
+    CoinFlowService service) : ViewModelBase
 {
-    private Guid _fundId;
-    private DateOnly? _trackingStartedDate;
-
     [ObservableProperty] private string salaryDay = "10";
-    [ObservableProperty] private bool gamificationEnabled = true;
-    [ObservableProperty] private string bufferTarget = string.Empty;
-    [ObservableProperty] private string bufferCurrent = string.Empty;
-    [ObservableProperty] private string periodContribution = "0";
-    [ObservableProperty] private string transferAmount = string.Empty;
+    [ObservableProperty] private string monthlyLivingBudget = "0";
+    [ObservableProperty] private string projectionStartingSavings = "0";
 
     public bool IsDevelopment => BuildInfo.IsDevelopment;
     public string BuildChannel => BuildInfo.Channel;
@@ -26,14 +21,12 @@ public partial class SettingsViewModel(CoinFlowService service) : ViewModelBase
 
     public async Task LoadAsync()
     {
-        var data = await service.GetFinanceDataAsync();
-        _fundId = data.EmergencyFund.Id;
-        SalaryDay = data.Settings.SalaryDay.ToString(TurkishCulture);
-        GamificationEnabled = data.Settings.GamificationEnabled;
-        _trackingStartedDate = data.Settings.TrackingStartedDate;
-        BufferTarget = data.EmergencyFund.TargetAmount.ToString("0.##", TurkishCulture);
-        BufferCurrent = data.EmergencyFund.CurrentAmount.ToString("0.##", TurkishCulture);
-        PeriodContribution = data.EmergencyFund.PlannedPeriodContribution.ToString("0.##", TurkishCulture);
+        var settings = (await service.GetFinancialPlanAsync()).Settings;
+        SalaryDay = settings.SalaryDay.ToString(TurkishCulture);
+        MonthlyLivingBudget = settings.MonthlyLivingBudget
+            .ToString("N2", TurkishCulture);
+        ProjectionStartingSavings = settings.ProjectionStartingSavings
+            .ToString("N2", TurkishCulture);
     }
 
     [RelayCommand]
@@ -41,32 +34,22 @@ public partial class SettingsViewModel(CoinFlowService service) : ViewModelBase
     {
         try
         {
-            IsBusy = true;
-            if (!int.TryParse(SalaryDay, out var day) || day is < 1 or > 31)
+            if (!int.TryParse(SalaryDay, out var day) ||
+                day is < 1 or > 31)
             {
-                throw new InvalidOperationException("Maaş günü 1 ile 31 arasında olmalıdır.");
+                throw new InvalidOperationException(
+                    "Maaş günü 1 ile 31 arasında olmalıdır.");
             }
 
             await service.SaveSettingsAsync(new UserSettings
             {
                 SalaryDay = day,
-                GamificationEnabled = GamificationEnabled,
-                DevelopmentSeedEnabled = BuildInfo.IsDevelopment,
-                TrackingStartedDate = _trackingStartedDate
-            });
-            var target = ParseMoney(BufferTarget, "Tampon hedefi");
-            var current = ParseMoney(BufferCurrent, "Mevcut tampon");
-            var contribution = ParseMoney(PeriodContribution, "Dönem katkısı");
-            if (target < 0m || current < 0m || contribution < 0m)
-            {
-                throw new InvalidOperationException("Tampon tutarları negatif olamaz.");
-            }
-            await service.SaveEmergencyFundAsync(new EmergencyFund
-            {
-                Id = _fundId,
-                TargetAmount = target,
-                CurrentAmount = current,
-                PlannedPeriodContribution = contribution
+                MonthlyLivingBudget = ParseMoney(
+                    MonthlyLivingBudget,
+                    "Aylık tahmini yaşam bütçesi"),
+                ProjectionStartingSavings = ParseMoney(
+                    ProjectionStartingSavings,
+                    "Projeksiyon başlangıç birikimi")
             });
             SetStatus("Ayarlar kaydedildi.");
         }
@@ -74,53 +57,28 @@ public partial class SettingsViewModel(CoinFlowService service) : ViewModelBase
         {
             SetStatus(exception.Message);
         }
-        finally
-        {
-            IsBusy = false;
-        }
     }
 
-    [RelayCommand]
-    private async Task TransferAsync()
+    public async Task<bool> ResetDevelopmentDataAsync()
     {
-        try
+        if (!IsDevelopment)
         {
-            var amount = ParseMoney(TransferAmount, "Aktarım tutarı");
-            await service.TransferToEmergencyFundAsync(amount);
-            TransferAmount = string.Empty;
-            SetStatus("Tutar acil durum tamponuna aktarıldı.");
-            await LoadAsync();
-        }
-        catch (Exception exception)
-        {
-            SetStatus(exception.Message);
-        }
-    }
-
-    public async Task<bool> ResetAllDataAsync()
-    {
-        if (IsBusy)
-        {
+            SetStatus(
+                "Development veri sıfırlama yalnızca development build'de kullanılabilir.");
             return false;
         }
 
         try
         {
-            IsBusy = true;
-            await service.ResetAllDataAsync();
-            TransferAmount = string.Empty;
+            await service.ResetDevelopmentDataAsync();
             await LoadAsync();
-            SetStatus("Tüm veriler sıfırlandı.");
+            SetStatus("Canonical development verisi yeniden yüklendi.");
             return true;
         }
         catch (Exception exception)
         {
             SetStatus(exception.Message);
             return false;
-        }
-        finally
-        {
-            IsBusy = false;
         }
     }
 }

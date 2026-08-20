@@ -35,25 +35,25 @@ public static class MauiProgram
                 seedDevelopmentData,
                 services.GetRequiredService<IClock>().Today));
         builder.Services.AddSingleton<SalaryPeriodCalculator>();
+        builder.Services.AddSingleton<SalaryResolver>();
+        builder.Services.AddSingleton<IncomeProjectionCalculator>();
         builder.Services.AddSingleton<LoanScheduleCalculator>();
         builder.Services.AddSingleton<InstallmentScheduleCalculator>();
-        builder.Services.AddSingleton<SpendableBalanceCalculator>();
-        builder.Services.AddSingleton<DailyCoinCalculator>();
-        builder.Services.AddSingleton<CreditCardProjectionCalculator>();
+        builder.Services.AddSingleton<ScheduledPaymentCalculator>();
+        builder.Services.AddSingleton<CreditCardStatementCalculator>();
         builder.Services.AddSingleton<MandatoryPaymentCalculator>();
-        builder.Services.AddSingleton<EmergencyFundCalculator>();
+        builder.Services.AddSingleton<FinancialProjectionCalculator>();
         builder.Services.AddSingleton<FinancialProjectionService>();
-        builder.Services.AddSingleton<PurchaseSimulationCalculator>();
+        builder.Services.AddSingleton<SimulationCalculator>();
+        builder.Services.AddSingleton<TargetAmountCalculator>();
         builder.Services.AddSingleton<CoinFlowService>();
 
         builder.Services.AddTransient<DashboardViewModel>();
-        builder.Services.AddTransient<ExpenseViewModel>();
         builder.Services.AddTransient<CommitmentsViewModel>();
         builder.Services.AddTransient<FutureMonthsViewModel>();
         builder.Services.AddTransient<SimulationViewModel>();
         builder.Services.AddTransient<SettingsViewModel>();
         builder.Services.AddTransient<MainPage>();
-        builder.Services.AddTransient<ExpensePage>();
         builder.Services.AddTransient<CommitmentsPage>();
         builder.Services.AddTransient<FutureMonthsPage>();
         builder.Services.AddTransient<SimulationPage>();

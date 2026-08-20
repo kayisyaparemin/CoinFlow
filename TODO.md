@@ -1,28 +1,16 @@
-# CoinFlow MVP teslim planı
+# CoinFlow refactor teslim durumu
 
-- [x] Gereksinimleri ve tarih/para kararlarını mimari belgede sabitle
-- [x] .NET 8 solution ve katmanlı proje yapısını oluştur
-- [x] Domain veri modelini oluştur
-- [x] Maaş dönemi, Daily Coin, kart projeksiyonu ve alışveriş simülasyonu motorlarını ayır
-- [x] Application service ve repository sözleşmesini oluştur
-- [x] SQLite tablolarını, eşlemeleri ve development seed verisini oluştur
-- [x] Türkçe MAUI MVVM ana ekranını ve hızlı harcama akışını tamamla
-- [x] Maaş/kredi/geçici plan/kart yönetim ekranını tamamla
-- [x] 12 aylık görünüm, simülasyon, acil tampon ve ayarlar ekranını tamamla
-- [x] Salary day 29/30/31, Şubat ve aynı gün vade testlerini tamamla
-- [x] Daily Coin havuz, nakit/kart davranışı ve yuvarlama testlerini tamamla
-- [x] Development/stable GitHub Actions kanallarını tamamla
-- [x] Yerel build/test ve Android APK doğrulamasını tamamla
-- [x] Current Actual ve Future Projection hesaplarını ayır
-- [x] Serbest bakiye snapshot geçmişi ve düzeltme akışını ekle
-- [x] Daily Reward ile sürdürülebilir Daily Coin'i ayır
-- [x] Exact posting/statement close/payment due kart motoruna geçir
-- [x] Due-date bazlı manuel kart ödeme planlarını ekle
-- [x] Kart başına gerçek ödeme stratejisi ve ayrı projection fallback modeli ekle
-- [x] Belirsiz kart ödemelerini `Kesin değil` olarak geleceğe taşı
-- [x] Dashboard exact ekstre ödeme planlama ve kart stratejisi düzenleme akışını ekle
-- [x] Kart aggregate'ları için veri kaybetmeyen SQLite migration ekle
-- [x] Tampon hedef sınırı ve çift düşmeyi önleyen transfer kaydı ekle
-- [x] Simülasyonu ortak current/future projection çekirdeğine geçir
-- [x] Development hesap detayları görünümünü ekle
-- [x] README kurulum, signing, release ve branch protection belgelerini tamamla
+- [x] Mikro harcama, Daily Coin, Current Cash, snapshot, acil fon ve oyunlaştırma akışlarını kaldır
+- [x] Maaş dönemi ve exact-date kurallarını tek merkezde topla
+- [x] Maaş, diğer gelir, kredi, kart, geçici/taksitli ödeme ve büyük gider modellerini yenile
+- [x] Ortak 12 dönem projection motorunu oluştur
+- [x] Kredi kartı kesim, son ödeme, strateji, fallback ve override kurallarını uygula
+- [x] Simülatörü baseline/scenario için aynı projection motoruna geçir
+- [x] Dokuz senaryo türünü ve açık onaylı kalıcı uygulamayı ekle
+- [x] Development kanonik seed'ini idempotent hale getir; production seed'ini kapat
+- [x] SQLite şema v4 migration'ını ve legacy veri korumasını tamamla
+- [x] Alt navigasyonu dört ana ekrana indir ve detay kırılımlarını ekle
+- [x] Kanonik ilk dört maaş dönemi için exact regression testlerini ekle
+- [x] Domain, simulator ve SQLite test paketini tamamla
+- [x] Android Release build'i doğrula
+- [x] Son APK publish, imza/package/hash ve repository taramasını raporla

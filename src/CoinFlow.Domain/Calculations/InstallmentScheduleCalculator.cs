@@ -1,8 +1,10 @@
 namespace CoinFlow.Domain.Calculations;
 
+public sealed record ScheduledAmount(DateOnly Date, decimal Amount);
+
 public sealed class InstallmentScheduleCalculator
 {
-    public IReadOnlyList<(DateOnly Date, decimal Amount)> Split(
+    public IReadOnlyList<ScheduledAmount> Split(
         decimal total,
         int count,
         DateOnly firstDate)
@@ -17,11 +19,16 @@ public sealed class InstallmentScheduleCalculator
             throw new ArgumentOutOfRangeException(nameof(count), "Taksit sayısı 1 ile 120 arasında olmalıdır.");
         }
 
+        if (firstDate == default)
+        {
+            throw new ArgumentException("İlk ödeme tarihi gereklidir.", nameof(firstDate));
+        }
+
         var regular = decimal.Round(total / count, 2, MidpointRounding.AwayFromZero);
         var paidBeforeLast = regular * (count - 1);
         return Enumerable.Range(0, count)
-            .Select(index => (
-                firstDate.AddMonths(index),
+            .Select(index => new ScheduledAmount(
+                CalendarRules.AddMonthsKeepingDay(firstDate, index, firstDate.Day),
                 index == count - 1 ? total - paidBeforeLast : regular))
             .ToArray();
     }

@@ -1,45 +1,51 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             xmlns:vm="clr-namespace:CoinFlow.App.ViewModels"
-             xmlns:models="clr-namespace:CoinFlow.App.Models"
              x:Class="CoinFlow.App.Pages.FutureMonthsPage"
-             x:DataType="vm:FutureMonthsViewModel"
-             Title="12 Dönem">
-    <Grid RowDefinitions="Auto,*" Padding="20,28,20,16" RowSpacing="16">
-        <VerticalStackLayout>
-            <Label Text="İLERİ BAK" Style="{StaticResource Eyebrow}" />
-            <Label Text="Önündeki 12 maaş dönemi" Style="{StaticResource PageTitle}" />
-            <Label Text="İlk kart gerçek şu anki bakiyeni; diğerleri maaş ve exact vadeli zorunlu ödemeler üzerinden tahmini bütçeyi gösterir." Style="{StaticResource MutedText}" />
+             Title="12 Aylık">
+    <Grid RowDefinitions="Auto,*" Padding="20,18,20,12" RowSpacing="14">
+        <VerticalStackLayout Spacing="10">
+            <Label Text="12 MAAŞ DÖNEMİ" Style="{StaticResource Eyebrow}" />
+            <Label Text="İleriye Bakış" Style="{StaticResource PageTitle}" />
+            <Label Text="Takvim ayı değil, maaş gününden sonraki maaş gününe kadar exact-date projeksiyon." Style="{StaticResource MutedText}" />
+            <Border Padding="14">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Ne zaman karşılayabilirim?" Style="{StaticResource SectionTitle}" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <Entry Text="{Binding TargetAmount}" Placeholder="Hedef tutar" Keyboard="Numeric" />
+                        <Button Grid.Column="1" Text="Hesapla" Command="{Binding FindTargetCommand}" />
+                    </Grid>
+                    <Label Text="{Binding TargetResult}" IsVisible="{Binding HasTargetResult}" />
+                </VerticalStackLayout>
+            </Border>
+            <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" />
             <Label Text="{Binding StatusMessage}" IsVisible="{Binding HasStatus}" TextColor="{StaticResource Error}" />
         </VerticalStackLayout>
-        <RefreshView Grid.Row="1" Command="{Binding LoadCommand}" IsRefreshing="{Binding IsBusy}">
-            <CollectionView ItemsSource="{Binding Months}" SelectionMode="None">
-                <CollectionView.ItemTemplate>
-                    <DataTemplate x:DataType="models:ProjectionLine">
-                        <Border Margin="0,0,0,12">
-                            <VerticalStackLayout Spacing="7">
-                                <Label Text="{Binding Period}" FontFamily="OpenSansSemibold" FontSize="17" />
-                                <Grid ColumnDefinitions="*,*">
-                                    <Label Text="{Binding Salary, StringFormat='Maaş: {0}'}" Style="{StaticResource MutedText}" />
-                                    <Label Grid.Column="1" Text="{Binding Obligations, StringFormat='Zorunlu: {0}'}" Style="{StaticResource MutedText}" HorizontalTextAlignment="End" />
-                                </Grid>
-                                <Grid ColumnDefinitions="*,Auto">
-                                    <Label Text="Tahmini dönem başlangıç bütçesi" Style="{StaticResource MutedText}" />
-                                    <Label Grid.Column="1" Text="{Binding ProjectedSpendable}" FontFamily="OpenSansSemibold" />
-                                </Grid>
-                                <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding HasActualRemaining}">
-                                    <Label Text="Şu an gerçekten kalan" FontFamily="OpenSansSemibold" />
-                                    <Label Grid.Column="1" Text="{Binding ActualRemaining}" FontFamily="OpenSansSemibold" TextColor="{StaticResource MintStrong}" />
-                                </Grid>
-                                <Label Text="{Binding ProjectedDailyCoin, StringFormat='Tahmini başlangıç Daily Coin: {0}'}" Style="{StaticResource MutedText}" />
-                                <Label Text="{Binding Breakdown}" Style="{StaticResource MutedText}" />
-                                <Label Text="{Binding Highlight}" TextColor="{StaticResource MintStrong}" FontFamily="OpenSansSemibold" />
-                            </VerticalStackLayout>
-                        </Border>
-                    </DataTemplate>
-                </CollectionView.ItemTemplate>
-            </CollectionView>
-        </RefreshView>
+
+        <CollectionView Grid.Row="1" ItemsSource="{Binding Periods}" SelectionMode="None">
+            <CollectionView.ItemTemplate>
+                <DataTemplate>
+                    <Border Margin="0,0,0,10">
+                        <Border.GestureRecognizers>
+                            <TapGestureRecognizer Command="{Binding ToggleCommand}" />
+                        </Border.GestureRecognizers>
+                        <VerticalStackLayout Spacing="9">
+                            <Label Text="{Binding Period}" FontFamily="OpenSansSemibold" FontSize="17" />
+                            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" RowSpacing="6">
+                                <Label Text="Zorunlular sonrası" Style="{StaticResource MutedText}" />
+                                <Label Grid.Column="1" Text="{Binding AvailableAfterMandatory}" FontFamily="OpenSansSemibold" />
+                                <Label Grid.Row="1" Text="Tahmini tasarruf" Style="{StaticResource MutedText}" />
+                                <Label Grid.Row="1" Grid.Column="1" Text="{Binding EstimatedSavings}" FontFamily="OpenSansSemibold" />
+                                <Label Grid.Row="2" Text="Tahmini birikim" Style="{StaticResource MutedText}" />
+                                <Label Grid.Row="2" Grid.Column="1" Text="{Binding EndingProjectedSavings}" FontFamily="OpenSansSemibold" />
+                            </Grid>
+                            <Label Text="{Binding Notice}" IsVisible="{Binding HasNotice}" TextColor="{StaticResource Error}" FontSize="12" />
+                            <Label Text="Detay için dokun" Style="{StaticResource MutedText}" IsVisible="{Binding IsCollapsed}" />
+                            <Label Text="{Binding Breakdown}" IsVisible="{Binding IsExpanded}" FontSize="12" />
+                        </VerticalStackLayout>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
     </Grid>
 </ContentPage>

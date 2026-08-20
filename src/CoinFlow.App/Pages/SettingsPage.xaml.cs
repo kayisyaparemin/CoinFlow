@@ -18,22 +18,26 @@ public partial class SettingsPage : ContentPage
         await _viewModel.LoadAsync();
     }
 
-    private async void OnResetAllDataClicked(object? sender, EventArgs e)
+    private async void OnResetDevelopmentDataClicked(
+        object? sender,
+        EventArgs eventArgs)
     {
         var confirmed = await DisplayAlert(
-            "Tüm veriler silinsin mi?",
-            "Bu işlem geri alınamaz. Maaşlar, borçlar, kartlar, planlar, harcamalar, tampon ve ayarlar tamamen silinecek.",
-            "Tümünü sil",
+            "Development verisini yeniden yükle",
+            "Development veritabanındaki tüm kayıtlar silinecek ve canonical örnek veri yeniden oluşturulacak.",
+            "Sıfırla ve yükle",
             "Vazgeç");
-
         if (!confirmed)
         {
             return;
         }
 
-        if (await _viewModel.ResetAllDataAsync())
+        if (await _viewModel.ResetDevelopmentDataAsync())
         {
-            await DisplayAlert("Sıfırlama tamamlandı", "Uygulamadaki tüm veriler silindi.", "Tamam");
+            await DisplayAlert(
+                "Tamamlandı",
+                "Canonical development verisi yeniden yüklendi.",
+                "Tamam");
         }
     }
 }
