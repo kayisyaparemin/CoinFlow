@@ -24,6 +24,38 @@ public sealed class PaymentAssignmentTests
     }
 
     [Fact]
+    public void StrategyResolver_InfersThreeHistoryRangesWithoutMutatingRecords()
+    {
+        var history = History(
+            (new DateOnly(2026, 9, 10), PaymentAssignmentMode.PreviousPeriod),
+            (new DateOnly(2026, 12, 10), PaymentAssignmentMode.UpcomingPeriod),
+            (new DateOnly(2027, 4, 10), PaymentAssignmentMode.PreviousPeriod));
+        var original = history.Select(x =>
+            (x.Id, x.EffectiveFromSalaryDate, x.Mode)).ToArray();
+
+        var expected = new[]
+        {
+            (new DateOnly(2026, 9, 10), PaymentAssignmentMode.PreviousPeriod),
+            (new DateOnly(2026, 10, 10), PaymentAssignmentMode.PreviousPeriod),
+            (new DateOnly(2026, 11, 10), PaymentAssignmentMode.PreviousPeriod),
+            (new DateOnly(2026, 12, 10), PaymentAssignmentMode.UpcomingPeriod),
+            (new DateOnly(2027, 1, 10), PaymentAssignmentMode.UpcomingPeriod),
+            (new DateOnly(2027, 2, 10), PaymentAssignmentMode.UpcomingPeriod),
+            (new DateOnly(2027, 3, 10), PaymentAssignmentMode.UpcomingPeriod),
+            (new DateOnly(2027, 4, 10), PaymentAssignmentMode.PreviousPeriod),
+            (new DateOnly(2027, 5, 10), PaymentAssignmentMode.PreviousPeriod)
+        };
+
+        foreach (var (salaryDate, mode) in expected)
+        {
+            Assert.Equal(mode, _resolver.Resolve(salaryDate, history).Mode);
+        }
+
+        Assert.Equal(original, history.Select(x =>
+            (x.Id, x.EffectiveFromSalaryDate, x.Mode)).ToArray());
+    }
+
+    [Fact]
     public void StrategyResolver_RejectsMidPeriodEffectiveDate()
     {
         var history = History(

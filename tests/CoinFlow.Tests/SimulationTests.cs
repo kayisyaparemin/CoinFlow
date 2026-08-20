@@ -246,6 +246,12 @@ public sealed class SimulationTests
             new DateOnly(2026, 8, 20));
         try
         {
+            if (seed)
+            {
+                await TestFactory.Service(store)
+                    .LoadCanonicalDevelopmentDataAsync();
+            }
+
             await test(store);
         }
         finally

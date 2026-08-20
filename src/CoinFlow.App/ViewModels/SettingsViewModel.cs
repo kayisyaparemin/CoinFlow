@@ -13,8 +13,6 @@ public partial class SettingsViewModel(
 {
     private DateOnly _projectionAnchorDate;
     private PaymentAssignmentStrategy? _pendingStrategy;
-    private readonly Dictionary<Guid, PaymentAssignmentStrategy>
-        _strategyById = [];
 
     public ObservableCollection<StrategyHistoryLine> StrategyHistory { get; } = [];
     public IReadOnlyList<SelectionOption<PaymentAssignmentMode>> StrategyModes { get; } =
@@ -23,25 +21,22 @@ public partial class SettingsViewModel(
         new("Gelecek dönemi karşılarım", PaymentAssignmentMode.UpcomingPeriod)
     ];
     public ObservableCollection<SelectionOption<DateOnly>> EffectiveSalaryDates { get; } = [];
-    public ObservableCollection<SelectionOption<Guid>> HistoricalStrategyOptions { get; } = [];
 
     [ObservableProperty] private string salaryDay = "10";
     [ObservableProperty] private string monthlyLivingBudget = "0";
     [ObservableProperty] private string projectionStartingSavings = "0";
     [ObservableProperty] private string projectionAnchorText = "—";
-    [ObservableProperty] private string currentStrategyText = "—";
-    [ObservableProperty] private string currentStrategySinceText = "—";
+    [ObservableProperty] private string currentStrategyText = "Henüz seçilmedi";
+    [ObservableProperty] private string currentStrategySinceText = string.Empty;
     [ObservableProperty] private string pendingStrategyText = string.Empty;
     [ObservableProperty] private bool hasPendingStrategy;
-    [ObservableProperty] private bool isStrategyEditorVisible;
+    [ObservableProperty] private bool canManageStrategy;
+    [ObservableProperty] private bool hasNoStrategy = true;
     [ObservableProperty] private SelectionOption<PaymentAssignmentMode>? selectedStrategyMode;
     [ObservableProperty] private SelectionOption<DateOnly>? selectedEffectiveSalary;
     [ObservableProperty] private string strategyNote = string.Empty;
     [ObservableProperty] private string previewText = string.Empty;
     [ObservableProperty] private bool hasPreview;
-    [ObservableProperty] private bool isHistoricalEditorVisible;
-    [ObservableProperty] private SelectionOption<Guid>? selectedHistoricalStrategy;
-    [ObservableProperty] private SelectionOption<PaymentAssignmentMode>? selectedHistoricalMode;
 
     public bool IsDevelopment => BuildInfo.IsDevelopment;
     public string BuildChannel => BuildInfo.Channel;
@@ -60,11 +55,24 @@ public partial class SettingsViewModel(
             .ToString("N2", TurkishCulture);
         ProjectionStartingSavings = settings.ProjectionStartingSavings
             .ToString("N2", TurkishCulture);
-        ProjectionAnchorText = settings.ProjectionAnchorDate
-            .ToString("dd MMMM yyyy", TurkishCulture);
-        CurrentStrategyText = ModeText(overview.Current.Mode);
-        CurrentStrategySinceText =
-            $"{overview.Current.EffectiveFromSalaryDate.ToString("dd MMMM yyyy", TurkishCulture)} maaşından beri";
+        ProjectionAnchorText = settings.ProjectionAnchorDate == default
+            ? "İlk maaş kaydıyla oluşturulacak"
+            : settings.ProjectionAnchorDate.ToString(
+                "dd MMMM yyyy", TurkishCulture);
+
+        CanManageStrategy = overview.Current is not null;
+        HasNoStrategy = !CanManageStrategy;
+        CurrentStrategyText = overview.Current is null
+            ? "Henüz seçilmedi"
+            : ModeText(overview.Current.Mode);
+        CurrentStrategySinceText = overview.Current is null
+            ? plan.Salaries.Count == 0
+                ? "İlk maaşını eklediğinde kullanım düzenini seçersin."
+                : "Maaş kullanım düzenini seçerek projeksiyonu tamamla."
+            : overview.Current.EffectiveFromSalaryDate >
+              DateOnly.FromDateTime(DateTime.Today)
+                ? $"{overview.Current.EffectiveFromSalaryDate.ToString("dd MMMM yyyy", TurkishCulture)} maaşından itibaren"
+                : $"{overview.Current.EffectiveFromSalaryDate.ToString("dd MMMM yyyy", TurkishCulture)} maaşından beri";
         _pendingStrategy = overview.Pending;
         HasPendingStrategy = overview.Pending is not null;
         PendingStrategyText = overview.Pending is null
@@ -72,8 +80,6 @@ public partial class SettingsViewModel(
             : $"{overview.Pending.EffectiveFromSalaryDate.ToString("dd MMMM yyyy", TurkishCulture)} maaşından itibaren {ModeText(overview.Pending.Mode)}";
 
         StrategyHistory.Clear();
-        HistoricalStrategyOptions.Clear();
-        _strategyById.Clear();
         foreach (var strategy in overview.History.OrderByDescending(x =>
                      x.EffectiveFromSalaryDate))
         {
@@ -84,11 +90,7 @@ public partial class SettingsViewModel(
                 ModeText(strategy.Mode),
                 strategy.Note,
                 strategy.EffectiveFromSalaryDate > DateOnly.FromDateTime(
-                    DateTime.Now)));
-            _strategyById[strategy.Id] = strategy;
-            HistoricalStrategyOptions.Add(new SelectionOption<Guid>(
-                $"{strategy.EffectiveFromSalaryDate.ToString("dd MMMM yyyy", TurkishCulture)} • {ModeText(strategy.Mode)}",
-                strategy.Id));
+                    DateTime.Today)));
         }
 
         EffectiveSalaryDates.Clear();
@@ -99,77 +101,37 @@ public partial class SettingsViewModel(
                 date));
         }
 
+        var defaultMode = overview.Pending?.Mode ??
+                          (overview.Current is null
+                              ? PaymentAssignmentMode.UpcomingPeriod
+                              : Opposite(overview.Current.Mode));
         SelectedStrategyMode = StrategyModes.First(x =>
-            x.Value == (overview.Pending?.Mode ?? Opposite(overview.Current.Mode)));
+            x.Value == defaultMode);
         SelectedEffectiveSalary = overview.Pending is null
             ? EffectiveSalaryDates.FirstOrDefault()
             : EffectiveSalaryDates.FirstOrDefault(x =>
                   x.Value == overview.Pending.EffectiveFromSalaryDate) ??
               EffectiveSalaryDates.FirstOrDefault();
         StrategyNote = overview.Pending?.Note ?? "Planlanan düzen değişikliği";
-        SelectedHistoricalStrategy = HistoricalStrategyOptions.FirstOrDefault();
-        SelectedHistoricalMode = StrategyModes.FirstOrDefault(x =>
-            x.Value == overview.Current.Mode);
         HasPreview = false;
     }
 
-    [RelayCommand]
-    private void ShowHistoricalEditor()
+    public void PrepareStrategyEditor()
     {
-        IsHistoricalEditorVisible = true;
-        if (SelectedHistoricalStrategy is not null &&
-            _strategyById.TryGetValue(
-                SelectedHistoricalStrategy.Value,
-                out var strategy))
+        if (!CanManageStrategy)
         {
-            SelectedHistoricalMode = StrategyModes.First(x =>
-                x.Value == strategy.Mode);
+            SetStatus(
+                "Önce maaşını ekleyip ilk maaş kullanım düzenini seçmelisin.");
+            return;
         }
-    }
 
-    partial void OnSelectedHistoricalStrategyChanged(
-        SelectionOption<Guid>? value)
-    {
-        if (value is not null &&
-            _strategyById.TryGetValue(value.Value, out var strategy))
-        {
-            SelectedHistoricalMode = StrategyModes.First(x =>
-                x.Value == strategy.Mode);
-        }
-    }
-
-    public async Task<bool> CorrectHistoricalStrategyAsync()
-    {
-        try
-        {
-            var id = SelectedHistoricalStrategy?.Value ??
-                     throw new InvalidOperationException(
-                         "Düzeltilecek geçmiş kayıt seçilmelidir.");
-            var existing = _strategyById[id];
-            var mode = SelectedHistoricalMode?.Value ??
-                       throw new InvalidOperationException(
-                           "Düzeltilmiş düzen seçilmelidir.");
-            await service.SavePaymentAssignmentStrategyAsync(
-                existing with { Mode = mode },
-                confirmedHistoricalCorrection: true);
-            await LoadAsync();
-            IsHistoricalEditorVisible = false;
-            SetStatus("Geçmiş düzen kaydı açık onayla düzeltildi.");
-            return true;
-        }
-        catch (Exception exception)
-        {
-            SetStatus(exception.Message);
-            return false;
-        }
-    }
-
-    [RelayCommand]
-    private void ShowStrategyEditor()
-    {
-        IsStrategyEditorVisible = true;
         HasPreview = false;
+        SetStatus(string.Empty);
     }
+
+    [RelayCommand]
+    private Task OpenCommitmentsAsync() =>
+        Shell.Current.GoToAsync("//commitments/commitments-content");
 
     [RelayCommand]
     private async Task PreviewStrategyAsync()
@@ -186,7 +148,7 @@ public partial class SettingsViewModel(
                 $"Mevcut: {ModeText(preview.CurrentMode)}",
                 $"Yeni: {ModeText(preview.NewMode)}",
                 $"Normal zorunlu yük: {Money(preview.Baseline.MandatoryOutflow)}",
-                $"Geçişte geçmişten kapanacak: {Money(preview.Scenario.TransitionCatchUpAmount)}",
+                $"Geçmiş düzenden kapanacak: {Money(preview.Scenario.TransitionCatchUpAmount)}",
                 $"Yeni dönem için ayrılacak: {Money(preview.Scenario.ForwardFundedAmount)}",
                 $"Toplam geçiş yükü: {Money(preview.TotalTransitionBurden)}",
                 $"Tahmini tasarruf: {Money(preview.Scenario.EstimatedSavingsCapacity)}",
@@ -214,18 +176,16 @@ public partial class SettingsViewModel(
             var mode = SelectedStrategyMode?.Value ??
                        throw new InvalidOperationException(
                            "Yeni düzen seçilmelidir.");
-            var id = _pendingStrategy?.Id ?? Guid.NewGuid();
             await service.SavePaymentAssignmentStrategyAsync(
                 new PaymentAssignmentStrategy
                 {
-                    Id = id,
+                    Id = _pendingStrategy?.Id ?? Guid.NewGuid(),
                     Mode = mode,
                     EffectiveFromSalaryDate = date,
                     Note = StrategyNote.Trim()
                 });
             await LoadAsync();
-            IsStrategyEditorVisible = false;
-            SetStatus("Maaş kullanım düzeni planlandı.");
+            SetStatus("Maaş kullanım düzeni planlandı; geçmiş kayıtlar korundu.");
             return true;
         }
         catch (Exception exception)
@@ -247,7 +207,7 @@ public partial class SettingsViewModel(
             await service.DeletePaymentAssignmentStrategyAsync(
                 _pendingStrategy.Id);
             await LoadAsync();
-            SetStatus("Planlanan düzen değişikliği silindi.");
+            SetStatus("Planlanan düzen değişikliği iptal edildi.");
             return true;
         }
         catch (Exception exception)
@@ -287,19 +247,41 @@ public partial class SettingsViewModel(
         }
     }
 
-    public async Task<bool> ResetDevelopmentDataAsync()
+    public async Task<bool> ClearDevelopmentDataAsync()
     {
         if (!IsDevelopment)
         {
-            SetStatus("Development veri sıfırlama yalnızca development build'de kullanılabilir.");
+            SetStatus("Bu işlem yalnızca development build'de kullanılabilir.");
             return false;
         }
 
         try
         {
-            await service.ResetDevelopmentDataAsync();
+            await service.ClearDevelopmentDataAsync();
             await LoadAsync();
-            SetStatus("Canonical development verisi yeniden yüklendi.");
+            SetStatus("Tüm veriler silindi.");
+            return true;
+        }
+        catch (Exception exception)
+        {
+            SetStatus(exception.Message);
+            return false;
+        }
+    }
+
+    public async Task<bool> LoadCanonicalSeedAsync()
+    {
+        if (!IsDevelopment)
+        {
+            SetStatus("Bu işlem yalnızca development build'de kullanılabilir.");
+            return false;
+        }
+
+        try
+        {
+            await service.LoadCanonicalDevelopmentDataAsync();
+            await LoadAsync();
+            SetStatus("Canonical development verisi yüklendi.");
             return true;
         }
         catch (Exception exception)

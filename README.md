@@ -29,14 +29,15 @@ Maaş, tek seferlik gelir, kredi, kart harcaması, kart vadesi, geçici ödeme v
 
 ## Ekranlar
 
-Alt navigasyon tam olarak dört ana bölüm içerir:
+Sol üstteki native Shell hamburger menüsü beş kök bölüm içerir; bottom TabBar yoktur:
 
 1. **Ana Sayfa:** Aktif maaş dönemi özeti, yaklaşan ödemeler, 12 dönem özeti ve en sıkışık dönem.
 2. **12 Aylık:** Her dönem için gelir, zorunlu ödeme, yaşam bütçesi, birikim kapasitesi ve dönem sonu birikim; satıra dokununca exact breakdown.
 3. **Simülatör:** Nakit alışveriş, tek çekim/taksitli kart, finansman, nakit borç, ileri tarihli tek/tekrarlı ödeme, gelecek gelir, maaş ve maaş kullanım düzeni değişimi senaryoları.
 4. **Gelir & Ödemeler:** Maaş, diğer gelir, kredi, kredi kartı, geçici/taksitli ödeme ve büyük gider yönetimi.
+5. **Ayarlar:** Maaş günü, bütçe, read-only düzen geçmişi ve development araçları.
 
-Ayarlar, ikincil bir rota olarak düzen geçmişini, planlanan future değişikliği, geçiş önizlemesini, maaş gününü, aylık yaşam bütçesini ve başlangıç birikimini yönetir. Başlamamış kayıtlar değiştirilebilir/silinebilir; geçmiş kayıt düzeltmesi ayrı ve açık onaylıdır. Development build'de kanonik veriyi yeniden yükleme seçeneği bulunur.
+Ayarlar, düzen geçmişini yalnız bilgi amaçlı gösterir. Kullanıcı bir sonraki değişikliğin başlayacağı maaşı seçer; uygulama eski kayıtları değiştirmeden yeni effective-dated event ekler. Yalnız henüz başlamamış planlanan değişiklik düzenlenebilir veya iptal edilebilir.
 
 ## Mimari
 
@@ -53,7 +54,7 @@ Projection ve simulator aynı `FinancialProjectionCalculator` çekirdeğini kull
 
 ## Development seed
 
-Boş development veritabanı deterministik olarak şu kanonik planla açılır:
+Fresh development ve production veritabanları finansal olarak boş açılır; otomatik seed çalışmaz. Development build'de Ayarlar altındaki bağımsız **Seed Data Yükle** aksiyonu şu kanonik planı yükler:
 
 - Maaş: 01.01.2026'dan itibaren 115.000 TL, 01.01.2027'den itibaren 132.250 TL
 - Garanti BBVA: 14.501,23 TL, 22 taksit
@@ -64,7 +65,7 @@ Boş development veritabanı deterministik olarak şu kanonik planla açılır:
 - Projection anchor: 20.08.2026; ilk projection maaşı: 10.09.2026
 - İlk maaş kullanım düzeni: `UpcomingPeriod`
 
-Seed yalnızca development ortamında ve boş veritabanında çalışır; tekrar açılışta kayıt çoğaltmaz. Production boş veritabanı otomatik demo veri almaz.
+Seed yalnızca development build'de kullanıcı isteğiyle çalışır. Sabit kimliklerle upsert edildiği için boş veya mevcut veritabanına tekrar yüklenmesi kayıt çoğaltmaz. Ayrı **Verileri Sil** aksiyonu tüm finans kayıtlarını, strategy history'yi ve projection anchor/bütçelerini temizler; şemayı korur ve seed yüklemez. Kullanıcı boş durumda ilk maaşını kaydedince anchor bir kez oluşturulur ve maaş kullanım düzenini seçen onboarding açılır.
 
 ## Yerel doğrulama
 

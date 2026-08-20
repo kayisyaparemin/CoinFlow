@@ -38,6 +38,11 @@ public partial class DashboardViewModel(
     [ObservableProperty] private string strategyStatusText = "—";
     [ObservableProperty] private string pendingStrategyText = string.Empty;
     [ObservableProperty] private bool hasPendingStrategy;
+    [ObservableProperty] private bool hasFinancialPlan;
+    [ObservableProperty] private bool isEmptyState = true;
+    [ObservableProperty] private string emptyStateMessage =
+        "Başlamak için maaşını ekle.";
+    [ObservableProperty] private string emptyStateAction = "Maaş Ekle";
 
     public bool IsDevelopment => BuildInfo.IsDevelopment;
 
@@ -54,6 +59,29 @@ public partial class DashboardViewModel(
             IsBusy = true;
             SetStatus(string.Empty);
             var dashboard = await service.GetDashboardAsync();
+            if (dashboard is null)
+            {
+                var plan = await service.GetFinancialPlanAsync();
+                HasFinancialPlan = false;
+                IsEmptyState = true;
+                HasPreFirstSalaryPayments = false;
+                HasUpcomingPayments = false;
+                HasNoUpcomingPayments = true;
+                HasUndeterminedCardPayment = false;
+                HasPendingStrategy = false;
+                PreFirstSalaryPayments.Clear();
+                UpcomingPayments.Clear();
+                EmptyStateMessage = plan.Salaries.Count == 0
+                    ? "Henüz finansal plan oluşturulmadı. Başlamak için maaşını ekle."
+                    : "Maaş kullanım düzenini seçerek projeksiyonu tamamla.";
+                EmptyStateAction = plan.Salaries.Count == 0
+                    ? "Maaş Ekle"
+                    : "Düzeni Seç";
+                return;
+            }
+
+            HasFinancialPlan = true;
+            IsEmptyState = false;
             var current = dashboard.CurrentPeriod;
 
             CurrentPeriodText =
@@ -140,11 +168,15 @@ public partial class DashboardViewModel(
 
     [RelayCommand]
     private Task OpenSimulationAsync() =>
-        Shell.Current.GoToAsync("//main/simulation/simulation-content");
+        Shell.Current.GoToAsync("//simulation/simulation-content");
 
     [RelayCommand]
     private Task OpenSettingsAsync() =>
-        Shell.Current.GoToAsync("settings");
+        Shell.Current.GoToAsync("//settings/settings-content");
+
+    [RelayCommand]
+    private Task OpenCommitmentsAsync() =>
+        Shell.Current.GoToAsync("//commitments/commitments-content");
 
     private static string BuildDetails(SalaryPeriodProjection row)
     {

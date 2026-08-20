@@ -8,7 +8,7 @@
             <Label Text="12 MAAŞ DÖNEMİ" Style="{StaticResource Eyebrow}" />
             <Label Text="İleriye Bakış" Style="{StaticResource PageTitle}" />
             <Label Text="Gerçek ödeme tarihleri korunur; seçili maaş kullanım şekline göre ilgili maaş bütçesine atanır." Style="{StaticResource MutedText}" />
-            <Border Padding="14">
+            <Border Padding="14" IsVisible="{Binding HasProjection}">
                 <VerticalStackLayout Spacing="8">
                     <Label Text="Ne zaman karşılayabilirim?" Style="{StaticResource SectionTitle}" />
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
@@ -22,7 +22,24 @@
             <Label Text="{Binding StatusMessage}" IsVisible="{Binding HasStatus}" TextColor="{StaticResource Error}" />
         </VerticalStackLayout>
 
-        <CollectionView Grid.Row="1" ItemsSource="{Binding Periods}" SelectionMode="None">
+        <Border Grid.Row="1"
+                IsVisible="{Binding HasNoProjection}"
+                BackgroundColor="{StaticResource SoftSky}"
+                VerticalOptions="Start">
+            <VerticalStackLayout Spacing="10">
+                <Label Text="Henüz projeksiyon yok."
+                       Style="{StaticResource SectionTitle}" />
+                <Label Text="{Binding EmptyStateMessage}"
+                       Style="{StaticResource MutedText}" />
+                <Button Text="Gelir &amp; Ödemelere Git"
+                        Command="{Binding OpenCommitmentsCommand}" />
+            </VerticalStackLayout>
+        </Border>
+
+        <CollectionView Grid.Row="1"
+                        IsVisible="{Binding HasProjection}"
+                        ItemsSource="{Binding Periods}"
+                        SelectionMode="None">
             <CollectionView.ItemTemplate>
                 <DataTemplate>
                     <Border Margin="0,0,0,10">

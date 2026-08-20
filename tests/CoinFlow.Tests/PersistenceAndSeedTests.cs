@@ -14,8 +14,9 @@ public sealed class PersistenceAndSeedTests
     {
         await WithStore(true, async store =>
         {
-            var plan = await TestFactory.Service(store)
-                .GetFinancialPlanAsync();
+            var service = TestFactory.Service(store);
+            await service.LoadCanonicalDevelopmentDataAsync();
+            var plan = await service.GetFinancialPlanAsync();
 
             Assert.Equal(10, plan.Settings.SalaryDay);
             Assert.Equal(30_000m, plan.Settings.MonthlyLivingBudget);
@@ -77,16 +78,19 @@ public sealed class PersistenceAndSeedTests
             await using (var first = new SqliteCoinFlowStore(
                              path, true, Today))
             {
-                var plan = await TestFactory.Service(first)
-                    .GetFinancialPlanAsync();
+                var service = TestFactory.Service(first);
+                await service.LoadCanonicalDevelopmentDataAsync();
+                await service.LoadCanonicalDevelopmentDataAsync();
+                var plan = await service.GetFinancialPlanAsync();
                 Assert.Equal(2, plan.Salaries.Count);
             }
 
             await using (var second = new SqliteCoinFlowStore(
                              path, true, Today))
             {
-                var plan = await TestFactory.Service(second)
-                    .GetFinancialPlanAsync();
+                var service = TestFactory.Service(second);
+                await service.LoadCanonicalDevelopmentDataAsync();
+                var plan = await service.GetFinancialPlanAsync();
                 Assert.Equal(2, plan.Salaries.Count);
                 Assert.Equal(2, plan.Loans.Count);
                 Assert.Single(plan.PaymentPlans);
@@ -101,7 +105,45 @@ public sealed class PersistenceAndSeedTests
     }
 
     [Fact]
-    public async Task ProjectionAnchor_IsInitializedOnceAndDoesNotMoveOnReopen()
+    public async Task DevelopmentSeed_UpsertsCanonicalDataIntoExistingDatabase()
+    {
+        await WithStore(true, async store =>
+        {
+            var service = TestFactory.Service(store);
+            await service.SaveOtherIncomeAsync(new OneTimeIncome
+            {
+                Description = "Kullanıcı bonusu",
+                Amount = 5_000m,
+                ExactDate = new DateOnly(2026, 10, 1)
+            });
+            await service.SaveSalaryAsync(new SalaryScheduleEntry
+            {
+                Amount = 150_000m,
+                EffectiveDate = new DateOnly(2025, 1, 1),
+                Description = "Kullanıcı maaşı"
+            });
+            await service.CompleteInitialPaymentStrategySetupAsync(
+                PaymentAssignmentMode.PreviousPeriod);
+
+            await service.LoadCanonicalDevelopmentDataAsync();
+            await service.LoadCanonicalDevelopmentDataAsync();
+            var plan = await service.GetFinancialPlanAsync();
+
+            Assert.Equal(3, plan.Salaries.Count);
+            Assert.Single(plan.OtherIncomes);
+            Assert.Equal("Kullanıcı bonusu", plan.OtherIncomes[0].Description);
+            Assert.Equal(2, plan.Loans.Count);
+            Assert.Single(plan.PaymentPlans);
+            Assert.Single(plan.CreditCards);
+            var initial = Assert.Single(plan.PaymentAssignmentStrategies);
+            Assert.Equal(PaymentAssignmentMode.UpcomingPeriod, initial.Mode);
+            Assert.Equal(new DateOnly(2026, 9, 10),
+                initial.EffectiveFromSalaryDate);
+        });
+    }
+
+    [Fact]
+    public async Task FirstSalary_InitializesAnchorOnce_AndCreatesOneChosenStrategy()
     {
         var path = TempPath();
         try
@@ -109,9 +151,38 @@ public sealed class PersistenceAndSeedTests
             await using (var first = new SqliteCoinFlowStore(
                              path, false, Today))
             {
+                var service = TestFactory.Service(first);
+                var empty = await service.GetFinancialPlanAsync();
+                Assert.Empty(empty.Salaries);
+                Assert.Empty(empty.PaymentAssignmentStrategies);
+                Assert.Equal(default, empty.Settings.ProjectionAnchorDate);
+
+                var setup = await service.SaveSalaryAsync(
+                    new SalaryScheduleEntry
+                    {
+                        Amount = 100_000m,
+                        EffectiveDate = Today,
+                        Description = "Maaş"
+                    });
+                Assert.NotNull(setup);
                 Assert.Equal(
                     Today,
                     (await first.GetSettingsAsync()).ProjectionAnchorDate);
+                Assert.Equal(
+                    new DateOnly(2026, 9, 10),
+                    setup!.EffectiveSalaryDate);
+                Assert.Empty((await service.GetFinancialPlanAsync())
+                    .PaymentAssignmentStrategies);
+
+                await service.CompleteInitialPaymentStrategySetupAsync(
+                    PaymentAssignmentMode.PreviousPeriod);
+                var strategy = Assert.Single(
+                    (await service.GetFinancialPlanAsync())
+                    .PaymentAssignmentStrategies);
+                Assert.Equal(PaymentAssignmentMode.PreviousPeriod, strategy.Mode);
+                Assert.Equal(new DateOnly(2026, 9, 10),
+                    strategy.EffectiveFromSalaryDate);
+                Assert.NotNull(await service.GetDashboardAsync());
             }
 
             await using var second = new SqliteCoinFlowStore(
@@ -129,11 +200,12 @@ public sealed class PersistenceAndSeedTests
     }
 
     [Fact]
-    public async Task DevelopmentReset_ReloadsCanonicalSeed()
+    public async Task DevelopmentClear_LeavesValidEmptyState_AndDoesNotReseed()
     {
         await WithStore(true, async store =>
         {
             var service = TestFactory.Service(store);
+            await service.LoadCanonicalDevelopmentDataAsync();
             var salary = (await service.GetFinancialPlanAsync())
                 .Salaries[0];
             await service.DeleteSalaryAsync(salary.Id);
@@ -145,15 +217,50 @@ public sealed class PersistenceAndSeedTests
                 Mode = PaymentAssignmentMode.PreviousPeriod
             });
 
-            await service.ResetDevelopmentDataAsync();
+            await service.ClearDevelopmentDataAsync();
             var reset = await service.GetFinancialPlanAsync();
 
-            Assert.Equal(2, reset.Salaries.Count);
-            Assert.Single(reset.PaymentPlans);
-            Assert.Equal(30_000m, reset.Settings.MonthlyLivingBudget);
-            Assert.Equal(
-                PaymentAssignmentMode.UpcomingPeriod,
-                Assert.Single(reset.PaymentAssignmentStrategies).Mode);
+            Assert.Empty(reset.Salaries);
+            Assert.Empty(reset.OtherIncomes);
+            Assert.Empty(reset.Loans);
+            Assert.Empty(reset.PaymentPlans);
+            Assert.Empty(reset.CreditCards);
+            Assert.Empty(reset.PlannedLargeExpenses);
+            Assert.Empty(reset.PaymentAssignmentStrategies);
+            Assert.Equal(0m, reset.Settings.MonthlyLivingBudget);
+            Assert.Equal(0m, reset.Settings.ProjectionStartingSavings);
+            Assert.Equal(default, reset.Settings.ProjectionAnchorDate);
+            Assert.Null(await service.GetDashboardAsync());
+            Assert.Empty(await service.GetFuturePeriodsAsync());
+
+            await service.LoadCanonicalDevelopmentDataAsync();
+            var seeded = await service.GetFinancialPlanAsync();
+            Assert.Equal(2, seeded.Salaries.Count);
+            Assert.Single(seeded.PaymentAssignmentStrategies);
+        });
+    }
+
+    [Fact]
+    public async Task DevelopmentDatabase_DoesNotSeedAutomatically()
+    {
+        await WithStore(true, async store =>
+        {
+            var service = TestFactory.Service(store);
+            var plan = await service.GetFinancialPlanAsync();
+
+            Assert.Empty(plan.Salaries);
+            Assert.Empty(plan.Loans);
+            Assert.Empty(plan.CreditCards);
+            Assert.Empty(plan.PaymentAssignmentStrategies);
+            Assert.Equal(default, plan.Settings.ProjectionAnchorDate);
+            Assert.Null(await service.GetDashboardAsync());
+            Assert.Empty(await service.GetFuturePeriodsAsync());
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                service.SimulateAsync(new SimulationRequest(
+                    SimulationScenarioType.CashPurchase,
+                    "Test",
+                    1_000m,
+                    Today)));
         });
     }
 
@@ -170,9 +277,8 @@ public sealed class PersistenceAndSeedTests
             Assert.Empty(plan.PaymentPlans);
             Assert.Empty(plan.CreditCards);
             Assert.Equal(0m, plan.Settings.MonthlyLivingBudget);
-            Assert.Equal(
-                PaymentAssignmentMode.UpcomingPeriod,
-                Assert.Single(plan.PaymentAssignmentStrategies).Mode);
+            Assert.Equal(default, plan.Settings.ProjectionAnchorDate);
+            Assert.Empty(plan.PaymentAssignmentStrategies);
         });
     }
 
@@ -186,13 +292,14 @@ public sealed class PersistenceAndSeedTests
                              path, false, Today))
             {
                 var service = TestFactory.Service(first);
-                var strategy = Assert.Single(
-                    (await service.GetFinancialPlanAsync())
-                    .PaymentAssignmentStrategies);
-                await service.SavePaymentAssignmentStrategyAsync(strategy with
+                await service.SaveSalaryAsync(new SalaryScheduleEntry
                 {
-                    Mode = PaymentAssignmentMode.PreviousPeriod
+                    Amount = 100_000m,
+                    EffectiveDate = Today,
+                    Description = "Maaş"
                 });
+                await service.CompleteInitialPaymentStrategySetupAsync(
+                    PaymentAssignmentMode.PreviousPeriod);
             }
 
             await using var second = new SqliteCoinFlowStore(
@@ -218,6 +325,7 @@ public sealed class PersistenceAndSeedTests
         await WithStore(true, async store =>
         {
             var service = TestFactory.Service(store);
+            await service.LoadCanonicalDevelopmentDataAsync();
             var before = await service.GetFinancialPlanAsync();
 
             var preview = await service.PreviewPaymentAssignmentStrategyAsync(
@@ -247,6 +355,61 @@ public sealed class PersistenceAndSeedTests
     }
 
     [Fact]
+    public async Task LaterStrategyChanges_InsertEvents_AndPreserveEarlierHistory()
+    {
+        await WithStore(false, async store =>
+        {
+            var service = TestFactory.Service(store);
+            await service.SaveSalaryAsync(new SalaryScheduleEntry
+            {
+                Amount = 100_000m,
+                EffectiveDate = Today,
+                Description = "Maaş"
+            });
+            await service.CompleteInitialPaymentStrategySetupAsync(
+                PaymentAssignmentMode.PreviousPeriod);
+            var initial = Assert.Single(
+                (await service.GetFinancialPlanAsync())
+                .PaymentAssignmentStrategies);
+
+            await service.SavePaymentAssignmentStrategyAsync(
+                new PaymentAssignmentStrategy
+                {
+                    Mode = PaymentAssignmentMode.UpcomingPeriod,
+                    EffectiveFromSalaryDate = new DateOnly(2026, 12, 10),
+                    Note = "İkinci karar"
+                });
+            await service.SavePaymentAssignmentStrategyAsync(
+                new PaymentAssignmentStrategy
+                {
+                    Mode = PaymentAssignmentMode.PreviousPeriod,
+                    EffectiveFromSalaryDate = new DateOnly(2027, 4, 10),
+                    Note = "Üçüncü karar"
+                });
+
+            var history = (await service.GetFinancialPlanAsync())
+                .PaymentAssignmentStrategies;
+            Assert.Collection(
+                history,
+                first => Assert.Equal(initial, first),
+                second =>
+                {
+                    Assert.Equal(new DateOnly(2026, 12, 10),
+                        second.EffectiveFromSalaryDate);
+                    Assert.Equal(PaymentAssignmentMode.UpcomingPeriod,
+                        second.Mode);
+                },
+                third =>
+                {
+                    Assert.Equal(new DateOnly(2027, 4, 10),
+                        third.EffectiveFromSalaryDate);
+                    Assert.Equal(PaymentAssignmentMode.PreviousPeriod,
+                        third.Mode);
+                });
+        });
+    }
+
+    [Fact]
     public async Task HistoricalStrategyCorrection_RequiresExplicitConfirmation()
     {
         await WithStore(true, async store =>
@@ -254,6 +417,7 @@ public sealed class PersistenceAndSeedTests
             var service = TestFactory.Service(
                 store,
                 new DateOnly(2026, 9, 20));
+            await service.LoadCanonicalDevelopmentDataAsync();
             var initial = Assert.Single(
                 (await service.GetFinancialPlanAsync())
                 .PaymentAssignmentStrategies);

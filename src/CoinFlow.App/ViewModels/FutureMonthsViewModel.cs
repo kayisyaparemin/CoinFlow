@@ -15,6 +15,10 @@ public partial class FutureMonthsViewModel(
     [ObservableProperty] private string targetAmount = string.Empty;
     [ObservableProperty] private string targetResult = string.Empty;
     [ObservableProperty] private bool hasTargetResult;
+    [ObservableProperty] private bool hasProjection;
+    [ObservableProperty] private bool hasNoProjection = true;
+    [ObservableProperty] private string emptyStateMessage =
+        "Projeksiyon oluşturmak için önce maaş bilgisi ekle.";
 
     [RelayCommand]
     public async Task LoadAsync()
@@ -30,6 +34,7 @@ public partial class FutureMonthsViewModel(
             SetStatus(string.Empty);
             var rows = await service.GetFuturePeriodsAsync(
                 periodCount: 12);
+            var plan = await service.GetFinancialPlanAsync();
             Periods.Clear();
             foreach (var row in rows)
             {
@@ -44,6 +49,13 @@ public partial class FutureMonthsViewModel(
                     notice,
                     !string.IsNullOrWhiteSpace(notice)));
             }
+
+            HasProjection = Periods.Count > 0;
+            HasNoProjection = !HasProjection;
+            HasTargetResult = false;
+            EmptyStateMessage = plan.Salaries.Count == 0
+                ? "Projeksiyon oluşturmak için önce maaş bilgisi ekle."
+                : "Projeksiyon için maaş kullanım düzenini seç.";
         }
         catch (Exception exception)
         {
@@ -54,6 +66,10 @@ public partial class FutureMonthsViewModel(
             IsBusy = false;
         }
     }
+
+    [RelayCommand]
+    private Task OpenCommitmentsAsync() =>
+        Shell.Current.GoToAsync("//commitments/commitments-content");
 
     [RelayCommand]
     private async Task FindTargetAsync()

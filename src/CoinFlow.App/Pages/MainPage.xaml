@@ -20,6 +20,20 @@
 
             <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" />
 
+            <Border IsVisible="{Binding IsEmptyState}"
+                    BackgroundColor="{StaticResource SoftSky}">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Henüz finansal plan oluşturulmadı."
+                           Style="{StaticResource SectionTitle}" />
+                    <Label Text="{Binding EmptyStateMessage}"
+                           Style="{StaticResource MutedText}" />
+                    <Button Text="{Binding EmptyStateAction}"
+                            Command="{Binding OpenCommitmentsCommand}" />
+                </VerticalStackLayout>
+            </Border>
+
+            <VerticalStackLayout IsVisible="{Binding HasFinancialPlan}"
+                                 Spacing="16">
             <Border BackgroundColor="{StaticResource HeroSurface}">
                 <VerticalStackLayout Spacing="10">
                     <Label Text="SONRAKİ MAAŞ PLANI" Style="{StaticResource Eyebrow}" />
@@ -115,6 +129,7 @@
                     <Label Text="{Binding CalculationDetails}" FontSize="12" />
                 </VerticalStackLayout>
             </Border>
+            </VerticalStackLayout>
 
             <Label Text="{Binding StatusMessage}" IsVisible="{Binding HasStatus}" TextColor="{StaticResource Error}" />
         </VerticalStackLayout>

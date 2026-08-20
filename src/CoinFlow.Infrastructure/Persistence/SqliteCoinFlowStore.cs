@@ -10,17 +10,17 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
 {
     private const string DateFormat = "yyyy-MM-dd";
     private const int CurrentSchemaVersion = 6;
-    private static readonly Guid InitialAssignmentStrategyId =
+    private static readonly Guid LegacyInitialAssignmentStrategyId =
         Guid.Parse("50000000-0000-0000-0000-000000000001");
     private readonly SQLiteAsyncConnection _database;
-    private readonly bool _seedDevelopmentData;
+    private readonly bool _developmentFeaturesEnabled;
     private readonly DateOnly _migrationDate;
     private readonly SemaphoreSlim _initializeLock = new(1, 1);
     private bool _initialized;
 
     public SqliteCoinFlowStore(
         string databasePath,
-        bool seedDevelopmentData,
+        bool developmentFeaturesEnabled,
         DateOnly migrationDate)
     {
         if (string.IsNullOrWhiteSpace(databasePath))
@@ -37,7 +37,7 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
             SQLiteOpenFlags.ReadWrite |
             SQLiteOpenFlags.Create |
             SQLiteOpenFlags.SharedCache);
-        _seedDevelopmentData = seedDevelopmentData;
+        _developmentFeaturesEnabled = developmentFeaturesEnabled;
         _migrationDate = migrationDate;
     }
 
@@ -75,38 +75,29 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
             var settings = await _database
                 .Table<SettingsRow>()
                 .FirstOrDefaultAsync();
+            var isNewSettings = settings is null;
             if (settings is null)
             {
                 settings = DefaultSettingsRow();
                 await _database.InsertAsync(settings);
             }
 
-            if (_seedDevelopmentData &&
-                settings.DevelopmentSeedVersion <
-                    DevelopmentDataSeeder.CurrentSeedVersion)
-            {
-                if (await IsFinancialPlanEmptyAsync())
-                {
-                    await DevelopmentDataSeeder.SeedAsync(_database);
-                    settings.MonthlyLivingBudget = 30_000m;
-                    settings.ProjectionStartingSavings = 0m;
-                    settings.PaymentAssignmentMode =
-                        (int)PaymentAssignmentMode.UpcomingPeriod;
-                }
-
-                settings.DevelopmentSeedVersion =
-                    DevelopmentDataSeeder.CurrentSeedVersion;
-            }
-
-            if (string.IsNullOrWhiteSpace(settings.ProjectionAnchorDate))
+            var needsStrategyMigration = !isNewSettings &&
+                                         settings.SchemaVersion <
+                                         CurrentSchemaVersion;
+            if (needsStrategyMigration &&
+                string.IsNullOrWhiteSpace(settings.ProjectionAnchorDate))
             {
                 settings.ProjectionAnchorDate = FormatDate(_migrationDate);
             }
 
-            await EnsureInitialPaymentAssignmentStrategyAsync(settings);
+            if (needsStrategyMigration)
+            {
+                await EnsureInitialPaymentAssignmentStrategyAsync(settings);
+            }
 
             settings.SchemaVersion = CurrentSchemaVersion;
-            settings.DevelopmentSeedEnabled = _seedDevelopmentData;
+            settings.DevelopmentSeedEnabled = _developmentFeaturesEnabled;
             settings.LegacyRemovedFeatureFlag = false;
             settings.TrackingStartedDate = null;
             await _database.UpdateAsync(settings);
@@ -118,7 +109,7 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         }
     }
 
-    public async Task ResetAllDataAsync(
+    public async Task ClearAllFinancialDataAsync(
         CancellationToken cancellationToken = default)
     {
         await InitializeAsync(cancellationToken);
@@ -136,25 +127,42 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
             connection.DeleteAll<SalaryRow>();
             connection.DeleteAll<LoanRow>();
             connection.DeleteAll<PaymentAssignmentStrategyRow>();
-            connection.DeleteAll<SettingsRow>();
-            connection.Insert(DefaultSettingsRow());
-        });
-
-        if (_seedDevelopmentData)
-        {
-            await DevelopmentDataSeeder.SeedAsync(_database);
-            var settings = await _database.Table<SettingsRow>().FirstAsync();
-            settings.MonthlyLivingBudget = 30_000m;
+            var settings = connection.Table<SettingsRow>().First();
+            settings.SalaryDay = 10;
+            settings.MonthlyLivingBudget = 0m;
             settings.ProjectionStartingSavings = 0m;
+            settings.ProjectionAnchorDate = null;
             settings.PaymentAssignmentMode =
                 (int)PaymentAssignmentMode.UpcomingPeriod;
-            settings.DevelopmentSeedVersion =
-                DevelopmentDataSeeder.CurrentSeedVersion;
-            await _database.UpdateAsync(settings);
+            settings.DevelopmentSeedVersion = 0;
+            settings.SchemaVersion = CurrentSchemaVersion;
+            connection.Update(settings);
+        });
+    }
+
+    public async Task LoadCanonicalDevelopmentDataAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await InitializeAsync(cancellationToken);
+        if (!_developmentFeaturesEnabled)
+        {
+            throw new InvalidOperationException(
+                "Canonical seed yalnızca development build'de yüklenebilir.");
         }
 
-        await EnsureInitialPaymentAssignmentStrategyAsync(
-            await _database.Table<SettingsRow>().FirstAsync());
+        cancellationToken.ThrowIfCancellationRequested();
+        await DevelopmentDataSeeder.SeedAsync(_database);
+        var settings = await _database.Table<SettingsRow>().FirstAsync();
+        settings.SalaryDay = 10;
+        settings.MonthlyLivingBudget = 30_000m;
+        settings.ProjectionStartingSavings = 0m;
+        settings.ProjectionAnchorDate = FormatDate(
+            new DateOnly(2026, 8, 20));
+        settings.PaymentAssignmentMode =
+            (int)PaymentAssignmentMode.UpcomingPeriod;
+        settings.DevelopmentSeedVersion =
+            DevelopmentDataSeeder.CurrentSeedVersion;
+        await _database.UpdateAsync(settings);
     }
 
     public async Task<UserSettings> GetSettingsAsync(
@@ -167,8 +175,10 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
             SalaryDay = row.SalaryDay,
             MonthlyLivingBudget = row.MonthlyLivingBudget,
             ProjectionStartingSavings = row.ProjectionStartingSavings,
-            ProjectionAnchorDate = ParseDate(
-                row.ProjectionAnchorDate ?? FormatDate(_migrationDate))
+            ProjectionAnchorDate = string.IsNullOrWhiteSpace(
+                row.ProjectionAnchorDate)
+                ? default
+                : ParseDate(row.ProjectionAnchorDate)
         };
     }
 
@@ -182,8 +192,9 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         row.MonthlyLivingBudget = settings.MonthlyLivingBudget;
         row.ProjectionStartingSavings =
             settings.ProjectionStartingSavings;
-        row.ProjectionAnchorDate =
-            FormatDate(settings.ProjectionAnchorDate);
+        row.ProjectionAnchorDate = settings.ProjectionAnchorDate == default
+            ? null
+            : FormatDate(settings.ProjectionAnchorDate);
         await _database.UpdateAsync(row);
     }
 
@@ -706,14 +717,14 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
     private SettingsRow DefaultSettingsRow() => new()
     {
         SalaryDay = 10,
-        MonthlyLivingBudget = _seedDevelopmentData ? 30_000m : 0m,
+        MonthlyLivingBudget = 0m,
         ProjectionStartingSavings = 0m,
-        ProjectionAnchorDate = FormatDate(_migrationDate),
+        ProjectionAnchorDate = null,
         PaymentAssignmentMode =
             (int)PaymentAssignmentMode.UpcomingPeriod,
         SchemaVersion = CurrentSchemaVersion,
         DevelopmentSeedVersion = 0,
-        DevelopmentSeedEnabled = _seedDevelopmentData,
+        DevelopmentSeedEnabled = _developmentFeaturesEnabled,
         LegacyRemovedFeatureFlag = false,
         TrackingStartedDate = null
     };
@@ -740,7 +751,7 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         await _database.InsertAsync(ToRow(
             new PaymentAssignmentStrategy
             {
-                Id = InitialAssignmentStrategyId,
+                Id = LegacyInitialAssignmentStrategyId,
                 Mode = legacyMode,
                 EffectiveFromSalaryDate = firstSalary,
                 CreatedAt = new DateTimeOffset(
@@ -749,14 +760,6 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
                 Note = "İlk maaş kullanım düzeni"
             }));
     }
-
-    private async Task<bool> IsFinancialPlanEmptyAsync() =>
-        await _database.Table<SalaryRow>().CountAsync() == 0 &&
-        await _database.Table<OtherIncomeRow>().CountAsync() == 0 &&
-        await _database.Table<LoanRow>().CountAsync() == 0 &&
-        await _database.Table<PaymentPlanRow>().CountAsync() == 0 &&
-        await _database.Table<CreditCardRow>().CountAsync() == 0 &&
-        await _database.Table<PlannedLargeExpenseRow>().CountAsync() == 0;
 
     private async Task RemoveObsoleteDailyTrackingTablesAsync()
     {

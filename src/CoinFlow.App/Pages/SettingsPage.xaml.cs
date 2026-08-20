@@ -18,42 +18,49 @@ public partial class SettingsPage : ContentPage
         await _viewModel.LoadAsync();
     }
 
-    private async void OnResetDevelopmentDataClicked(
+    private async void OnClearDevelopmentDataClicked(
         object? sender,
         EventArgs eventArgs)
     {
         var confirmed = await DisplayAlert(
-            "Development verisini yeniden yükle",
-            "Development veritabanındaki tüm kayıtlar silinecek ve canonical örnek veri yeniden oluşturulacak.",
-            "Sıfırla ve yükle",
+            "Verileri Sil",
+            "Tüm finans verileri silinecek. Devam etmek istiyor musun?",
+            "Verileri Sil",
             "Vazgeç");
         if (!confirmed)
         {
             return;
         }
 
-        if (await _viewModel.ResetDevelopmentDataAsync())
+        if (await _viewModel.ClearDevelopmentDataAsync())
         {
             await DisplayAlert(
                 "Tamamlandı",
-                "Canonical development verisi yeniden yüklendi.",
+                "Tüm veriler silindi.",
                 "Tamam");
         }
     }
 
-    private async void OnApplyStrategyClicked(
+    private async void OnLoadCanonicalSeedClicked(
         object? sender,
         EventArgs eventArgs)
     {
-        var confirmed = await DisplayAlert(
-            "Düzen değişikliğini planla",
-            "Önizlemedeki düzen seçilen maaş tarihinde başlayacak. Geçmiş kayıtlar değiştirilmeyecek.",
-            "Planla",
-            "Vazgeç");
-        if (confirmed)
+        if (await _viewModel.LoadCanonicalSeedAsync())
         {
-            await _viewModel.ApplyStrategyAsync();
+            await DisplayAlert(
+                "Tamamlandı",
+                "Canonical development verisi yüklendi.",
+                "Tamam");
         }
+    }
+
+    private async void OnChangeStrategyClicked(
+        object? sender,
+        EventArgs eventArgs)
+    {
+        _viewModel.PrepareStrategyEditor();
+        await Navigation.PushModalAsync(
+            new StrategyChangePage(_viewModel));
     }
 
     private async void OnDeletePendingStrategyClicked(
@@ -71,18 +78,4 @@ public partial class SettingsPage : ContentPage
         }
     }
 
-    private async void OnCorrectHistoricalStrategyClicked(
-        object? sender,
-        EventArgs eventArgs)
-    {
-        var confirmed = await DisplayAlert(
-            "Geçmiş kaydı düzelt",
-            "Bu işlem geçmiş projection sonuçlarını değiştirebilir. Seçilen geçmiş düzen kaydı düzeltilecek. Devam edilsin mi?",
-            "Geçmişi düzelt",
-            "Vazgeç");
-        if (confirmed)
-        {
-            await _viewModel.CorrectHistoricalStrategyAsync();
-        }
-    }
 }

@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="CoinFlow.App.Pages.StrategyChangePage"
+             Title="Maaş Kullanım Düzenini Değiştir">
+    <ScrollView>
+        <VerticalStackLayout Padding="24,30,24,36" Spacing="14">
+            <Label Text="PLANLANAN DÜZEN DEĞİŞİKLİĞİ"
+                   Style="{StaticResource Eyebrow}" />
+            <Label Text="Maaş kullanım düzenini değiştir"
+                   Style="{StaticResource PageTitle}" />
+
+            <Border>
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Mevcut düzen"
+                           Style="{StaticResource FieldLabel}" />
+                    <Label Text="{Binding CurrentStrategyText}"
+                           FontFamily="OpenSansSemibold" />
+                    <Label Text="Yeni düzen"
+                           Style="{StaticResource FieldLabel}" />
+                    <Picker ItemsSource="{Binding StrategyModes}"
+                            SelectedItem="{Binding SelectedStrategyMode}" />
+                    <Label Text="Geçerli olacağı maaş"
+                           Style="{StaticResource FieldLabel}" />
+                    <Picker ItemsSource="{Binding EffectiveSalaryDates}"
+                            SelectedItem="{Binding SelectedEffectiveSalary}" />
+                    <Label Text="Yalnız henüz başlamamış maaş tarihleri seçilebilir. Önceki kararlar değiştirilmez."
+                           Style="{StaticResource MutedText}" />
+                    <Label Text="Not" Style="{StaticResource FieldLabel}" />
+                    <Entry Text="{Binding StrategyNote}" />
+                    <Button Text="Geçişi Önizle"
+                            Command="{Binding PreviewStrategyCommand}" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border IsVisible="{Binding HasPreview}"
+                    BackgroundColor="{StaticResource SoftSky}">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Geçiş Önizlemesi"
+                           Style="{StaticResource SectionTitle}" />
+                    <Label Text="{Binding PreviewText}" />
+                    <Button Text="Bu Düzeni Planla"
+                            Clicked="OnApplyStrategyClicked" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Label Text="{Binding StatusMessage}"
+                   IsVisible="{Binding HasStatus}"
+                   TextColor="{StaticResource Error}" />
+            <Button Text="Vazgeç"
+                    Clicked="OnCancelClicked"
+                    Style="{StaticResource SecondaryButton}" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

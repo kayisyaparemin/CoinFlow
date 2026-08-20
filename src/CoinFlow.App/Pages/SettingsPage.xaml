@@ -30,27 +30,11 @@
                                 Clicked="OnDeletePendingStrategyClicked" />
                     </VerticalStackLayout>
                     <Button Text="Düzeni Değiştir"
-                            Command="{Binding ShowStrategyEditorCommand}" />
-                    <VerticalStackLayout IsVisible="{Binding IsStrategyEditorVisible}" Spacing="8">
-                        <Label Text="Yeni düzen" Style="{StaticResource FieldLabel}" />
-                        <Picker ItemsSource="{Binding StrategyModes}"
-                                SelectedItem="{Binding SelectedStrategyMode}" />
-                        <Label Text="Geçerli olacağı maaş" Style="{StaticResource FieldLabel}" />
-                        <Picker ItemsSource="{Binding EffectiveSalaryDates}"
-                                SelectedItem="{Binding SelectedEffectiveSalary}" />
-                        <Label Text="Not" Style="{StaticResource FieldLabel}" />
-                        <Entry Text="{Binding StrategyNote}" />
-                        <Button Text="Geçişi Önizle"
-                                Command="{Binding PreviewStrategyCommand}" />
-                        <Border IsVisible="{Binding HasPreview}" BackgroundColor="{StaticResource SoftSky}">
-                            <VerticalStackLayout Spacing="8">
-                                <Label Text="Geçiş Önizlemesi" Style="{StaticResource SectionTitle}" />
-                                <Label Text="{Binding PreviewText}" />
-                                <Button Text="Bu Düzeni Planla"
-                                        Clicked="OnApplyStrategyClicked" />
-                            </VerticalStackLayout>
-                        </Border>
-                    </VerticalStackLayout>
+                            IsVisible="{Binding CanManageStrategy}"
+                            Clicked="OnChangeStrategyClicked" />
+                    <Button Text="Maaş Ekle ve Düzeni Seç"
+                            IsVisible="{Binding HasNoStrategy}"
+                            Command="{Binding OpenCommitmentsCommand}" />
                     <Label Text="Gerçek kredi, kart ve ödeme vadeleri değişmez; yeni kayıt yalnız seçilen maaştan sonraki bütçe atamalarını etkiler."
                            Style="{StaticResource MutedText}" />
                 </VerticalStackLayout>
@@ -71,19 +55,8 @@
                             </DataTemplate>
                         </BindableLayout.ItemTemplate>
                     </VerticalStackLayout>
-                    <Label Text="Geçmiş kayıt düzeltmeleri eski projection sonuçlarını değiştirir; normal düzen değiştirme akışı geçmişi değiştirmez."
+                    <Label Text="Bu geçmiş bilgilendirme amaçlıdır. Her yeni karar seçilen maaş tarihinde yeni bir kayıt oluşturur; önceki kararlar değiştirilmez."
                            Style="{StaticResource MutedText}" />
-                    <Button Text="Geçmiş Kaydı Düzelt • Gelişmiş"
-                            Command="{Binding ShowHistoricalEditorCommand}"
-                            Style="{StaticResource SecondaryButton}" />
-                    <VerticalStackLayout IsVisible="{Binding IsHistoricalEditorVisible}" Spacing="8">
-                        <Picker ItemsSource="{Binding HistoricalStrategyOptions}"
-                                SelectedItem="{Binding SelectedHistoricalStrategy}" />
-                        <Picker ItemsSource="{Binding StrategyModes}"
-                                SelectedItem="{Binding SelectedHistoricalMode}" />
-                        <Button Text="Onayla ve Geçmiş Kaydı Düzelt"
-                                Clicked="OnCorrectHistoricalStrategyClicked" />
-                    </VerticalStackLayout>
                 </VerticalStackLayout>
             </Border>
 
@@ -123,12 +96,28 @@
                 </VerticalStackLayout>
             </Border>
 
-            <Border IsVisible="{Binding IsDevelopment}" BackgroundColor="{StaticResource SoftPink}">
+            <Border IsVisible="{Binding IsDevelopment}">
                 <VerticalStackLayout Spacing="8">
                     <Label Text="Development Verisi" Style="{StaticResource SectionTitle}" />
-                    <Label Text="Development veritabanını temizler, schema migration'larını çalıştırır ve canonical seed'i yeniden yükler." Style="{StaticResource MutedText}" />
-                    <Button Text="Development verisini sıfırla ve seed'i yeniden yükle"
-                            Clicked="OnResetDevelopmentDataClicked" />
+                    <Border BackgroundColor="{StaticResource SoftPink}" Padding="12">
+                        <VerticalStackLayout Spacing="7">
+                            <Label Text="Verileri Sil" FontFamily="OpenSansSemibold" />
+                            <Label Text="Tüm kullanıcı finans verilerini siler ve uygulamayı boş başlangıç durumuna döndürür."
+                                   Style="{StaticResource MutedText}" />
+                            <Button Text="Verileri Sil"
+                                    Clicked="OnClearDevelopmentDataClicked"
+                                    BackgroundColor="{StaticResource SoftPink}" />
+                        </VerticalStackLayout>
+                    </Border>
+                    <Border BackgroundColor="{StaticResource SoftSky}" Padding="12">
+                        <VerticalStackLayout Spacing="7">
+                            <Label Text="Seed Data Yükle" FontFamily="OpenSansSemibold" />
+                            <Label Text="Canonical development verisini boş veya mevcut development veritabanına yükler. Tekrar çalıştırmak duplicate üretmez."
+                                   Style="{StaticResource MutedText}" />
+                            <Button Text="Seed Data Yükle"
+                                    Clicked="OnLoadCanonicalSeedClicked" />
+                        </VerticalStackLayout>
+                    </Border>
                 </VerticalStackLayout>
             </Border>
         </VerticalStackLayout>

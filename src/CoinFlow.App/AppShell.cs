@@ -6,57 +6,53 @@ public sealed class AppShell : Shell
 {
     public AppShell(IServiceProvider services)
     {
-        FlyoutBehavior = FlyoutBehavior.Disabled;
+        FlyoutBehavior = FlyoutBehavior.Flyout;
         Shell.SetNavBarIsVisible(this, true);
 
-        var tabs = new TabBar
-        {
-            Route = "main"
-        };
-        tabs.Items.Add(CreateTab(
+        Items.Add(CreateFlyoutItem(
             "Ana Sayfa",
-            "home",
+            "dashboard",
             "dashboard-content",
             () => services.GetRequiredService<MainPage>()));
-        tabs.Items.Add(CreateTab(
+        Items.Add(CreateFlyoutItem(
             "12 Aylık",
             "projection",
             "future-months-content",
             () => services.GetRequiredService<FutureMonthsPage>()));
-        tabs.Items.Add(CreateTab(
+        Items.Add(CreateFlyoutItem(
             "Simülatör",
             "simulation",
             "simulation-content",
             () => services.GetRequiredService<SimulationPage>()));
-        tabs.Items.Add(CreateTab(
+        Items.Add(CreateFlyoutItem(
             "Gelir & Ödemeler",
-            "income-payments",
+            "commitments",
             "commitments-content",
             () => services.GetRequiredService<CommitmentsPage>()));
-        Items.Add(tabs);
-
-        Routing.RegisterRoute(
+        Items.Add(CreateFlyoutItem(
+            "Ayarlar",
             "settings",
-            typeof(SettingsPage));
+            "settings-content",
+            () => services.GetRequiredService<SettingsPage>()));
     }
 
-    private static Tab CreateTab(
+    private static FlyoutItem CreateFlyoutItem(
         string title,
         string route,
         string contentRoute,
         Func<Page> factory)
     {
-        var tab = new Tab
+        var item = new FlyoutItem
         {
             Title = title,
             Route = route
         };
-        tab.Items.Add(new ShellContent
+        item.Items.Add(new ShellContent
         {
             Title = title,
             Route = contentRoute,
             ContentTemplate = new DataTemplate(factory)
         });
-        return tab;
+        return item;
     }
 }

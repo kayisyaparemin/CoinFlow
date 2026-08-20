@@ -6,11 +6,35 @@ namespace CoinFlow.App.Pages;
 public partial class CommitmentsPage : ContentPage
 {
     private readonly CommitmentsViewModel _viewModel;
+    private bool _isShowingInitialStrategySetup;
 
     public CommitmentsPage(CommitmentsViewModel viewModel)
     {
         InitializeComponent();
         BindingContext = _viewModel = viewModel;
+        _viewModel.InitialStrategySetupRequested +=
+            OnInitialStrategySetupRequested;
+    }
+
+    private async void OnInitialStrategySetupRequested(
+        CoinFlow.Application.Models.InitialPaymentStrategySetup setup)
+    {
+        if (_isShowingInitialStrategySetup)
+        {
+            return;
+        }
+
+        _isShowingInitialStrategySetup = true;
+        try
+        {
+            var page = new InitialStrategyPage(setup, _viewModel);
+            await Navigation.PushModalAsync(page);
+            await page.Completion;
+        }
+        finally
+        {
+            _isShowingInitialStrategySetup = false;
+        }
     }
 
     protected override async void OnAppearing()

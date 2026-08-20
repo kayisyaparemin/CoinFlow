@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CoinFlow.App.Models;
+using CoinFlow.Application.Models;
 using CoinFlow.Application.Services;
 using CoinFlow.Domain.Calculations;
 using CoinFlow.Domain.Models;
@@ -12,6 +13,8 @@ public partial class CommitmentsViewModel(
     CoinFlowService service,
     CreditCardStatementCalculator cardCalculator) : ViewModelBase
 {
+    public event Action<InitialPaymentStrategySetup>?
+        InitialStrategySetupRequested;
     public ObservableCollection<SelectionOption<string>> RecordTypes { get; } = [];
 
     public ObservableCollection<SelectionOption<CreditCardPaymentStrategy>>
@@ -118,6 +121,13 @@ public partial class CommitmentsViewModel(
                     : "Maaş"));
         }
 
+        var initialSetup = await service
+            .GetInitialPaymentStrategySetupAsync();
+        if (initialSetup is not null)
+        {
+            InitialStrategySetupRequested?.Invoke(initialSetup);
+        }
+
         foreach (var income in plan.OtherIncomes.OrderBy(x => x.ExactDate))
         {
             _allItems.Add(new FinancialRecordLine(
@@ -201,6 +211,22 @@ public partial class CommitmentsViewModel(
         SelectedProjectionFallbackStrategy ??=
             ProjectionFallbackStrategies[0];
         SelectedPaymentPlanType ??= PaymentPlanTypes[0];
+    }
+
+    public async Task<bool> CompleteInitialStrategySetupAsync(
+        PaymentAssignmentMode mode)
+    {
+        try
+        {
+            await service.CompleteInitialPaymentStrategySetupAsync(mode);
+            SetStatus("Maaş kullanım düzeni kaydedildi; projeksiyon hazır.");
+            return true;
+        }
+        catch (Exception exception)
+        {
+            SetStatus(exception.Message);
+            return false;
+        }
     }
 
     [RelayCommand]

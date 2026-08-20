@@ -19,6 +19,8 @@ internal static class DevelopmentDataSeeder
         Guid.Parse("30000000-0000-0000-0000-000000000001");
     private static readonly Guid AxessCardId =
         Guid.Parse("40000000-0000-0000-0000-000000000001");
+    internal static readonly Guid InitialAssignmentStrategyId =
+        Guid.Parse("50000000-0000-0000-0000-000000000001");
 
     public static async Task SeedAsync(SQLiteAsyncConnection database)
     {
@@ -133,5 +135,18 @@ internal static class DevelopmentDataSeeder
                 Amount = amount
             });
         }
+
+        await database.InsertOrReplaceAsync(
+            new PaymentAssignmentStrategyRow
+            {
+                Id = InitialAssignmentStrategyId.ToString("D"),
+                Mode = (int)PaymentAssignmentMode.UpcomingPeriod,
+                EffectiveFromSalaryDate = SqliteCoinFlowStore.FormatDate(
+                    new DateOnly(2026, 9, 10)),
+                CreatedAt = new DateTimeOffset(
+                        2026, 8, 20, 0, 0, 0, TimeSpan.Zero)
+                    .ToString("O"),
+                Note = "Canonical development düzeni"
+            });
     }
 }

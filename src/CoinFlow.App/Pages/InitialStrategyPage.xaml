@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="CoinFlow.App.Pages.InitialStrategyPage"
+             Title="Maaş Kullanım Düzeni">
+    <ScrollView>
+        <VerticalStackLayout Padding="24,30,24,36" Spacing="16">
+            <Label Text="İLK PLANLAMA ADIMI" Style="{StaticResource Eyebrow}" />
+            <Label Text="Maaşını nasıl kullanıyorsun?" Style="{StaticResource PageTitle}" />
+            <Label Text="Ödemeleri hangi maaşa göre planladığını seç. Bunu daha sonra değiştirebilirsin; CoinFlow değişiklik tarihçesini otomatik olarak korur."
+                   Style="{StaticResource MutedText}" />
+
+            <Border>
+                <VerticalStackLayout Spacing="8">
+                    <RadioButton x:Name="PreviousOption"
+                                 GroupName="InitialPaymentStrategy"
+                                 Content="Geçmiş dönemi kapatırım"
+                                 CheckedChanged="OnOptionCheckedChanged" />
+                    <Label Text="{Binding PreviousDescription}"
+                           Margin="34,-5,0,0"
+                           Style="{StaticResource MutedText}" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border>
+                <VerticalStackLayout Spacing="8">
+                    <RadioButton x:Name="UpcomingOption"
+                                 GroupName="InitialPaymentStrategy"
+                                 Content="Gelecek dönemi karşılarım"
+                                 CheckedChanged="OnOptionCheckedChanged" />
+                    <Label Text="{Binding UpcomingDescription}"
+                           Margin="34,-5,0,0"
+                           Style="{StaticResource MutedText}" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Label Text="{Binding EffectiveDescription}"
+                   Style="{StaticResource MutedText}" />
+            <Button x:Name="SaveButton"
+                    Text="Kaydet"
+                    IsEnabled="False"
+                    Clicked="OnSaveClicked" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

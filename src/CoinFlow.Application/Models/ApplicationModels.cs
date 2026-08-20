@@ -15,10 +15,17 @@ public sealed record DashboardSnapshot(
     DateOnly ProjectionAnchorDate);
 
 public sealed record PaymentAssignmentStrategyOverview(
-    PaymentAssignmentStrategy Current,
+    PaymentAssignmentStrategy? Current,
     PaymentAssignmentStrategy? Pending,
     IReadOnlyList<PaymentAssignmentStrategy> History,
     IReadOnlyList<DateOnly> AvailableEffectiveSalaryDates);
+
+public sealed record InitialPaymentStrategySetup(
+    DateOnly ProjectionAnchorDate,
+    DateOnly EffectiveSalaryDate,
+    DateOnly ExampleSalaryDate,
+    DateOnly PreviousExampleStart,
+    DateOnly UpcomingExampleEnd);
 
 public sealed record PaymentStrategyChangePreview(
     DateOnly EffectiveSalaryDate,

@@ -70,34 +70,73 @@ public partial class SimulationViewModel(
     [ObservableProperty] private string assignmentModeText = string.Empty;
     [ObservableProperty] private bool hasStrategyTransitionSummary;
     [ObservableProperty] private string strategyTransitionSummary = string.Empty;
+    [ObservableProperty] private bool isPlanAvailable;
+    [ObservableProperty] private bool isPlanUnavailable = true;
+    [ObservableProperty] private string emptyStateMessage =
+        "Simülasyon yapabilmek için önce temel finans planını oluştur.";
 
     public async Task LoadAsync()
     {
-        var plan = await service.GetFinancialPlanAsync();
-        var overview = await service.GetPaymentAssignmentStrategyOverviewAsync();
-        CreditCards.Clear();
-        foreach (var card in plan.CreditCards)
+        try
         {
-            CreditCards.Add(new SelectionOption<Guid>(
-                $"{card.Bank} {card.Name}".Trim(),
-                card.Id));
-        }
+            SetStatus(string.Empty);
+            var plan = await service.GetFinancialPlanAsync();
+            IsPlanAvailable = plan.Salaries.Count > 0 &&
+                              plan.PaymentAssignmentStrategies.Count > 0 &&
+                              plan.Settings.ProjectionAnchorDate != default;
+            IsPlanUnavailable = !IsPlanAvailable;
+            HasResults = false;
+            if (!IsPlanAvailable)
+            {
+                EmptyStateMessage = plan.Salaries.Count == 0
+                    ? "Simülasyon yapabilmek için önce temel finans planını oluştur."
+                    : "Simülasyon için maaş kullanım düzenini seçerek finans planını tamamla.";
+                AssignmentModeText = string.Empty;
+                CreditCards.Clear();
+                StrategySalaryDates.Clear();
+                Results.Clear();
+                return;
+            }
 
-        AssignmentModeText = AssignmentModeLabel(overview.Current.Mode);
-        StrategySalaryDates.Clear();
-        foreach (var date in overview.AvailableEffectiveSalaryDates)
+            var overview = await service.GetPaymentAssignmentStrategyOverviewAsync();
+            CreditCards.Clear();
+            foreach (var card in plan.CreditCards)
+            {
+                CreditCards.Add(new SelectionOption<Guid>(
+                    $"{card.Bank} {card.Name}".Trim(),
+                    card.Id));
+            }
+
+            var currentMode = overview.Current?.Mode ??
+                              throw new InvalidOperationException(
+                                  "Maaş kullanım düzeni bulunamadı.");
+            AssignmentModeText = AssignmentModeLabel(currentMode);
+            StrategySalaryDates.Clear();
+            foreach (var date in overview.AvailableEffectiveSalaryDates)
+            {
+                StrategySalaryDates.Add(new SelectionOption<DateOnly>(
+                    $"{date.ToString("dd MMMM yyyy", TurkishCulture)} maaşı",
+                    date));
+            }
+            SelectedStrategySalaryDate ??= StrategySalaryDates.FirstOrDefault();
+            SelectedStrategyMode ??= StrategyModes.First(x =>
+                x.Value != currentMode);
+
+            SelectedScenarioType ??= ScenarioTypes[0];
+            SelectedCreditCard ??= CreditCards.FirstOrDefault();
+        }
+        catch (Exception exception)
         {
-            StrategySalaryDates.Add(new SelectionOption<DateOnly>(
-                $"{date.ToString("dd MMMM yyyy", TurkishCulture)} maaşı",
-                date));
+            IsPlanAvailable = false;
+            IsPlanUnavailable = true;
+            HasResults = false;
+            SetStatus(exception.Message);
         }
-        SelectedStrategySalaryDate ??= StrategySalaryDates.FirstOrDefault();
-        SelectedStrategyMode ??= StrategyModes.First(x =>
-            x.Value != overview.Current.Mode);
-
-        SelectedScenarioType ??= ScenarioTypes[0];
-        SelectedCreditCard ??= CreditCards.FirstOrDefault();
     }
+
+    [RelayCommand]
+    private Task OpenCommitmentsAsync() =>
+        Shell.Current.GoToAsync("//commitments/commitments-content");
 
     partial void OnSelectedScenarioTypeChanged(
         SelectionOption<SimulationScenarioType>? value)

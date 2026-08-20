@@ -24,15 +24,15 @@ public static class MauiProgram
         builder.Services.AddSingleton<AppShell>();
         builder.Services.AddSingleton<IClock, SystemClock>();
 #if COINFLOW_DEV_BUILD
-        const bool seedDevelopmentData = true;
+        const bool developmentFeaturesEnabled = true;
 #else
-        const bool seedDevelopmentData = false;
+        const bool developmentFeaturesEnabled = false;
 #endif
         var databasePath = Path.Combine(FileSystem.AppDataDirectory, "coinflow.db3");
         builder.Services.AddSingleton<ICoinFlowStore>(
             services => new SqliteCoinFlowStore(
                 databasePath,
-                seedDevelopmentData,
+                developmentFeaturesEnabled,
                 services.GetRequiredService<IClock>().Today));
         builder.Services.AddSingleton<SalaryPeriodCalculator>();
         builder.Services.AddSingleton<PaymentAssignmentStrategyResolver>();

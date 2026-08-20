@@ -8,9 +8,23 @@
             <Label Text="PLANLAMADAN ÖNCE DENE" Style="{StaticResource Eyebrow}" />
             <Label Text="Simülatör" Style="{StaticResource PageTitle}" />
             <Label Text="Baseline ve yeni plan aynı 12 dönem projection engine'iyle hesaplanır. Simüle Et veritabanına kayıt yazmaz." Style="{StaticResource MutedText}" />
-            <Label Text="{Binding AssignmentModeText}" FontFamily="OpenSansSemibold" />
+            <Label Text="{Binding AssignmentModeText}"
+                   IsVisible="{Binding IsPlanAvailable}"
+                   FontFamily="OpenSansSemibold" />
 
-            <Border>
+            <Border IsVisible="{Binding IsPlanUnavailable}"
+                    BackgroundColor="{StaticResource SoftSky}">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Simülasyon henüz kullanılamıyor."
+                           Style="{StaticResource SectionTitle}" />
+                    <Label Text="{Binding EmptyStateMessage}"
+                           Style="{StaticResource MutedText}" />
+                    <Button Text="Gelir &amp; Ödemelere Git"
+                            Command="{Binding OpenCommitmentsCommand}" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border IsVisible="{Binding IsPlanAvailable}">
                 <VerticalStackLayout Spacing="9">
                     <Label Text="Senaryo" Style="{StaticResource SectionTitle}" />
                     <Label Text="Senaryo türü" Style="{StaticResource FieldLabel}" />

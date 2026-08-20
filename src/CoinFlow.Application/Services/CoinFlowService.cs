@@ -17,9 +17,13 @@ public sealed class CoinFlowService(
     public Task InitializeAsync(CancellationToken cancellationToken = default) =>
         store.InitializeAsync(cancellationToken);
 
-    public Task ResetDevelopmentDataAsync(
+    public Task ClearDevelopmentDataAsync(
         CancellationToken cancellationToken = default) =>
-        store.ResetAllDataAsync(cancellationToken);
+        store.ClearAllFinancialDataAsync(cancellationToken);
+
+    public Task LoadCanonicalDevelopmentDataAsync(
+        CancellationToken cancellationToken = default) =>
+        store.LoadCanonicalDevelopmentDataAsync(cancellationToken);
 
     public async Task<FinancialPlan> GetFinancialPlanAsync(
         CancellationToken cancellationToken = default)
@@ -59,12 +63,17 @@ public sealed class CoinFlowService(
         };
     }
 
-    public async Task<DashboardSnapshot> GetDashboardAsync(
+    public async Task<DashboardSnapshot?> GetDashboardAsync(
         DateOnly? asOf = null,
         CancellationToken cancellationToken = default)
     {
         var date = asOf ?? clock.Today;
         var plan = await GetFinancialPlanAsync(cancellationToken);
+        if (!CanBuildProjection(plan))
+        {
+            return null;
+        }
+
         return projectionService.BuildDashboard(plan, date);
     }
 
@@ -76,6 +85,11 @@ public sealed class CoinFlowService(
     {
         var date = asOf ?? clock.Today;
         var plan = await GetFinancialPlanAsync(cancellationToken);
+        if (!CanBuildProjection(plan))
+        {
+            return [];
+        }
+
         return projectionService.BuildFuturePeriods(plan, date, periodCount);
     }
 
@@ -86,6 +100,12 @@ public sealed class CoinFlowService(
     {
         var date = asOf ?? clock.Today;
         var plan = await GetFinancialPlanAsync(cancellationToken);
+        if (!CanBuildProjection(plan))
+        {
+            throw new InvalidOperationException(
+                "Simülasyon yapabilmek için önce maaşını ve maaş kullanım düzenini oluştur.");
+        }
+
         return simulationCalculator.Calculate(plan, date, request);
     }
 
@@ -171,7 +191,7 @@ public sealed class CoinFlowService(
         }
     }
 
-    public Task SaveSalaryAsync(
+    public async Task<InitialPaymentStrategySetup?> SaveSalaryAsync(
         SalaryScheduleEntry entry,
         CancellationToken cancellationToken = default)
     {
@@ -181,7 +201,69 @@ public sealed class CoinFlowService(
                 "Maaş tutarı sıfırdan büyük olmalıdır.");
         }
 
-        return store.UpsertSalaryAsync(entry, cancellationToken);
+        await store.UpsertSalaryAsync(entry, cancellationToken);
+        return await GetInitialPaymentStrategySetupAsync(cancellationToken);
+    }
+
+    public async Task<InitialPaymentStrategySetup?>
+        GetInitialPaymentStrategySetupAsync(
+            CancellationToken cancellationToken = default)
+    {
+        var plan = await GetFinancialPlanAsync(cancellationToken);
+        if (plan.Salaries.Count == 0 ||
+            plan.PaymentAssignmentStrategies.Count > 0)
+        {
+            return null;
+        }
+
+        var settings = plan.Settings;
+        var anchor = settings.ProjectionAnchorDate;
+        if (anchor == default)
+        {
+            anchor = clock.Today;
+            settings = settings with { ProjectionAnchorDate = anchor };
+            await store.SaveSettingsAsync(settings, cancellationToken);
+        }
+
+        var effectiveSalary = salaryPeriodCalculator
+            .GetFirstSalaryOnOrAfter(anchor, settings.SalaryDay);
+        var exampleSalary = CalendarRules.AddMonthsKeepingDay(
+            effectiveSalary,
+            1,
+            settings.SalaryDay);
+        return new InitialPaymentStrategySetup(
+            anchor,
+            effectiveSalary,
+            exampleSalary,
+            effectiveSalary,
+            CalendarRules.AddMonthsKeepingDay(
+                exampleSalary,
+                1,
+                settings.SalaryDay));
+    }
+
+    public async Task CompleteInitialPaymentStrategySetupAsync(
+        PaymentAssignmentMode mode,
+        CancellationToken cancellationToken = default)
+    {
+        if (!Enum.IsDefined(mode))
+        {
+            throw new InvalidOperationException(
+                "Maaş kullanım düzeni geçersiz.");
+        }
+
+        var setup = await GetInitialPaymentStrategySetupAsync(
+            cancellationToken) ?? throw new InvalidOperationException(
+                "İlk maaş kullanım düzeni kurulumu gerekli değil veya zaten tamamlandı.");
+        await store.UpsertPaymentAssignmentStrategyAsync(
+            new PaymentAssignmentStrategy
+            {
+                Mode = mode,
+                EffectiveFromSalaryDate = setup.EffectiveSalaryDate,
+                CreatedAt = clock.UtcNow,
+                Note = "İlk maaş kullanım düzeni"
+            },
+            cancellationToken);
     }
 
     public Task DeleteSalaryAsync(
@@ -351,14 +433,8 @@ public sealed class CoinFlowService(
                 "Tahmini yaşam bütçesi negatif olamaz.");
         }
 
-        var normalized = settings with
-        {
-            ProjectionAnchorDate = settings.ProjectionAnchorDate == default
-                ? clock.Today
-                : settings.ProjectionAnchorDate
-        };
         var plan = await GetFinancialPlanAsync(cancellationToken);
-        await store.SaveSettingsAsync(normalized, cancellationToken);
+        await store.SaveSettingsAsync(settings, cancellationToken);
         if (settings.SalaryDay != plan.Settings.SalaryDay)
         {
             foreach (var strategy in plan.PaymentAssignmentStrategies)
@@ -386,30 +462,40 @@ public sealed class CoinFlowService(
             .OrderBy(x => x.EffectiveFromSalaryDate)
             .ThenBy(x => x.CreatedAt)
             .ToArray();
+        var anchor = plan.Settings.ProjectionAnchorDate == default
+            ? clock.Today
+            : plan.Settings.ProjectionAnchorDate;
         var firstProjectionSalary = salaryPeriodCalculator
-            .GetFirstSalaryOnOrAfter(
-                plan.Settings.ProjectionAnchorDate,
-                plan.Settings.SalaryDay);
+            .GetFirstSalaryOnOrAfter(anchor, plan.Settings.SalaryDay);
         var referenceSalary = salaryPeriodCalculator
             .GetPeriod(clock.Today, plan.Settings.SalaryDay)
             .Start;
         var current = history
             .Where(x => x.EffectiveFromSalaryDate <= referenceSalary)
-            .LastOrDefault() ?? history[0];
-        var pending = history.FirstOrDefault(x =>
-            x.EffectiveFromSalaryDate >
-            DateOnly.FromDayNumber(Math.Max(
+            .LastOrDefault() ?? history.FirstOrDefault();
+        var currentThreshold = current is null
+            ? referenceSalary
+            : DateOnly.FromDayNumber(Math.Max(
                 referenceSalary.DayNumber,
-                current.EffectiveFromSalaryDate.DayNumber)));
+                current.EffectiveFromSalaryDate.DayNumber));
+        var pending = history.FirstOrDefault(x =>
+            x.EffectiveFromSalaryDate > currentThreshold);
         var firstChoice = salaryPeriodCalculator.GetFirstSalaryOnOrAfter(
             clock.Today,
             plan.Settings.SalaryDay);
+        if (firstChoice <= clock.Today)
+        {
+            firstChoice = CalendarRules.AddMonthsKeepingDay(
+                firstChoice,
+                1,
+                plan.Settings.SalaryDay);
+        }
         if (firstChoice < firstProjectionSalary)
         {
             firstChoice = firstProjectionSalary;
         }
 
-        var choices = Enumerable.Range(0, 18)
+        var choices = Enumerable.Range(0, 12)
             .Select(index => CalendarRules.AddMonthsKeepingDay(
                 firstChoice,
                 index,
@@ -580,6 +666,11 @@ public sealed class CoinFlowService(
                    .OrderBy(x => x.EffectiveFromSalaryDate)
                    .First().Mode;
     }
+
+    private static bool CanBuildProjection(FinancialPlan plan) =>
+        plan.Salaries.Count > 0 &&
+        plan.PaymentAssignmentStrategies.Count > 0 &&
+        plan.Settings.ProjectionAnchorDate != default;
 
     private static void ValidateCreditCardPaymentSettings(CreditCard card)
     {
