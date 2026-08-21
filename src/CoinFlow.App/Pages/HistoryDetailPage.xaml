@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:CoinFlow.App.ViewModels"
+             xmlns:models="clr-namespace:CoinFlow.App.Models"
+             x:Class="CoinFlow.App.Pages.HistoryDetailPage"
+             x:DataType="vm:HistoryDetailViewModel"
+             Title="Dönem Ayrıntısı">
+    <ContentPage.ToolbarItems><ToolbarItem Text="Kapat" Clicked="OnCloseClicked" /></ContentPage.ToolbarItems>
+    <ScrollView>
+        <VerticalStackLayout Padding="20,24,20,40" Spacing="14">
+            <Label Text="DÖNEM" Style="{StaticResource Eyebrow}" />
+            <Label Text="{Binding PeriodText}" Style="{StaticResource PageTitle}" />
+            <Border BackgroundColor="{StaticResource SoftSky}" StrokeThickness="0"><Label Text="{Binding Summary}" Style="{StaticResource SectionTitle}" /></Border>
+            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
+                <Border BackgroundColor="{StaticResource SoftPink}" StrokeThickness="0"><VerticalStackLayout><Label Text="PLAN" Style="{StaticResource Eyebrow}" /><Label Text="{Binding PlannedEnding}" FontFamily="OpenSansSemibold" /></VerticalStackLayout></Border>
+                <Border Grid.Column="1" BackgroundColor="{StaticResource SoftYellow}" StrokeThickness="0"><VerticalStackLayout><Label Text="GERÇEK" Style="{StaticResource Eyebrow}" /><Label Text="{Binding ActualEnding}" FontFamily="OpenSansSemibold" /></VerticalStackLayout></Border>
+                <Border Grid.Column="2" BackgroundColor="{StaticResource SoftLavender}" StrokeThickness="0"><VerticalStackLayout><Label Text="FARK" Style="{StaticResource Eyebrow}" /><Label Text="{Binding Difference}" FontFamily="OpenSansSemibold" /></VerticalStackLayout></Border>
+            </Grid>
+            <Border>
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Yaşam Giderleri" Style="{StaticResource SectionTitle}" />
+                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" RowSpacing="7"><Label Text="İlk plan" Style="{StaticResource MutedText}" /><Label Grid.Column="1" Text="{Binding OriginalLiving}" /><Label Grid.Row="1" Text="Son plan" Style="{StaticResource MutedText}" /><Label Grid.Row="1" Grid.Column="1" Text="{Binding FinalLiving}" /><Label Grid.Row="2" Text="Gerçek" Style="{StaticResource MutedText}" /><Label Grid.Row="2" Grid.Column="1" Text="{Binding ActualLiving}" FontFamily="OpenSansSemibold" /></Grid>
+                    <Label Text="Kapanışta plan revize edildi; ilk plan korunuyor." IsVisible="{Binding HasRevision}" Style="{StaticResource MutedText}" />
+                </VerticalStackLayout>
+            </Border>
+            <Label Text="Kategori Farkları" Style="{StaticResource SectionTitle}" />
+            <VerticalStackLayout BindableLayout.ItemsSource="{Binding ComparisonLines}" Spacing="8">
+                <BindableLayout.ItemTemplate><DataTemplate x:DataType="models:ComparisonUiLine"><Border><Grid ColumnDefinitions="1.2*,*,*,*" ColumnSpacing="5"><Label Text="{Binding Category}" Style="{StaticResource MutedText}" /><Label Grid.Column="1" Text="{Binding Planned}" FontSize="12" HorizontalTextAlignment="End" /><Label Grid.Column="2" Text="{Binding Actual}" FontSize="12" HorizontalTextAlignment="End" /><Label Grid.Column="3" Text="{Binding Difference}" FontSize="12" FontFamily="OpenSansSemibold" HorizontalTextAlignment="End" /></Grid></Border></DataTemplate></BindableLayout.ItemTemplate>
+            </VerticalStackLayout>
+            <Label Text="Ödemeler" Style="{StaticResource SectionTitle}" />
+            <VerticalStackLayout BindableLayout.ItemsSource="{Binding Payments}" Spacing="8">
+                <BindableLayout.ItemTemplate><DataTemplate x:DataType="models:PaymentHistoryUiLine"><Border><VerticalStackLayout Spacing="5"><Grid ColumnDefinitions="*,Auto"><Label Text="{Binding Name}" FontFamily="OpenSansSemibold" /><Label Grid.Column="1" Text="{Binding Status}" Style="{StaticResource Eyebrow}" /></Grid><Label Text="{Binding Date}" Style="{StaticResource MutedText}" /><Grid ColumnDefinitions="*,Auto"><Label Text="Planlanan" Style="{StaticResource MutedText}" /><Label Grid.Column="1" Text="{Binding Planned}" /></Grid><Grid ColumnDefinitions="*,Auto"><Label Text="Gerçek" Style="{StaticResource MutedText}" /><Label Grid.Column="1" Text="{Binding Actual}" FontFamily="OpenSansSemibold" /></Grid></VerticalStackLayout></Border></DataTemplate></BindableLayout.ItemTemplate>
+            </VerticalStackLayout>
+            <Border BackgroundColor="{StaticResource SoftLavender}" StrokeThickness="0"><VerticalStackLayout Spacing="7"><Label Text="Yeni Güncel Durum" Style="{StaticResource SectionTitle}" /><Label Text="{Binding NewSnapshotText}" FontFamily="OpenSansSemibold" /><Grid ColumnDefinitions="*,Auto"><Label Text="Dönem düzeltmesi" Style="{StaticResource MutedText}" /><Label Grid.Column="1" Text="{Binding ReconciliationText}" /></Grid></VerticalStackLayout></Border>
+            <Label Text="{Binding StatusMessage}" IsVisible="{Binding HasStatus}" TextColor="{StaticResource Error}" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

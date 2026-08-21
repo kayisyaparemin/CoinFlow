@@ -72,4 +72,15 @@ public interface ICoinFlowStore
     Task DeletePlannedLargeExpenseAsync(
         Guid id,
         CancellationToken cancellationToken = default);
+
+    Task<FinancialHistoryData> GetFinancialHistoryAsync(
+        CancellationToken cancellationToken = default);
+    Task SaveCurrentFinancialSnapshotAsync(
+        FinancialSnapshot snapshot,
+        PeriodPlanSnapshot plan,
+        UserSettings? updatedSettings = null,
+        CancellationToken cancellationToken = default);
+    Task FinalizeFinancialReviewAsync(
+        FinancialReviewCommit commit,
+        CancellationToken cancellationToken = default);
 }

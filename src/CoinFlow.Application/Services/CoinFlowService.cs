@@ -12,7 +12,10 @@ public sealed class CoinFlowService(
     SimulationCalculator simulationCalculator,
     TargetAmountCalculator targetAmountCalculator,
     PaymentAssignmentStrategyResolver strategyResolver,
-    SalaryPeriodCalculator salaryPeriodCalculator)
+    SalaryPeriodCalculator salaryPeriodCalculator,
+    FinancialSnapshotService snapshotService,
+    PeriodReviewService reviewService,
+    HistoryQueryService historyService)
 {
     public Task InitializeAsync(CancellationToken cancellationToken = default) =>
         store.InitializeAsync(cancellationToken);
@@ -50,7 +53,7 @@ public sealed class CoinFlowService(
             largeExpensesTask,
             strategiesTask);
 
-        return new FinancialPlan
+        var plan = new FinancialPlan
         {
             Settings = await settingsTask,
             Salaries = await salariesTask,
@@ -61,6 +64,10 @@ public sealed class CoinFlowService(
             PlannedLargeExpenses = await largeExpensesTask,
             PaymentAssignmentStrategies = await strategiesTask
         };
+        await snapshotService.EnsureInitialSnapshotAsync(
+            plan,
+            cancellationToken);
+        return plan;
     }
 
     public async Task<DashboardSnapshot?> GetDashboardAsync(
@@ -384,6 +391,7 @@ public sealed class CoinFlowService(
                 Note = "İlk maaş kullanım düzeni"
             },
             cancellationToken);
+        await GetFinancialPlanAsync(cancellationToken);
     }
 
     public Task DeleteSalaryAsync(
@@ -561,23 +569,123 @@ public sealed class CoinFlowService(
         }
 
         var plan = await GetFinancialPlanAsync(cancellationToken);
-        await store.SaveSettingsAsync(settings, cancellationToken);
+        var history = await store.GetFinancialHistoryAsync(cancellationToken);
+        var currentSnapshot = FinancialSnapshotService.LatestCurrent(history);
+        var adjustedStrategies = settings.SalaryDay == plan.Settings.SalaryDay
+            ? plan.PaymentAssignmentStrategies
+            : plan.PaymentAssignmentStrategies.Select(strategy =>
+                strategy with
+                {
+                    EffectiveFromSalaryDate = CalendarRules.ResolveDay(
+                        strategy.EffectiveFromSalaryDate.Year,
+                        strategy.EffectiveFromSalaryDate.Month,
+                        settings.SalaryDay)
+                }).ToArray();
+        var createsRecoverySnapshot = currentSnapshot is not null &&
+                                      CanBuildProjection(plan) &&
+                                      (settings.ProjectionStartingSavings !=
+                                           plan.Settings.ProjectionStartingSavings ||
+                                       settings.ProjectionAnchorDate !=
+                                           plan.Settings.ProjectionAnchorDate);
+        if (createsRecoverySnapshot)
+        {
+            var snapshotDate = settings.ProjectionStartingSavings !=
+                               plan.Settings.ProjectionStartingSavings
+                ? clock.Today
+                : settings.ProjectionAnchorDate;
+            var normalized = settings with
+            {
+                ProjectionAnchorDate = snapshotDate
+            };
+            await snapshotService.CreateCurrentSnapshotAsync(
+                plan with
+                {
+                    Settings = normalized,
+                    PaymentAssignmentStrategies = adjustedStrategies
+                },
+                normalized.ProjectionStartingSavings,
+                snapshotDate,
+                FinancialSnapshotSource.Recovery,
+                "Güncel finansal durum yenilendi",
+                cancellationToken);
+            settings = normalized;
+        }
+        else
+        {
+            await store.SaveSettingsAsync(settings, cancellationToken);
+        }
         if (settings.SalaryDay != plan.Settings.SalaryDay)
         {
-            foreach (var strategy in plan.PaymentAssignmentStrategies)
+            foreach (var strategy in adjustedStrategies)
             {
-                var oldDate = strategy.EffectiveFromSalaryDate;
                 await store.UpsertPaymentAssignmentStrategyAsync(
-                    strategy with
-                    {
-                        EffectiveFromSalaryDate = CalendarRules.ResolveDay(
-                            oldDate.Year,
-                            oldDate.Month,
-                            settings.SalaryDay)
-                    },
+                    strategy,
                     cancellationToken);
             }
         }
+    }
+
+    public async Task<PeriodReviewAvailability>
+        GetPeriodReviewAvailabilityAsync(
+            CancellationToken cancellationToken = default)
+    {
+        await GetFinancialPlanAsync(cancellationToken);
+        return await reviewService.GetAvailabilityAsync(cancellationToken);
+    }
+
+    public Task<PeriodReviewContext> GetPeriodReviewContextAsync(
+        Guid? planId = null,
+        CancellationToken cancellationToken = default) =>
+        reviewService.GetContextAsync(planId, cancellationToken);
+
+    public Task<PeriodReviewPreview> PreviewPeriodReviewAsync(
+        PeriodReviewDraft draft,
+        CancellationToken cancellationToken = default) =>
+        reviewService.PreviewAsync(draft, cancellationToken);
+
+    public async Task<FinancialReviewResult> FinalizePeriodReviewAsync(
+        PeriodReviewDraft draft,
+        CancellationToken cancellationToken = default)
+    {
+        var plan = await GetFinancialPlanAsync(cancellationToken);
+        return await reviewService.FinalizeAsync(
+            plan,
+            draft,
+            cancellationToken);
+    }
+
+    public Task<IReadOnlyList<HistoryPeriod>> GetHistoryPeriodsAsync(
+        CancellationToken cancellationToken = default) =>
+        historyService.GetPeriodsAsync(cancellationToken);
+
+    public Task<HistoryPeriod> GetHistoryPeriodAsync(
+        Guid actualId,
+        CancellationToken cancellationToken = default) =>
+        historyService.GetPeriodAsync(actualId, cancellationToken);
+
+    public Task<HistorySummary?> GetHistorySummaryAsync(
+        int periodCount = 3,
+        CancellationToken cancellationToken = default) =>
+        historyService.GetRecentSummaryAsync(
+            periodCount,
+            cancellationToken);
+
+    public async Task<FinancialSnapshot> RefreshCurrentFinancialStateAsync(
+        decimal startingSavings,
+        string note = "",
+        CancellationToken cancellationToken = default)
+    {
+        var plan = await GetFinancialPlanAsync(cancellationToken);
+        var bundle = await snapshotService.CreateCurrentSnapshotAsync(
+            plan,
+            startingSavings,
+            clock.Today,
+            FinancialSnapshotSource.Recovery,
+            string.IsNullOrWhiteSpace(note)
+                ? "Güncel finansal durum yenilendi"
+                : note,
+            cancellationToken);
+        return bundle.Snapshot;
     }
 
     public async Task<PaymentAssignmentStrategyOverview>

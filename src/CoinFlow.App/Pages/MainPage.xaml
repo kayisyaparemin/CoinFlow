@@ -20,6 +20,19 @@
 
             <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" />
 
+            <Border IsVisible="{Binding HasPendingReview}"
+                    BackgroundColor="{StaticResource SoftPink}"
+                    StrokeThickness="0">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="{Binding PendingReviewTitle}"
+                           Style="{StaticResource SectionTitle}" />
+                    <Label Text="{Binding PendingReviewMessage}"
+                           Style="{StaticResource MutedText}" />
+                    <Button Text="Güncelle"
+                            Command="{Binding OpenPeriodReviewCommand}" />
+                </VerticalStackLayout>
+            </Border>
+
             <Border IsVisible="{Binding IsEmptyState}"
                     BackgroundColor="{StaticResource SoftSky}">
                 <VerticalStackLayout Spacing="10">

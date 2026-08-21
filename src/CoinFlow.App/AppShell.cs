@@ -35,6 +35,11 @@ public sealed class AppShell : Shell
             "commitments-content",
             () => services.GetRequiredService<CommitmentsPage>()));
         Items.Add(CreateFlyoutItem(
+            "Geçmiş",
+            "history",
+            "history-content",
+            () => services.GetRequiredService<HistoryPage>()));
+        Items.Add(CreateFlyoutItem(
             "Ayarlar",
             "settings",
             "settings-content",

@@ -21,6 +21,8 @@ FinancialPlan
  Dashboard / 12 Aylık / Simulator baseline + scenario
 ```
 
+Son finalized current snapshot, canonical `UserSettings.ProjectionStartingSavings` ve `ProjectionAnchorDate` ile aynı başlangıç semantiğini taşır. İlk kurulum ve aylık yenileme `FinancialSnapshotService` üzerinden aynı `FinancialPlan` biçimini üretir; projection veya simulator için ikinci bir hesap motoru yoktur.
+
 `SalaryPeriodDetailPresenter`, hesaplanmış `SalaryPeriodProjection` sonucunu presentation-only summary, flow, kategori, faiz, transition ve bağımsız ödeme satırlarına ayırır. Formül çalıştırmaz. 12 Aylık ve Simulator aynı `SalaryPeriodDetailPage` / `SalaryPeriodDetailViewModel` ikilisini kullanır; Simulator yalnız aynı modele baseline karşılaştırmasını ekler. Shell navigation hesaplanmış result nesnesini taşır, detail page finans motorunu yeniden kurmaz.
 
 ## Katmanlar
@@ -29,7 +31,7 @@ FinancialPlan
 |---|---|
 | `CoinFlow.Domain` | Saf modeller, tarih kuralları, projection ve simulation motorları |
 | `CoinFlow.Application` | Kullanım senaryoları, CRUD, açık onaylı scenario apply ve store sözleşmesi |
-| `CoinFlow.Infrastructure` | SQLite şema v7, legacy upgrade ve deterministik development seed |
+| `CoinFlow.Infrastructure` | SQLite şema v8, legacy upgrade ve deterministik development seed |
 | `CoinFlow.App` | .NET MAUI Android görünümü ve servis sonuçlarını sunan MVVM katmanı |
 | `CoinFlow.Tests` | Domain regression, kanonik veri ve SQLite entegrasyon testleri |
 
@@ -69,6 +71,29 @@ Kart ve ödeme planı aggregate upsert'leri SQLite transaction içinde ana kayı
 
 12 Aylık ve Simulator, Dönem Detayı'ndan geri dönüşte collection'ı yeniden üretmez; mevcut page instance ve scroll/scenario state korunur. Başka bir kök ekrandan geri gelindiğinde normal canonical reload davranışı devam eder.
 
+## Aylık snapshot ve history
+
+```text
+Current FinancialSnapshot
+        ↓ aynı FinancialProjectionCalculator
+Frozen PeriodPlanSnapshot
+        ↓ review tarihi
+PeriodActual + optional PeriodPlanRevision
+        ↓ FinancialInstrumentReconciliationService
+Canonical kart/kredi/plan state + yeni UserSettings baseline
+        ↓ tek transaction
+New Current FinancialSnapshot + New Frozen Plan
+```
+
+- `PeriodPlanSnapshotService`, mevcut projection motorunun ilk dönem sonucunu kategori toplamları, strategy/payment window context'i ve ödeme satırlarıyla dondurur.
+- `PeriodReviewService`, due kontrolü, actual doğrulaması ve idempotent finalization orkestrasyonunu yapar.
+- `FinancialStateReconciliationService`, başlangıç birikimi semantics'ini değiştirmeden dönem sonu önerisini hesaplar.
+- `CreditCardActualPaymentReconciler`, actual kart ödemesini exact due-date statement ile eşler; kalan principal ve carry faizini canonical karta bir kez uygular.
+- `FinancialInstrumentReconciliationService`, ödenen kredi/taksitleri ilerletir; ödenmeyen veya kaçırılmış yükümlülükleri yeni anchor'a taşıyarak gelecek plandan kaybolmalarını engeller.
+- `PlanActualComparisonCalculator` ve `HistoryQueryService` yalnız frozen tarihsel veriyi okur. Gelecek ayar değişiklikleri eski planı yeniden hesaplamaz.
+
+SQLite finalization transaction'ı source snapshot'ın hâlâ current olduğunu ve plan için actual bulunmadığını kontrol eder. Unique `PeriodPlanSnapshotId` indeksi hızlı çift dokunma/retry durumunda ikinci actual ve snapshot oluşmasını engeller.
+
 ## Veri ve migration
 
-Store tüm entity'leri exact-date alanlarıyla round-trip eder. Şema v7, iki global planlama faiz oranını persistent ayarlara ekler ve mevcut kurulumları `%5,00` varsayılanıyla yükseltir. Eski global `PaymentAssignmentMode` değeri history boşsa ilk projection maaşında başlayan strategy kaydına taşınır. SQLite-net additive migration finansman planlarına ana tutar ve toplam geri ödeme alanlarını eski kayıtları bozmadan ekler. Legacy upgrade sırasında eksik `ProjectionAnchorDate` bir kez oluşturulur; fresh veritabanında ise ilk maaş planlamasına kadar boş kalır. Global sütun yalnız migration bootstrap uyumluluğu için kalır; runtime hesaplaması onu okumaz. Şema upgrade'i eski kart sütunlarını yeni devreden/dönem içi borç modeline taşır ve kaldırılmış özelliklerin tablolarını temizler. Fresh development veritabanı otomatik seed edilmez. Açık development seed aksiyonu sabit GUID'lerle idempotent upsert yapar; ayrı clear aksiyonu şemayı ve teknik metadata'yı koruyarak yalnız finansal veriyi siler.
+Store tüm entity'leri exact-date alanlarıyla round-trip eder. Şema v8; `financial_snapshots`, frozen plan/satırları, revision, actual, actual payment/flow ve optional living breakdown tablolarını additive olarak ekler. Existing kullanıcı ilk normal plan okumasında mevcut canonical durumundan initial current snapshot alır; geçmiş actual üretilmez. Şema v7'de eklenen iki global planlama faiz oranı ve eski strategy/card migration davranışları korunur. SQLite-net additive migration finansman planlarına ana tutar ve toplam geri ödeme alanlarını eski kayıtları bozmadan ekler. Legacy upgrade sırasında eksik `ProjectionAnchorDate` bir kez oluşturulur; fresh veritabanında ise ilk maaş planlamasına kadar boş kalır. Fresh development veritabanı otomatik seed edilmez. Clear aksiyonu yeni history tablolarını da temizler.

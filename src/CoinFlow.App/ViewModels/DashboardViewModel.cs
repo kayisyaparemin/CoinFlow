@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CoinFlow.App.Models;
+using CoinFlow.App.Pages;
 using CoinFlow.App.Services;
 using CoinFlow.Application.Services;
 using CoinFlow.Domain.Calculations;
@@ -9,12 +10,15 @@ using CoinFlow.Domain.Calculations;
 namespace CoinFlow.App.ViewModels;
 
 public partial class DashboardViewModel(
-    CoinFlowService service) : ViewModelBase
+    CoinFlowService service,
+    IServiceProvider services) : ViewModelBase
 {
     public ObservableCollection<UpcomingPaymentLine>
-        UpcomingPayments { get; } = [];
+        UpcomingPayments
+    { get; } = [];
     public ObservableCollection<UpcomingPaymentLine>
-        PreFirstSalaryPayments { get; } = [];
+        PreFirstSalaryPayments
+    { get; } = [];
 
     [ObservableProperty] private string currentPeriodText = "—";
     [ObservableProperty] private string assignmentModeText = "—";
@@ -48,9 +52,13 @@ public partial class DashboardViewModel(
     [ObservableProperty] private bool hasPendingStrategy;
     [ObservableProperty] private bool hasFinancialPlan;
     [ObservableProperty] private bool isEmptyState = true;
-    [ObservableProperty] private string emptyStateMessage =
+    [ObservableProperty]
+    private string emptyStateMessage =
         "Başlamak için maaşını ekle.";
     [ObservableProperty] private string emptyStateAction = "Maaş Ekle";
+    [ObservableProperty] private bool hasPendingReview;
+    [ObservableProperty] private string pendingReviewTitle = string.Empty;
+    [ObservableProperty] private string pendingReviewMessage = string.Empty;
 
     public bool IsDevelopment => BuildInfo.IsDevelopment;
 
@@ -66,6 +74,14 @@ public partial class DashboardViewModel(
         {
             IsBusy = true;
             SetStatus(string.Empty);
+            var review = await service.GetPeriodReviewAvailabilityAsync();
+            HasPendingReview = review.IsDue;
+            PendingReviewTitle = review.IsDue
+                ? "Geçen dönemi güncelle"
+                : string.Empty;
+            PendingReviewMessage = review.IsDue
+                ? "Planınla gerçekte olanı karşılaştır ve yeni planını güncel durumundan başlat."
+                : string.Empty;
             var dashboard = await service.GetDashboardAsync();
             if (dashboard is null)
             {
@@ -203,6 +219,14 @@ public partial class DashboardViewModel(
     [RelayCommand]
     private Task OpenCommitmentsAsync() =>
         Shell.Current.GoToAsync("//commitments/commitments-content");
+
+    [RelayCommand]
+    public Task OpenPeriodReviewAsync()
+    {
+        var page = services.GetRequiredService<PeriodReviewPage>();
+        return Shell.Current.Navigation.PushModalAsync(
+            new NavigationPage(page));
+    }
 
     private static string BuildDetails(SalaryPeriodProjection row)
     {

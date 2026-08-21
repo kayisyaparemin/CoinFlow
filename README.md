@@ -4,6 +4,8 @@ CoinFlow, maaş gününden bir sonraki maaş gününe kadar olan dönemi esas al
 
 Uygulama mikro harcama takibi yapmaz. Ana kavramlar maaş dönemi, toplam gelir, zorunlu ödeme, yaşam bütçesi ve birikim kapasitesidir.
 
+CoinFlow ayrıca finansal durumu dönemsel doğruluk noktalarıyla yeniler. Kullanıcı her kahveyi veya market fişini girmez; dönem kapanınca planlanan ödemeleri doğrular, tek bir toplam yaşam gideri girer ve yeni planlama başlangıç birikimini onaylar.
+
 ## Finans modeli
 
 Her maaş dönemi `[başlangıç, sonraki maaş günü)` aralığıdır. Dönem başlangıcı dahildir, sonraki maaş günü dahil değildir.
@@ -33,15 +35,39 @@ Kart ekstresinde ödenmeyen principal için aylık planlama faizi hesaplanır ve
 
 Maaş, tek seferlik gelir, kredi, kart harcaması, kart vadesi, geçici ödeme ve büyük giderlerin tamamı exact date ile ilgili maaş dönemine yerleşir. Ayın 29/30/31'i için takvim sonu kırpma kuralı merkezi olarak uygulanır.
 
+## Güncel durum ve Plan vs Gerçek
+
+İlk tamamlanmış finansal plan bir `FinancialSnapshot` ve mevcut `FinancialProjectionCalculator` sonucundan dondurulan bir `PeriodPlanSnapshot` oluşturur. Dashboard, 12 Aylık ve Simulator için güncel başlangıç kaynağı son snapshot'ın `ProjectionStartingSavings` ve `ProjectionAnchorDate` değerleridir. Geçmiş plan hiçbir zaman tekrar hesaplanmaz.
+
+Review tarihi geldiğinde üç adımlı akış açılır:
+
+1. **Planın:** Dönem başında dondurulan gelir, ödemeler, yaşam bütçesi, faiz ve dönem sonu görülür. İsteğe bağlı revizyon original planı değiştirmeden ayrı saklanır.
+2. **Gerçekte Ne Oldu?:** Planlı ödemeler hazır gelir; ödendi, farklı tutar veya ödenmedi seçilir. Tek toplam yaşam gideri yeterlidir. İsteğe bağlı yaşam kırılımı, plan dışı büyük ödeme ve plan dışı gelir eklenebilir.
+3. **Sonuç:** Son plan, gerçek ve fark gösterilir. Kullanıcı yeni başlangıç birikimini doğrular; kayıt tek SQLite transaction'ında actual, canonical borç durumu, yeni current snapshot ve yeni frozen planı oluşturur.
+
+```text
+Yeni Başlangıç Birikimi Önerisi =
+  Önceki Başlangıç Birikimi
+  + Planlanan Gelir
+  + Plan Dışı Gelir
+  - Gerçekleşen Planlı Ödemeler
+  - Toplam Yaşam Gideri
+  - Dönemde Ödenen Diğer Faiz
+  - Plan Dışı Büyük Ödemeler
+```
+
+Kullanıcı öneriyi gerçek finansal durumuyla düzeltebilir; fark `ReconciliationAdjustment` olarak geçmişe yazılır. Yaşam giderinin gerçek değeri gelecek ayın global yaşam bütçesini sessizce değiştirmez. Kart/kredi/ödeme planı actual durumları ise canonical kayıtları ilerlettiği için sonraki projection ve Simulator tarafından görülür.
+
 ## Ekranlar
 
-Sol üstteki native Shell hamburger menüsü beş kök bölüm içerir; bottom TabBar yoktur:
+Sol üstteki native Shell hamburger menüsü altı kök bölüm içerir; bottom TabBar yoktur:
 
 1. **Ana Sayfa:** Aktif maaş dönemi özeti, yaklaşan ödemeler, 12 dönem özeti ve en sıkışık dönem.
 2. **12 Aylık:** Compact dönem kartları 12 maaşı hızlı taratır. Karta dokununca ortak full-screen **Dönem Detayı** açılır; summary, finansal akış, açık, zorunlu kırılımı, faiz ve her exact ödeme ayrı görsel satırda gösterilir.
 3. **Simülatör:** Nakit alışveriş, tek çekim/taksitli kart, kart ekstresini tam kapatma, finansman, nakit borç, ileri tarihli tek/tekrarlı ödeme, gelecek gelir, maaş ve maaş kullanım düzeni değişimi senaryoları; baseline ve scenario faiz yükünü karşılaştırır. Dönem kartı aynı Dönem Detayı sayfasını baseline/senaryo/delta modu ile kullanır.
 4. **Gelir & Ödemeler:** Maaş, diğer gelir, kredi, kredi kartı, geçici/taksitli ödeme ve büyük gider yönetimi.
-5. **Ayarlar:** Maaş günü, bütçe, kart carry/açık faiz varsayımları, read-only düzen geçmişi ve development araçları.
+5. **Geçmiş:** Kapanmış dönemlerde Original Plan, varsa Son Plan, Gerçek, kategori farkları, ödeme durumları ve yeni güncel durum.
+6. **Ayarlar:** Maaş günü, bütçe, kart carry/açık faiz varsayımları, read-only düzen geçmişi ve development araçları.
 
 Simülatörde **Simüle Et** yalnız bellekte hypothetical bir plan üretir. **Planı Uygula** açık onaydan sonra scenario türünü canonical finans kaydına dönüştürür; aynı application kimliği ikinci kez yükümlülük oluşturmaz. Uygulanan kayıt Gelir & Ödemeler içindeki doğru bölümde veya seçili kart detayında hemen açılabilir ve sonraki simulator baseline hesabına normal gerçek veri olarak girer.
 
@@ -74,7 +100,7 @@ Fresh development ve production veritabanları finansal olarak boş açılır; o
 - Projection anchor: 20.08.2026; ilk projection maaşı: 10.09.2026
 - İlk maaş kullanım düzeni: `UpcomingPeriod`
 
-Seed yalnızca development build'de kullanıcı isteğiyle çalışır. Sabit kimliklerle upsert edildiği için boş veya mevcut veritabanına tekrar yüklenmesi kayıt çoğaltmaz. Ayrı **Verileri Sil** aksiyonu tüm finans kayıtlarını, strategy history'yi ve projection anchor/bütçelerini temizler; şemayı korur ve seed yüklemez. Kullanıcı boş durumda ilk maaşını kaydedince anchor bir kez oluşturulur ve maaş kullanım düzenini seçen onboarding açılır.
+Seed yalnızca development build'de kullanıcı isteğiyle çalışır. Sabit kimliklerle upsert edildiği için boş veya mevcut veritabanına tekrar yüklenmesi kayıt çoğaltmaz. Ayrı **Verileri Sil** aksiyonu snapshot/Plan vs Gerçek geçmişi dahil tüm finans kayıtlarını, strategy history'yi ve projection anchor/bütçelerini temizler; şemayı korur ve seed yüklemez. Kullanıcı boş durumda ilk maaşını kaydedince anchor bir kez oluşturulur ve maaş kullanım düzenini seçen onboarding açılır.
 
 ## Yerel doğrulama
 
@@ -97,7 +123,7 @@ dotnet publish src/CoinFlow.App/CoinFlow.App.csproj -f net8.0-android -c Release
 
 ## Migration
 
-SQLite şema sürümü 7'dir. Mevcut kullanıcı verisi yerinde yükseltilir; v7 migration iki planlama faiz varsayımını `%5,00` ile başlatır. Eski global ödeme atama değeri bir kez ilk strategy history kaydına dönüştürülür ve runtime source of truth olmaktan çıkar. Eksik projection anchor upgrade tarihinde bir kez oluşturulur ve sonraki açılışlarda ilerletilmez. Eski kart aggregate alanları yeni kart modeline aktarılır. Kaldırılan mikro harcama, balance snapshot ve acil fon tabloları upgrade sırasında düşürülür.
+SQLite şema sürümü 8'dir. v8 additive migration snapshot, frozen plan, revision, actual payment/flow ve living breakdown tablolarını ekler; mevcut finans tablolarını drop etmez. Upgrade olan kullanıcıda ilk plan okunurken mevcut canonical durumdan tek bir initial snapshot üretilir; geçmiş aylar için actual uydurulmaz. v7 migration iki planlama faiz varsayımını `%5,00` ile başlatmaya devam eder. Eski global ödeme atama değeri bir kez ilk strategy history kaydına dönüştürülür ve runtime source of truth olmaktan çıkar. Eski kart aggregate alanları yeni kart modeline aktarılır. Kaldırılan mikro harcama, balance snapshot ve acil fon tabloları upgrade sırasında düşürülür.
 
 ## CI/CD
 

@@ -9,7 +9,7 @@ namespace CoinFlow.Infrastructure.Persistence;
 public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
 {
     private const string DateFormat = "yyyy-MM-dd";
-    private const int CurrentSchemaVersion = 7;
+    private const int CurrentSchemaVersion = 8;
     private const int CurrentCardStatementModelVersion = 6;
     private const decimal DefaultPlanningInterestRate = 0.05m;
     private static readonly Guid LegacyInitialAssignmentStrategyId =
@@ -70,6 +70,14 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
             await _database.CreateTableAsync<PlannedLargeExpenseRow>();
             await _database.CreateTableAsync<SettingsRow>();
             await _database.CreateTableAsync<PaymentAssignmentStrategyRow>();
+            await _database.CreateTableAsync<FinancialSnapshotRow>();
+            await _database.CreateTableAsync<PeriodPlanSnapshotRow>();
+            await _database.CreateTableAsync<PeriodPlanPaymentLineRow>();
+            await _database.CreateTableAsync<PeriodPlanRevisionRow>();
+            await _database.CreateTableAsync<PeriodActualRow>();
+            await _database.CreateTableAsync<ActualPaymentRow>();
+            await _database.CreateTableAsync<ActualFlowRow>();
+            await _database.CreateTableAsync<ActualLivingBreakdownRow>();
 
             await MigrateLegacyCreditCardsAsync();
             await RemoveObsoleteDailyTrackingTablesAsync();
@@ -127,6 +135,14 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
 
         await _database.RunInTransactionAsync(connection =>
         {
+            connection.DeleteAll<ActualLivingBreakdownRow>();
+            connection.DeleteAll<ActualFlowRow>();
+            connection.DeleteAll<ActualPaymentRow>();
+            connection.DeleteAll<PeriodActualRow>();
+            connection.DeleteAll<PeriodPlanRevisionRow>();
+            connection.DeleteAll<PeriodPlanPaymentLineRow>();
+            connection.DeleteAll<PeriodPlanSnapshotRow>();
+            connection.DeleteAll<FinancialSnapshotRow>();
             connection.DeleteAll<PaymentInstallmentRow>();
             connection.DeleteAll<PaymentPlanRow>();
             connection.DeleteAll<CardInstallmentRow>();
@@ -499,6 +515,116 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
             Key(id));
     }
 
+    public async Task<FinancialHistoryData> GetFinancialHistoryAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await InitializeAsync(cancellationToken);
+        var snapshotsTask = _database.Table<FinancialSnapshotRow>().ToListAsync();
+        var plansTask = _database.Table<PeriodPlanSnapshotRow>().ToListAsync();
+        var linesTask = _database.Table<PeriodPlanPaymentLineRow>().ToListAsync();
+        var revisionsTask = _database.Table<PeriodPlanRevisionRow>().ToListAsync();
+        var actualsTask = _database.Table<PeriodActualRow>().ToListAsync();
+        var paymentsTask = _database.Table<ActualPaymentRow>().ToListAsync();
+        var flowsTask = _database.Table<ActualFlowRow>().ToListAsync();
+        var breakdownTask = _database.Table<ActualLivingBreakdownRow>().ToListAsync();
+        await Task.WhenAll(
+            snapshotsTask, plansTask, linesTask, revisionsTask,
+            actualsTask, paymentsTask, flowsTask, breakdownTask);
+
+        var lines = await linesTask;
+        var payments = await paymentsTask;
+        var flows = await flowsTask;
+        var breakdown = await breakdownTask;
+        return new FinancialHistoryData(
+            (await snapshotsTask).Select(FromRow).OrderBy(x => x.SnapshotDate).ThenBy(x => x.CreatedAtUtc).ToArray(),
+            (await plansTask)
+                .Select(row => FromRow(row, lines.Where(x => x.PeriodPlanSnapshotId == row.Id)))
+                .OrderBy(x => x.PeriodStart)
+                .ToArray(),
+            (await revisionsTask).Select(FromRow).OrderBy(x => x.CreatedAtUtc).ToArray(),
+            (await actualsTask)
+                .Select(row => FromRow(
+                    row,
+                    payments.Where(x => x.PeriodActualId == row.Id),
+                    flows.Where(x => x.PeriodActualId == row.Id),
+                    breakdown.Where(x => x.PeriodActualId == row.Id)))
+                .OrderBy(x => x.PeriodStart)
+                .ToArray());
+    }
+
+    public async Task SaveCurrentFinancialSnapshotAsync(
+        FinancialSnapshot snapshot,
+        PeriodPlanSnapshot plan,
+        UserSettings? updatedSettings = null,
+        CancellationToken cancellationToken = default)
+    {
+        await InitializeAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        await _database.RunInTransactionAsync(connection =>
+        {
+            connection.Execute("UPDATE financial_snapshots SET IsCurrent = 0 WHERE IsCurrent = 1");
+            if (updatedSettings is not null)
+            {
+                UpdateSettings(connection, updatedSettings);
+            }
+            connection.Insert(ToRow(snapshot with { IsCurrent = true }));
+            InsertPlan(connection, plan);
+        });
+    }
+
+    public async Task FinalizeFinancialReviewAsync(
+        FinancialReviewCommit commit,
+        CancellationToken cancellationToken = default)
+    {
+        await InitializeAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        await _database.RunInTransactionAsync(connection =>
+        {
+            var current = connection.FindWithQuery<FinancialSnapshotRow>(
+                "SELECT * FROM financial_snapshots WHERE IsCurrent = 1 LIMIT 1");
+            if (current is null ||
+                current.Id != Key(commit.Actual.SourceFinancialSnapshotId))
+            {
+                throw new InvalidOperationException(
+                    "Güncel finansal durum değişti. Dönemi yeniden açın.");
+            }
+
+            var existing = connection.FindWithQuery<PeriodActualRow>(
+                "SELECT * FROM period_actuals WHERE PeriodPlanSnapshotId = ? LIMIT 1",
+                Key(commit.Actual.PeriodPlanSnapshotId));
+            if (existing is not null)
+            {
+                throw new InvalidOperationException("Bu dönem daha önce kaydedildi.");
+            }
+
+            if (commit.Revision is not null)
+            {
+                connection.Insert(ToRow(commit.Revision));
+            }
+            InsertActual(connection, commit.Actual);
+            foreach (var loan in commit.UpdatedLoans)
+            {
+                connection.InsertOrReplace(ToRow(loan));
+            }
+            foreach (var plan in commit.UpdatedPaymentPlans)
+            {
+                InsertPaymentPlan(connection, plan);
+            }
+            foreach (var card in commit.UpdatedCreditCards)
+            {
+                InsertCreditCard(connection, card);
+            }
+            foreach (var expense in commit.UpdatedLargeExpenses)
+            {
+                connection.InsertOrReplace(ToRow(expense));
+            }
+            UpdateSettings(connection, commit.UpdatedSettings);
+            connection.Execute("UPDATE financial_snapshots SET IsCurrent = 0 WHERE IsCurrent = 1");
+            connection.Insert(ToRow(commit.NewSnapshot with { IsCurrent = true }));
+            InsertPlan(connection, commit.NewPlan);
+        });
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (_initialized)
@@ -524,30 +650,34 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
 
     private static string Key(Guid id) => id.ToString("D");
     private static Guid ParseKey(string value) => Guid.Parse(value);
+    private static string FormatInstant(DateTimeOffset value) =>
+        value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+    private static DateTimeOffset ParseInstant(string value) =>
+        DateTimeOffset.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
 
     private static PaymentAssignmentStrategyRow ToRow(
         PaymentAssignmentStrategy value) => new()
-    {
-        Id = Key(value.Id),
-        Mode = (int)value.Mode,
-        EffectiveFromSalaryDate =
+        {
+            Id = Key(value.Id),
+            Mode = (int)value.Mode,
+            EffectiveFromSalaryDate =
             FormatDate(value.EffectiveFromSalaryDate),
-        CreatedAt = value.CreatedAt.ToString("O", CultureInfo.InvariantCulture),
-        Note = value.Note
-    };
+            CreatedAt = value.CreatedAt.ToString("O", CultureInfo.InvariantCulture),
+            Note = value.Note
+        };
 
     private static PaymentAssignmentStrategy FromRow(
         PaymentAssignmentStrategyRow row) => new()
-    {
-        Id = ParseKey(row.Id),
-        Mode = (PaymentAssignmentMode)row.Mode,
-        EffectiveFromSalaryDate =
+        {
+            Id = ParseKey(row.Id),
+            Mode = (PaymentAssignmentMode)row.Mode,
+            EffectiveFromSalaryDate =
             ParseDate(row.EffectiveFromSalaryDate),
-        CreatedAt = DateTimeOffset.Parse(
+            CreatedAt = DateTimeOffset.Parse(
             row.CreatedAt,
             CultureInfo.InvariantCulture),
-        Note = row.Note
-    };
+            Note = row.Note
+        };
 
     internal static SalaryRow ToRow(SalaryScheduleEntry value) => new()
     {
@@ -612,23 +742,23 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
 
     internal static PaymentInstallmentRow ToRow(
         TemporaryPaymentInstallment value) => new()
-    {
-        Id = Key(value.Id),
-        PlanId = Key(value.PlanId),
-        DueDate = FormatDate(value.DueDate),
-        Amount = value.Amount,
-        IsPaid = value.IsPaid
-    };
+        {
+            Id = Key(value.Id),
+            PlanId = Key(value.PlanId),
+            DueDate = FormatDate(value.DueDate),
+            Amount = value.Amount,
+            IsPaid = value.IsPaid
+        };
 
     private static TemporaryPaymentInstallment FromRow(
         PaymentInstallmentRow row) => new()
-    {
-        Id = ParseKey(row.Id),
-        PlanId = ParseKey(row.PlanId),
-        DueDate = ParseDate(row.DueDate),
-        Amount = row.Amount,
-        IsPaid = row.IsPaid
-    };
+        {
+            Id = ParseKey(row.Id),
+            PlanId = ParseKey(row.PlanId),
+            DueDate = ParseDate(row.DueDate),
+            Amount = row.Amount,
+            IsPaid = row.IsPaid
+        };
 
     internal static CreditCardRow ToRow(CreditCard value) => new()
     {
@@ -661,32 +791,32 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         CreditCardRow row,
         IEnumerable<CardInstallmentRow> charges,
         IEnumerable<CreditCardPaymentPlanRow> paymentPlans) => new()
-    {
-        Id = ParseKey(row.Id),
-        Name = row.Name,
-        Bank = row.Bank,
-        Limit = row.Limit,
-        CarriedBalance = row.CarriedBalance,
-        UnbilledSpending = row.UnbilledSpending,
-        BalanceAsOfDate = ParseDate(row.BalanceAsOfDate),
-        StatementClosingDay = row.StatementClosingDay,
-        PaymentDueDay = row.PaymentDueDay,
-        MinimumPaymentRate = row.MinimumPaymentRate,
-        PaymentStrategy = (CreditCardPaymentStrategy)row.PaymentStrategy,
-        FixedPaymentAmount = row.FixedPaymentAmount,
-        ProjectionFallbackStrategy =
+        {
+            Id = ParseKey(row.Id),
+            Name = row.Name,
+            Bank = row.Bank,
+            Limit = row.Limit,
+            CarriedBalance = row.CarriedBalance,
+            UnbilledSpending = row.UnbilledSpending,
+            BalanceAsOfDate = ParseDate(row.BalanceAsOfDate),
+            StatementClosingDay = row.StatementClosingDay,
+            PaymentDueDay = row.PaymentDueDay,
+            MinimumPaymentRate = row.MinimumPaymentRate,
+            PaymentStrategy = (CreditCardPaymentStrategy)row.PaymentStrategy,
+            FixedPaymentAmount = row.FixedPaymentAmount,
+            ProjectionFallbackStrategy =
             (ProjectionFallbackStrategy)row.ProjectionFallbackStrategy,
-        ProjectionFallbackFixedAmount =
+            ProjectionFallbackFixedAmount =
             row.ProjectionFallbackFixedAmount,
-        Charges = charges
+            Charges = charges
             .Select(FromRow)
             .OrderBy(x => x.PostingDate)
             .ToArray(),
-        PaymentPlans = paymentPlans
+            PaymentPlans = paymentPlans
             .Select(FromRow)
             .OrderBy(x => x.DueDate)
             .ToArray()
-    };
+        };
 
     internal static CardInstallmentRow ToRow(CardCharge value) => new()
     {
@@ -708,49 +838,370 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
 
     private static CreditCardPaymentPlanRow ToRow(
         CreditCardPaymentPlan value) => new()
-    {
-        Id = Key(value.Id),
-        CreditCardId = Key(value.CreditCardId),
-        DueDate = FormatDate(value.DueDate),
-        PlannedPaymentAmount = value.Amount ?? 0m,
-        PaymentType = (int)value.PaymentType,
-        Amount = value.Amount
-    };
+        {
+            Id = Key(value.Id),
+            CreditCardId = Key(value.CreditCardId),
+            DueDate = FormatDate(value.DueDate),
+            PlannedPaymentAmount = value.Amount ?? 0m,
+            PaymentType = (int)value.PaymentType,
+            Amount = value.Amount
+        };
 
     private static CreditCardPaymentPlan FromRow(
         CreditCardPaymentPlanRow row) => new()
-    {
-        Id = ParseKey(row.Id),
-        CreditCardId = ParseKey(row.CreditCardId),
-        DueDate = ParseDate(row.DueDate),
-        PaymentType = (CreditCardPaymentType)row.PaymentType,
-        Amount = row.Amount ??
+        {
+            Id = ParseKey(row.Id),
+            CreditCardId = ParseKey(row.CreditCardId),
+            DueDate = ParseDate(row.DueDate),
+            PaymentType = (CreditCardPaymentType)row.PaymentType,
+            Amount = row.Amount ??
                  (row.PlannedPaymentAmount > 0m
                      ? row.PlannedPaymentAmount
                      : null)
-    };
+        };
 
     private static PlannedLargeExpenseRow ToRow(
         PlannedLargeExpense value) => new()
-    {
-        Id = Key(value.Id),
-        Name = value.Name,
-        Amount = value.Amount,
-        ExactDate = FormatDate(value.ExactDate),
-        Note = value.Note,
-        Status = (int)value.Status
-    };
+        {
+            Id = Key(value.Id),
+            Name = value.Name,
+            Amount = value.Amount,
+            ExactDate = FormatDate(value.ExactDate),
+            Note = value.Note,
+            Status = (int)value.Status
+        };
 
     private static PlannedLargeExpense FromRow(
         PlannedLargeExpenseRow row) => new()
+        {
+            Id = ParseKey(row.Id),
+            Name = row.Name,
+            Amount = row.Amount,
+            ExactDate = ParseDate(row.ExactDate),
+            Note = row.Note,
+            Status = (PlannedExpenseStatus)row.Status
+        };
+
+    private static FinancialSnapshotRow ToRow(FinancialSnapshot value) => new()
+    {
+        Id = Key(value.Id),
+        SnapshotDate = FormatDate(value.SnapshotDate),
+        ProjectionAnchorDate = FormatDate(value.ProjectionAnchorDate),
+        NextReviewDate = FormatDate(value.NextReviewDate),
+        ProjectionStartingSavings = value.ProjectionStartingSavings,
+        SalaryDay = value.SalaryDay,
+        PreviousSnapshotId = value.PreviousSnapshotId?.ToString("D"),
+        Source = (int)value.Source,
+        IsCurrent = value.IsCurrent,
+        CreatedAtUtc = FormatInstant(value.CreatedAtUtc),
+        Note = value.Note
+    };
+
+    private static FinancialSnapshot FromRow(FinancialSnapshotRow row) => new()
     {
         Id = ParseKey(row.Id),
-        Name = row.Name,
-        Amount = row.Amount,
-        ExactDate = ParseDate(row.ExactDate),
-        Note = row.Note,
-        Status = (PlannedExpenseStatus)row.Status
+        SnapshotDate = ParseDate(row.SnapshotDate),
+        ProjectionAnchorDate = ParseDate(row.ProjectionAnchorDate),
+        NextReviewDate = ParseDate(row.NextReviewDate),
+        ProjectionStartingSavings = row.ProjectionStartingSavings,
+        SalaryDay = row.SalaryDay,
+        PreviousSnapshotId = string.IsNullOrWhiteSpace(row.PreviousSnapshotId) ? null : ParseKey(row.PreviousSnapshotId),
+        Source = (FinancialSnapshotSource)row.Source,
+        IsCurrent = row.IsCurrent,
+        CreatedAtUtc = ParseInstant(row.CreatedAtUtc),
+        Note = row.Note
     };
+
+    private static PeriodPlanSnapshotRow ToRow(PeriodPlanSnapshot value) => new()
+    {
+        Id = Key(value.Id),
+        FinancialSnapshotId = Key(value.FinancialSnapshotId),
+        PeriodStart = FormatDate(value.PeriodStart),
+        PeriodEnd = FormatDate(value.PeriodEnd),
+        ReviewAvailableFrom = FormatDate(value.ReviewAvailableFrom),
+        CreatedAtUtc = FormatInstant(value.CreatedAtUtc),
+        StrategyUsed = (int)value.StrategyUsed,
+        PaymentWindowStart = FormatDate(value.PaymentWindowStart),
+        PaymentWindowEnd = FormatDate(value.PaymentWindowEnd),
+        OpeningSavings = value.OpeningSavings,
+        PlannedIncome = value.PlannedIncome,
+        PlannedLoanPayments = value.PlannedLoanPayments,
+        PlannedCardPayments = value.PlannedCardPayments,
+        PlannedTemporaryPayments = value.PlannedTemporaryPayments,
+        PlannedInstallmentPayments = value.PlannedInstallmentPayments,
+        PlannedOtherScheduledPayments = value.PlannedOtherScheduledPayments,
+        PlannedMandatoryPayments = value.PlannedMandatoryPayments,
+        PlannedLivingBudget = value.PlannedLivingBudget,
+        PlannedLargeExpenses = value.PlannedLargeExpenses,
+        PlannedCardInterest = value.PlannedCardInterest,
+        PlannedDeficitInterest = value.PlannedDeficitInterest,
+        PlannedEndingSavings = value.PlannedEndingSavings
+    };
+
+    private static PeriodPlanSnapshot FromRow(PeriodPlanSnapshotRow row, IEnumerable<PeriodPlanPaymentLineRow> lines) => new()
+    {
+        Id = ParseKey(row.Id),
+        FinancialSnapshotId = ParseKey(row.FinancialSnapshotId),
+        PeriodStart = ParseDate(row.PeriodStart),
+        PeriodEnd = ParseDate(row.PeriodEnd),
+        ReviewAvailableFrom = ParseDate(row.ReviewAvailableFrom),
+        CreatedAtUtc = ParseInstant(row.CreatedAtUtc),
+        StrategyUsed = (PaymentAssignmentMode)row.StrategyUsed,
+        PaymentWindowStart = ParseDate(row.PaymentWindowStart),
+        PaymentWindowEnd = ParseDate(row.PaymentWindowEnd),
+        OpeningSavings = row.OpeningSavings,
+        PlannedIncome = row.PlannedIncome,
+        PlannedLoanPayments = row.PlannedLoanPayments,
+        PlannedCardPayments = row.PlannedCardPayments,
+        PlannedTemporaryPayments = row.PlannedTemporaryPayments,
+        PlannedInstallmentPayments = row.PlannedInstallmentPayments,
+        PlannedOtherScheduledPayments = row.PlannedOtherScheduledPayments,
+        PlannedMandatoryPayments = row.PlannedMandatoryPayments,
+        PlannedLivingBudget = row.PlannedLivingBudget,
+        PlannedLargeExpenses = row.PlannedLargeExpenses,
+        PlannedCardInterest = row.PlannedCardInterest,
+        PlannedDeficitInterest = row.PlannedDeficitInterest,
+        PlannedEndingSavings = row.PlannedEndingSavings,
+        PaymentLines = lines.Select(FromRow).OrderBy(x => x.PlannedDate).ThenBy(x => x.Name).ToArray()
+    };
+
+    private static PeriodPlanPaymentLineRow ToRow(PeriodPlanPaymentLine value) => new()
+    {
+        Id = Key(value.Id),
+        PeriodPlanSnapshotId = Key(value.PeriodPlanSnapshotId),
+        SourceEntityId = Key(value.SourceEntityId),
+        SourceType = (int)value.SourceType,
+        Name = value.Name,
+        PlannedDate = FormatDate(value.PlannedDate),
+        PlannedAmount = value.PlannedAmount,
+        IsEstimate = value.IsEstimate,
+        Detail = value.Detail
+    };
+
+    private static PeriodPlanPaymentLine FromRow(PeriodPlanPaymentLineRow row) => new()
+    {
+        Id = ParseKey(row.Id),
+        PeriodPlanSnapshotId = ParseKey(row.PeriodPlanSnapshotId),
+        SourceEntityId = ParseKey(row.SourceEntityId),
+        SourceType = (PlanPaymentSourceType)row.SourceType,
+        Name = row.Name,
+        PlannedDate = ParseDate(row.PlannedDate),
+        PlannedAmount = row.PlannedAmount,
+        IsEstimate = row.IsEstimate,
+        Detail = row.Detail
+    };
+
+    private static PeriodPlanRevisionRow ToRow(PeriodPlanRevision value) => new()
+    {
+        Id = Key(value.Id),
+        PeriodPlanSnapshotId = Key(value.PeriodPlanSnapshotId),
+        CreatedAtUtc = FormatInstant(value.CreatedAtUtc),
+        PlannedIncome = value.PlannedIncome,
+        PlannedMandatoryPayments = value.PlannedMandatoryPayments,
+        PlannedLivingBudget = value.PlannedLivingBudget,
+        PlannedLargeExpenses = value.PlannedLargeExpenses,
+        PlannedInterest = value.PlannedInterest,
+        PlannedEndingSavings = value.PlannedEndingSavings,
+        Note = value.Note
+    };
+
+    private static PeriodPlanRevision FromRow(PeriodPlanRevisionRow row) => new()
+    {
+        Id = ParseKey(row.Id),
+        PeriodPlanSnapshotId = ParseKey(row.PeriodPlanSnapshotId),
+        CreatedAtUtc = ParseInstant(row.CreatedAtUtc),
+        PlannedIncome = row.PlannedIncome,
+        PlannedMandatoryPayments = row.PlannedMandatoryPayments,
+        PlannedLivingBudget = row.PlannedLivingBudget,
+        PlannedLargeExpenses = row.PlannedLargeExpenses,
+        PlannedInterest = row.PlannedInterest,
+        PlannedEndingSavings = row.PlannedEndingSavings,
+        Note = row.Note
+    };
+
+    private static PeriodActualRow ToRow(PeriodActual value) => new()
+    {
+        Id = Key(value.Id),
+        PeriodPlanSnapshotId = Key(value.PeriodPlanSnapshotId),
+        SourceFinancialSnapshotId = Key(value.SourceFinancialSnapshotId),
+        ResultFinancialSnapshotId = Key(value.ResultFinancialSnapshotId),
+        PeriodStart = FormatDate(value.PeriodStart),
+        PeriodEnd = FormatDate(value.PeriodEnd),
+        FinalizedAtUtc = FormatInstant(value.FinalizedAtUtc),
+        ActualIncome = value.ActualIncome,
+        ActualLoanPayments = value.ActualLoanPayments,
+        ActualCardPayments = value.ActualCardPayments,
+        ActualTemporaryPayments = value.ActualTemporaryPayments,
+        ActualInstallmentPayments = value.ActualInstallmentPayments,
+        ActualOtherScheduledPayments = value.ActualOtherScheduledPayments,
+        ActualLargeExpenses = value.ActualLargeExpenses,
+        ActualMandatoryPayments = value.ActualMandatoryPayments,
+        ActualLivingSpend = value.ActualLivingSpend,
+        ActualInterest = value.ActualInterest,
+        UnplannedIncome = value.UnplannedIncome,
+        UnplannedPayments = value.UnplannedPayments,
+        DerivedEndingSavings = value.DerivedEndingSavings,
+        ConfirmedEndingSavings = value.ConfirmedEndingSavings,
+        ReconciliationAdjustment = value.ReconciliationAdjustment,
+        ComparisonSummary = value.ComparisonSummary,
+        Note = value.Note
+    };
+
+    private static PeriodActual FromRow(PeriodActualRow row, IEnumerable<ActualPaymentRow> payments, IEnumerable<ActualFlowRow> flows, IEnumerable<ActualLivingBreakdownRow> breakdown) => new()
+    {
+        Id = ParseKey(row.Id),
+        PeriodPlanSnapshotId = ParseKey(row.PeriodPlanSnapshotId),
+        SourceFinancialSnapshotId = ParseKey(row.SourceFinancialSnapshotId),
+        ResultFinancialSnapshotId = ParseKey(row.ResultFinancialSnapshotId),
+        PeriodStart = ParseDate(row.PeriodStart),
+        PeriodEnd = ParseDate(row.PeriodEnd),
+        FinalizedAtUtc = ParseInstant(row.FinalizedAtUtc),
+        ActualIncome = row.ActualIncome,
+        ActualLoanPayments = row.ActualLoanPayments,
+        ActualCardPayments = row.ActualCardPayments,
+        ActualTemporaryPayments = row.ActualTemporaryPayments,
+        ActualInstallmentPayments = row.ActualInstallmentPayments,
+        ActualOtherScheduledPayments = row.ActualOtherScheduledPayments,
+        ActualLargeExpenses = row.ActualLargeExpenses,
+        ActualMandatoryPayments = row.ActualMandatoryPayments,
+        ActualLivingSpend = row.ActualLivingSpend,
+        ActualInterest = row.ActualInterest,
+        UnplannedIncome = row.UnplannedIncome,
+        UnplannedPayments = row.UnplannedPayments,
+        DerivedEndingSavings = row.DerivedEndingSavings,
+        ConfirmedEndingSavings = row.ConfirmedEndingSavings,
+        ReconciliationAdjustment = row.ReconciliationAdjustment,
+        ComparisonSummary = row.ComparisonSummary,
+        Note = row.Note,
+        Payments = payments.Select(FromRow).OrderBy(x => x.PlannedDate).ToArray(),
+        Flows = flows.Select(FromRow).OrderBy(x => x.Date).ToArray(),
+        LivingBreakdown = breakdown.Select(FromRow).OrderBy(x => x.Category).ToArray()
+    };
+
+    private static ActualPaymentRow ToRow(ActualPayment value) => new()
+    {
+        Id = Key(value.Id),
+        PeriodActualId = Key(value.PeriodActualId),
+        PeriodPlanPaymentLineId = Key(value.PeriodPlanPaymentLineId),
+        SourceEntityId = Key(value.SourceEntityId),
+        SourceType = (int)value.SourceType,
+        Name = value.Name,
+        PlannedDate = FormatDate(value.PlannedDate),
+        PlannedAmount = value.PlannedAmount,
+        ActualPaymentDate = FormatNullableDate(value.ActualPaymentDate),
+        ActualAmount = value.ActualAmount,
+        Status = (int)value.Status,
+        Note = value.Note
+    };
+
+    private static ActualPayment FromRow(ActualPaymentRow row) => new()
+    {
+        Id = ParseKey(row.Id),
+        PeriodActualId = ParseKey(row.PeriodActualId),
+        PeriodPlanPaymentLineId = ParseKey(row.PeriodPlanPaymentLineId),
+        SourceEntityId = ParseKey(row.SourceEntityId),
+        SourceType = (PlanPaymentSourceType)row.SourceType,
+        Name = row.Name,
+        PlannedDate = ParseDate(row.PlannedDate),
+        PlannedAmount = row.PlannedAmount,
+        ActualPaymentDate = ParseNullableDate(row.ActualPaymentDate),
+        ActualAmount = row.ActualAmount,
+        Status = (ActualPaymentStatus)row.Status,
+        Note = row.Note
+    };
+
+    private static ActualFlowRow ToRow(ActualFlow value) => new()
+    {
+        Id = Key(value.Id),
+        PeriodActualId = Key(value.PeriodActualId),
+        Type = (int)value.Type,
+        Name = value.Name,
+        Category = value.Category,
+        Date = FormatDate(value.Date),
+        Amount = value.Amount
+    };
+
+    private static ActualFlow FromRow(ActualFlowRow row) => new()
+    {
+        Id = ParseKey(row.Id),
+        PeriodActualId = ParseKey(row.PeriodActualId),
+        Type = (ActualFlowType)row.Type,
+        Name = row.Name,
+        Category = row.Category,
+        Date = ParseDate(row.Date),
+        Amount = row.Amount
+    };
+
+    private static ActualLivingBreakdownRow ToRow(ActualLivingBreakdown value) => new()
+    {
+        Id = Key(value.Id),
+        PeriodActualId = Key(value.PeriodActualId),
+        Category = value.Category,
+        Amount = value.Amount
+    };
+
+    private static ActualLivingBreakdown FromRow(ActualLivingBreakdownRow row) => new()
+    {
+        Id = ParseKey(row.Id),
+        PeriodActualId = ParseKey(row.PeriodActualId),
+        Category = row.Category,
+        Amount = row.Amount
+    };
+
+    private static void InsertPlan(SQLiteConnection connection, PeriodPlanSnapshot plan)
+    {
+        connection.Insert(ToRow(plan));
+        foreach (var line in plan.PaymentLines)
+        {
+            connection.Insert(ToRow(line with { PeriodPlanSnapshotId = plan.Id }));
+        }
+    }
+
+    private static void InsertActual(SQLiteConnection connection, PeriodActual actual)
+    {
+        connection.Insert(ToRow(actual));
+        foreach (var payment in actual.Payments) connection.Insert(ToRow(payment with { PeriodActualId = actual.Id }));
+        foreach (var flow in actual.Flows) connection.Insert(ToRow(flow with { PeriodActualId = actual.Id }));
+        foreach (var item in actual.LivingBreakdown) connection.Insert(ToRow(item with { PeriodActualId = actual.Id }));
+    }
+
+    private static void InsertPaymentPlan(SQLiteConnection connection, TemporaryPaymentPlan plan)
+    {
+        connection.InsertOrReplace(new PaymentPlanRow
+        {
+            Id = Key(plan.Id),
+            Name = plan.Name,
+            Kind = (int)plan.Kind,
+            OriginalAmount = plan.OriginalAmount,
+            TotalRepaymentAmount = plan.TotalRepaymentAmount
+        });
+        connection.Execute("DELETE FROM payment_installments WHERE PlanId = ?", Key(plan.Id));
+        foreach (var installment in plan.Installments)
+        {
+            connection.Insert(ToRow(installment with { PlanId = plan.Id }));
+        }
+    }
+
+    private static void InsertCreditCard(SQLiteConnection connection, CreditCard card)
+    {
+        connection.InsertOrReplace(ToRow(card));
+        connection.Execute("DELETE FROM card_installments WHERE CreditCardId = ?", Key(card.Id));
+        foreach (var charge in card.Charges) connection.Insert(ToRow(charge with { CreditCardId = card.Id }));
+        connection.Execute("DELETE FROM credit_card_payment_plans WHERE CreditCardId = ?", Key(card.Id));
+        foreach (var payment in card.PaymentPlans) connection.Insert(ToRow(payment with { CreditCardId = card.Id }));
+    }
+
+    private static void UpdateSettings(SQLiteConnection connection, UserSettings settings)
+    {
+        var row = connection.Table<SettingsRow>().First();
+        row.SalaryDay = settings.SalaryDay; row.MonthlyLivingBudget = settings.MonthlyLivingBudget;
+        row.ProjectionStartingSavings = settings.ProjectionStartingSavings;
+        row.ProjectionAnchorDate = settings.ProjectionAnchorDate == default ? null : FormatDate(settings.ProjectionAnchorDate);
+        row.CreditCardCarryInterestRate = settings.CreditCardCarryInterestRate;
+        row.DeficitFinancingInterestRate = settings.DeficitFinancingInterestRate;
+        row.SchemaVersion = CurrentSchemaVersion;
+        connection.Update(row);
+    }
 
     private SettingsRow DefaultSettingsRow() => new()
     {

@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:CoinFlow.App.ViewModels"
+             xmlns:models="clr-namespace:CoinFlow.App.Models"
+             x:Class="CoinFlow.App.Pages.PeriodReviewPage"
+             x:Name="RootPage"
+             x:DataType="vm:PeriodReviewWizardViewModel"
+             Title="Durumunu Güncelle">
+    <ContentPage.ToolbarItems>
+        <ToolbarItem Text="Kapat" Clicked="OnCloseClicked" />
+    </ContentPage.ToolbarItems>
+    <ScrollView>
+        <VerticalStackLayout Padding="20,22,20,40" Spacing="16">
+            <VerticalStackLayout IsVisible="{Binding IsReviewVisible}" Spacing="12">
+                <Label Text="DÖNEM GÜNCELLEMESİ" Style="{StaticResource Eyebrow}" />
+                <Label Text="Plan vs Gerçek" Style="{StaticResource PageTitle}" />
+                <Label Text="{Binding PeriodText}" Style="{StaticResource MutedText}" />
+                <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
+                    <Border BackgroundColor="{StaticResource SoftPink}" StrokeThickness="0" Padding="8,9">
+                        <Label Text="{Binding PlanIndicator}" HorizontalTextAlignment="Center" FontFamily="OpenSansSemibold" FontSize="12" />
+                    </Border>
+                    <Border Grid.Column="1" BackgroundColor="{StaticResource SoftYellow}" StrokeThickness="0" Padding="8,9">
+                        <Label Text="{Binding ActualIndicator}" HorizontalTextAlignment="Center" FontFamily="OpenSansSemibold" FontSize="12" />
+                    </Border>
+                    <Border Grid.Column="2" BackgroundColor="{StaticResource SoftSky}" StrokeThickness="0" Padding="8,9">
+                        <Label Text="{Binding ResultIndicator}" HorizontalTextAlignment="Center" FontFamily="OpenSansSemibold" FontSize="12" />
+                    </Border>
+                </Grid>
+            </VerticalStackLayout>
+
+            <VerticalStackLayout IsVisible="{Binding IsStep1}" Spacing="14">
+                <Border BackgroundColor="{StaticResource SoftPink}" StrokeThickness="0">
+                    <VerticalStackLayout Spacing="5">
+                        <Label Text="1. Planın" Style="{StaticResource SectionTitle}" />
+                        <Label Text="Bu dönem başlarken oluşturduğumuz değişmez plan." Style="{StaticResource MutedText}" />
+                    </VerticalStackLayout>
+                </Border>
+                <Border>
+                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="9">
+                        <Label Text="Gelir" Style="{StaticResource MutedText}" /><Label Grid.Column="1" Text="{Binding PlannedIncome}" FontFamily="OpenSansSemibold" />
+                        <Label Grid.Row="1" Text="Krediler" Style="{StaticResource MutedText}" /><Label Grid.Row="1" Grid.Column="1" Text="{Binding PlannedLoans}" />
+                        <Label Grid.Row="2" Text="Kredi kartları" Style="{StaticResource MutedText}" /><Label Grid.Row="2" Grid.Column="1" Text="{Binding PlannedCards}" />
+                        <Label Grid.Row="3" Text="Geçici ödemeler" Style="{StaticResource MutedText}" /><Label Grid.Row="3" Grid.Column="1" Text="{Binding PlannedTemporary}" />
+                        <Label Grid.Row="4" Text="Taksitli ödemeler" Style="{StaticResource MutedText}" /><Label Grid.Row="4" Grid.Column="1" Text="{Binding PlannedInstallments}" />
+                        <Label Grid.Row="5" Text="Diğer planlı ödemeler" Style="{StaticResource MutedText}" /><Label Grid.Row="5" Grid.Column="1" Text="{Binding PlannedOther}" />
+                        <Label Grid.Row="6" Text="Büyük ödemeler" Style="{StaticResource MutedText}" /><Label Grid.Row="6" Grid.Column="1" Text="{Binding PlannedLarge}" />
+                        <Label Grid.Row="7" Text="Tahmini yaşam" Style="{StaticResource MutedText}" /><Label Grid.Row="7" Grid.Column="1" Text="{Binding PlannedLiving}" />
+                        <Label Grid.Row="8" Text="Tahmini faiz" Style="{StaticResource MutedText}" /><Label Grid.Row="8" Grid.Column="1" Text="{Binding PlannedInterest}" />
+                        <Label Grid.Row="9" Text="Beklenen dönem sonu" FontFamily="OpenSansSemibold" /><Label Grid.Row="9" Grid.Column="1" Text="{Binding PlannedEnding}" FontFamily="OpenSansSemibold" />
+                    </Grid>
+                </Border>
+                <Border BackgroundColor="{StaticResource SoftYellow}" StrokeThickness="0">
+                    <VerticalStackLayout Spacing="9">
+                        <Label Text="Bu dönem için son planın bu muydu?" Style="{StaticResource SectionTitle}" />
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Label Text="Planı revize et" VerticalOptions="Center" />
+                            <Switch Grid.Column="1" IsToggled="{Binding RevisePlan}" />
+                        </Grid>
+                        <VerticalStackLayout IsVisible="{Binding RevisePlan}" Spacing="6">
+                            <Label Text="Son yaşam gideri planın" Style="{StaticResource FieldLabel}" />
+                            <Entry Text="{Binding RevisedLivingBudget}" Keyboard="Numeric" />
+                            <Label Text="Bu revizyon yalnızca kapanan dönemin karşılaştırmasını etkiler; gelecek varsayımını değiştirmez." Style="{StaticResource MutedText}" />
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
+                <Button Text="Evet, Gerçekte Ne Oldu?" Command="{Binding NextCommand}" />
+            </VerticalStackLayout>
+
+            <VerticalStackLayout IsVisible="{Binding IsStep2}" Spacing="14">
+                <Border BackgroundColor="{StaticResource SoftYellow}" StrokeThickness="0">
+                    <VerticalStackLayout Spacing="5">
+                        <Label Text="2. Gerçekte Ne Oldu?" Style="{StaticResource SectionTitle}" />
+                        <Label Text="Planlanan ödemeleri yalnızca farklıysa değiştir." Style="{StaticResource MutedText}" />
+                    </VerticalStackLayout>
+                </Border>
+                <Label Text="Ödemeler" Style="{StaticResource SectionTitle}" IsVisible="{Binding HasPayments}" />
+                <VerticalStackLayout BindableLayout.ItemsSource="{Binding Payments}" Spacing="10">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate x:DataType="models:ActualPaymentInputItem">
+                            <Border>
+                                <VerticalStackLayout Spacing="8">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <VerticalStackLayout>
+                                            <Label Text="{Binding Name}" FontFamily="OpenSansSemibold" FontSize="17" />
+                                            <Label Text="{Binding PlannedDateText}" Style="{StaticResource MutedText}" />
+                                        </VerticalStackLayout>
+                                        <VerticalStackLayout Grid.Column="1" HorizontalOptions="End">
+                                            <Label Text="PLANLANAN" Style="{StaticResource Eyebrow}" HorizontalTextAlignment="End" />
+                                            <Label Text="{Binding PlannedText}" FontFamily="OpenSansSemibold" />
+                                        </VerticalStackLayout>
+                                    </Grid>
+                                    <Picker ItemsSource="{Binding StatusOptions}" SelectedItem="{Binding SelectedStatus}" />
+                                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                                        <Entry Text="{Binding ActualAmount}" Placeholder="Gerçek tutar" Keyboard="Numeric" />
+                                        <DatePicker Grid.Column="1" Date="{Binding ActualDate}" Format="dd.MM.yyyy" />
+                                    </Grid>
+                                    <Entry Text="{Binding Note}" Placeholder="Not (opsiyonel)" />
+                                </VerticalStackLayout>
+                            </Border>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </VerticalStackLayout>
+
+                <Border BackgroundColor="{StaticResource SoftSky}" StrokeThickness="0">
+                    <VerticalStackLayout Spacing="9">
+                        <Label Text="Yaşam Giderleri" Style="{StaticResource SectionTitle}" />
+                        <Label Text="Bu dönemde günlük yaşam için toplam ne kadar harcadın? Tek sayı yeterli." Style="{StaticResource MutedText}" />
+                        <Entry Text="{Binding ActualLivingSpend}" Placeholder="Toplam yaşam gideri" Keyboard="Numeric" />
+                        <Grid ColumnDefinitions="*,Auto"><Label Text="İsteğe bağlı ayrıntı" VerticalOptions="Center" /><Switch Grid.Column="1" IsToggled="{Binding ShowLivingBreakdown}" /></Grid>
+                        <VerticalStackLayout IsVisible="{Binding ShowLivingBreakdown}" Spacing="6">
+                            <Entry Text="{Binding GroceryAmount}" Placeholder="Market" Keyboard="Numeric" />
+                            <Entry Text="{Binding FuelAmount}" Placeholder="Yakıt" Keyboard="Numeric" />
+                            <Entry Text="{Binding DiningAmount}" Placeholder="Yeme-İçme" Keyboard="Numeric" />
+                            <Entry Text="{Binding EntertainmentAmount}" Placeholder="Eğlence" Keyboard="Numeric" />
+                            <Entry Text="{Binding OtherLivingAmount}" Placeholder="Diğer" Keyboard="Numeric" />
+                        </VerticalStackLayout>
+                        <Label Text="Dönemde ödenen diğer faiz (varsa)" Style="{StaticResource FieldLabel}" />
+                        <Entry Text="{Binding ActualInterest}" Keyboard="Numeric" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border BackgroundColor="{StaticResource SoftPeach}" StrokeThickness="0">
+                    <VerticalStackLayout Spacing="8">
+                        <Label Text="Plan Dışı Büyük Ödeme" Style="{StaticResource SectionTitle}" />
+                        <Entry Text="{Binding NewPaymentName}" Placeholder="Ad" />
+                        <Entry Text="{Binding NewPaymentCategory}" Placeholder="Kategori" />
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="8"><Entry Text="{Binding NewPaymentAmount}" Placeholder="Tutar" Keyboard="Numeric" /><DatePicker Grid.Column="1" Date="{Binding NewPaymentDate}" Format="dd.MM.yyyy" /></Grid>
+                        <Button Text="+ Ödeme Ekle" Command="{Binding AddUnplannedPaymentCommand}" Style="{StaticResource SecondaryButton}" />
+                    </VerticalStackLayout>
+                </Border>
+                <Border BackgroundColor="{StaticResource SoftPink}" StrokeThickness="0">
+                    <VerticalStackLayout Spacing="8">
+                        <Label Text="Plan Dışı Gelir" Style="{StaticResource SectionTitle}" />
+                        <Entry Text="{Binding NewIncomeName}" Placeholder="Bonus, iade, ek gelir..." />
+                        <Entry Text="{Binding NewIncomeCategory}" Placeholder="Kategori" />
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="8"><Entry Text="{Binding NewIncomeAmount}" Placeholder="Tutar" Keyboard="Numeric" /><DatePicker Grid.Column="1" Date="{Binding NewIncomeDate}" Format="dd.MM.yyyy" /></Grid>
+                        <Button Text="+ Gelir Ekle" Command="{Binding AddUnplannedIncomeCommand}" Style="{StaticResource SecondaryButton}" />
+                    </VerticalStackLayout>
+                </Border>
+                <VerticalStackLayout BindableLayout.ItemsSource="{Binding Flows}" IsVisible="{Binding HasFlows}" Spacing="8">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate x:DataType="models:ActualFlowInputItem">
+                            <Border>
+                                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
+                                    <Label Text="{Binding TypeText}" Style="{StaticResource Eyebrow}" />
+                                    <Label Grid.Row="1" Text="{Binding Name}" FontFamily="OpenSansSemibold" />
+                                    <Label Grid.Row="2" Text="{Binding DetailText}" Style="{StaticResource MutedText}" />
+                                    <VerticalStackLayout Grid.Column="1" Grid.RowSpan="3" HorizontalOptions="End"><Label Text="{Binding AmountText}" FontFamily="OpenSansSemibold" /><Button Text="Sil" Command="{Binding Source={x:Reference RootPage}, Path=BindingContext.RemoveFlowCommand}" CommandParameter="{Binding .}" Style="{StaticResource SecondaryButton}" /></VerticalStackLayout>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </VerticalStackLayout>
+
+                <Border BackgroundColor="{StaticResource SoftLavender}" StrokeThickness="0">
+                    <VerticalStackLayout Spacing="8">
+                        <Label Text="Bugünkü Finansal Durum" Style="{StaticResource SectionTitle}" />
+                        <Label Text="Yeni 12 aylık tahmin bu planlama başlangıç birikiminden devam edecek." Style="{StaticResource MutedText}" />
+                        <Label Text="Hesaplanan öneri" Style="{StaticResource FieldLabel}" />
+                        <Label Text="{Binding SuggestedStartingSavings}" FontFamily="OpenSansSemibold" FontSize="20" />
+                        <Entry Text="{Binding CurrentStartingSavings}" Placeholder="Yeni planlama başlangıç birikimi" Keyboard="Numeric" />
+                        <Button Text="Öneriyi yeniden hesapla" Command="{Binding RecalculateSuggestedCommand}" Style="{StaticResource SecondaryButton}" />
+                        <Label Text="Gerçek durum farklıysa tutarı düzeltebilirsin; fark dönem düzeltmesi olarak saklanır." Style="{StaticResource MutedText}" />
+                    </VerticalStackLayout>
+                </Border>
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="10"><Button Text="Geri" Command="{Binding BackCommand}" Style="{StaticResource SecondaryButton}" /><Button Grid.Column="1" Text="Sonucu Gör" Command="{Binding NextCommand}" /></Grid>
+            </VerticalStackLayout>
+
+            <VerticalStackLayout IsVisible="{Binding IsStep3}" Spacing="14">
+                <Border BackgroundColor="{StaticResource SoftSky}" StrokeThickness="0"><VerticalStackLayout Spacing="5"><Label Text="3. Sonuç" Style="{StaticResource SectionTitle}" /><Label Text="{Binding ComparisonSummary}" Style="{StaticResource MutedText}" /></VerticalStackLayout></Border>
+                <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
+                    <Border BackgroundColor="{StaticResource SoftPink}" StrokeThickness="0"><VerticalStackLayout><Label Text="PLAN" Style="{StaticResource Eyebrow}" /><Label Text="{Binding ComparisonPlannedEnding}" FontFamily="OpenSansSemibold" /></VerticalStackLayout></Border>
+                    <Border Grid.Column="1" BackgroundColor="{StaticResource SoftYellow}" StrokeThickness="0"><VerticalStackLayout><Label Text="GERÇEK" Style="{StaticResource Eyebrow}" /><Label Text="{Binding ComparisonActualEnding}" FontFamily="OpenSansSemibold" /></VerticalStackLayout></Border>
+                    <Border Grid.Column="2" BackgroundColor="{StaticResource SoftLavender}" StrokeThickness="0"><VerticalStackLayout><Label Text="FARK" Style="{StaticResource Eyebrow}" /><Label Text="{Binding ComparisonDifference}" FontFamily="OpenSansSemibold" /></VerticalStackLayout></Border>
+                </Grid>
+                <VerticalStackLayout BindableLayout.ItemsSource="{Binding ComparisonLines}" Spacing="8">
+                    <BindableLayout.ItemTemplate><DataTemplate x:DataType="models:ComparisonUiLine"><Border><Grid ColumnDefinitions="1.2*,*,*,*" ColumnSpacing="5"><Label Text="{Binding Category}" Style="{StaticResource MutedText}" /><Label Grid.Column="1" Text="{Binding Planned}" FontSize="12" HorizontalTextAlignment="End" /><Label Grid.Column="2" Text="{Binding Actual}" FontSize="12" HorizontalTextAlignment="End" /><Label Grid.Column="3" Text="{Binding Difference}" FontSize="12" FontFamily="OpenSansSemibold" HorizontalTextAlignment="End" /></Grid></Border></DataTemplate></BindableLayout.ItemTemplate>
+                </VerticalStackLayout>
+                <Label Text="Gerçekleşen bilgiler kaydedilecek ve güncel finansal durumun yeni planlama başlangıç noktası olacak." Style="{StaticResource MutedText}" />
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="10"><Button Text="Geri" Command="{Binding BackCommand}" Style="{StaticResource SecondaryButton}" /><Button Grid.Column="1" Text="Kaydet ve Devam Et" Command="{Binding SaveCommand}" /></Grid>
+            </VerticalStackLayout>
+
+            <VerticalStackLayout IsVisible="{Binding IsSuccess}" Spacing="16">
+                <Border BackgroundColor="{StaticResource SoftSky}" StrokeThickness="0" Padding="22"><VerticalStackLayout Spacing="8"><Label Text="Güncel durumun kaydedildi" Style="{StaticResource PageTitle}" /><Label Text="Geçen dönem Plan vs Gerçek geçmişine eklendi." Style="{StaticResource MutedText}" /><Label Text="{Binding SuccessText}" FontFamily="OpenSansSemibold" /><Label Text="{Binding ComparisonSummary}" Style="{StaticResource MutedText}" /></VerticalStackLayout></Border>
+                <Button Text="Yeni Planı Gör" Clicked="OnViewPlanClicked" />
+                <Button Text="Ana Sayfaya Dön" Clicked="OnReturnHomeClicked" Style="{StaticResource SecondaryButton}" />
+            </VerticalStackLayout>
+            <Label Text="{Binding StatusMessage}" IsVisible="{Binding HasStatus}" TextColor="{StaticResource Error}" />
+            <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

@@ -1,12 +1,12 @@
 # CoinFlow doğrulama raporu
 
-Tarih: 20 Ağustos 2026
+Tarih: 21 Ağustos 2026
 
 Ortam: Windows, .NET SDK 8.0.424, JDK 17.0.20, Android SDK/Build Tools 34
 
 ## Sonuçlar
 
-- Test paketi: 110/110 başarılı; 0 başarısız, 0 atlanan
+- Test paketi: 119/119 başarılı; 0 başarısız, 0 atlanan
 - Fresh development/production SQLite başlangıcı: otomatik seed yok, boş plan geçerli
 - İlk maaş → anchor → tek initial strategy onboarding regresyonu: başarılı
 - Clear data ve açık/idempotent canonical seed entegrasyon testleri: başarılı
@@ -27,6 +27,12 @@ Ortam: Windows, .NET SDK 8.0.424, JDK 17.0.20, Android SDK/Build Tools 34
 - 12 Aylık / Simulator compact kart → ortak full-screen Dönem Detayı route ve Android XAML binding derlemesi: başarılı
 - Git diff whitespace kontrolü: başarılı
 - GitHub Actions development/stable workflow dosyaları değiştirilmedi
+- İlk current snapshot, frozen plan ve history'siz first-install davranışı doğrulandı.
+- Review due, üç adımlı actual girişi, optional revision ve atomik finalize/restart persistence doğrulandı.
+- Future settings'in frozen history'yi değiştirmediği ve actual living'in future living varsayımını otomatik değiştirmediği doğrulandı.
+- Actual kart ödemesinin exact statement'a bir kez uygulanması, unpaid kredinin outstanding kalması ve 31 → Şubat review tarihi doğrulandı.
+- “Eylülde kur + ekimde güncelle” ile “ilk kez ekimde aynı current state ile kur” projection eşdeğerliği doğrulandı; yalnız ilk senaryoda history oluştu.
+- Aylık review tek toplam yaşam gideriyle, sıfır günlük transaction girilerek tamamlanabiliyor.
 
 ## Payment assignment doğrulaması
 

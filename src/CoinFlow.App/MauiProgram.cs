@@ -43,9 +43,17 @@ public static class MauiProgram
         builder.Services.AddSingleton<InstallmentScheduleCalculator>();
         builder.Services.AddSingleton<ScheduledPaymentCalculator>();
         builder.Services.AddSingleton<CreditCardStatementCalculator>();
+        builder.Services.AddSingleton<CreditCardActualPaymentReconciler>();
         builder.Services.AddSingleton<MandatoryPaymentCalculator>();
         builder.Services.AddSingleton<FinancialProjectionCalculator>();
         builder.Services.AddSingleton<FinancialProjectionService>();
+        builder.Services.AddSingleton<PeriodPlanSnapshotService>();
+        builder.Services.AddSingleton<FinancialSnapshotService>();
+        builder.Services.AddSingleton<FinancialStateReconciliationService>();
+        builder.Services.AddSingleton<FinancialInstrumentReconciliationService>();
+        builder.Services.AddSingleton<PlanActualComparisonCalculator>();
+        builder.Services.AddSingleton<PeriodReviewService>();
+        builder.Services.AddSingleton<HistoryQueryService>();
         builder.Services.AddSingleton<SalaryPeriodDetailPresenter>();
         builder.Services.AddSingleton<SimulationCalculator>();
         builder.Services.AddSingleton<TargetAmountCalculator>();
@@ -57,12 +65,18 @@ public static class MauiProgram
         builder.Services.AddTransient<SimulationViewModel>();
         builder.Services.AddTransient<SalaryPeriodDetailViewModel>();
         builder.Services.AddTransient<SettingsViewModel>();
+        builder.Services.AddTransient<PeriodReviewWizardViewModel>();
+        builder.Services.AddTransient<HistoryViewModel>();
+        builder.Services.AddTransient<HistoryDetailViewModel>();
         builder.Services.AddTransient<MainPage>();
         builder.Services.AddTransient<CommitmentsPage>();
         builder.Services.AddTransient<FutureMonthsPage>();
         builder.Services.AddTransient<SimulationPage>();
         builder.Services.AddTransient<SalaryPeriodDetailPage>();
         builder.Services.AddTransient<SettingsPage>();
+        builder.Services.AddTransient<PeriodReviewPage>();
+        builder.Services.AddTransient<HistoryPage>();
+        builder.Services.AddTransient<HistoryDetailPage>();
 
 #if DEBUG
         builder.Logging.AddDebug();

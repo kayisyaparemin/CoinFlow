@@ -34,12 +34,33 @@ internal static class TestFactory
         var projectionService =
             new FinancialProjectionService(projectionCalculator);
         var installments = new InstallmentScheduleCalculator();
+        var clock = new FixedClock(
+            today ?? new DateOnly(2026, 8, 20),
+            new DateTimeOffset(
+                (today ?? new DateOnly(2026, 8, 20)).Year,
+                (today ?? new DateOnly(2026, 8, 20)).Month,
+                (today ?? new DateOnly(2026, 8, 20)).Day,
+                12,
+                0,
+                0,
+                TimeSpan.Zero));
+        var snapshotService = new FinancialSnapshotService(
+            store,
+            clock,
+            new PeriodPlanSnapshotService(projectionCalculator));
+        var comparison = new PlanActualComparisonCalculator();
+        var reviewService = new PeriodReviewService(
+            store,
+            clock,
+            snapshotService,
+            new FinancialStateReconciliationService(),
+            new FinancialInstrumentReconciliationService(
+                new CreditCardActualPaymentReconciler(
+                    new CreditCardStatementCalculator())),
+            comparison);
         return new CoinFlowService(
             store,
-            new FixedClock(
-                today ?? new DateOnly(2026, 8, 20),
-                new DateTimeOffset(
-                    2026, 8, 20, 12, 0, 0, TimeSpan.Zero)),
+            clock,
             projectionService,
             new SimulationCalculator(
                 projectionCalculator,
@@ -47,7 +68,10 @@ internal static class TestFactory
             new TargetAmountCalculator(),
             new PaymentAssignmentStrategyResolver(
                 new SalaryPeriodCalculator()),
-            new SalaryPeriodCalculator());
+            new SalaryPeriodCalculator(),
+            snapshotService,
+            reviewService,
+            new HistoryQueryService(store, comparison));
     }
 
     public static FinancialPlan CanonicalPlan() => new()
