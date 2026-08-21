@@ -6,7 +6,7 @@ Ortam: Windows, .NET SDK 8.0.424, JDK 17.0.20, Android SDK/Build Tools 34
 
 ## Sonuçlar
 
-- Test paketi: 119/119 başarılı; 0 başarısız, 0 atlanan
+- Test paketi: 135/135 başarılı; 0 başarısız, 0 atlanan
 - Fresh development/production SQLite başlangıcı: otomatik seed yok, boş plan geçerli
 - İlk maaş → anchor → tek initial strategy onboarding regresyonu: başarılı
 - Clear data ve açık/idempotent canonical seed entegrasyon testleri: başarılı
@@ -28,6 +28,11 @@ Ortam: Windows, .NET SDK 8.0.424, JDK 17.0.20, Android SDK/Build Tools 34
 - Git diff whitespace kontrolü: başarılı
 - GitHub Actions development/stable workflow dosyaları değiştirilmedi
 - İlk current snapshot, frozen plan ve history'siz first-install davranışı doğrulandı.
+- 20.08.2026 snapshot → 10.09.2026 review → 10.10.2026 review cadence entegrasyonu doğrulandı; ilk kısmi dönem artık atlanmıyor.
+- Review tarihi resolver'ı aynı gün strict-next davranışı ile 29/30/31 ve Şubat edge-case'lerinde doğrulandı.
+- İlk kısmi ödeme penceresi `(SnapshotDate, ReviewDate]`, 30.000 TL yaşam bütçesinin 21/31 oranla 20.322,58 TL olması ve sonraki tam dönemde 30.000 TL kalması doğrulandı.
+- Popup'ın checkpoint gününde açılması, gecikmiş finalize'ın snapshot'ı checkpoint tarihine yazması ve ileri tarih atlamasının sahte actual üretmemesi doğrulandı.
+- Önceki build'den kalan tamamlanmamış hatalı current planın kullanıcı verileri silinmeden düzeltilmesi doğrulandı.
 - Review due, üç adımlı actual girişi, optional revision ve atomik finalize/restart persistence doğrulandı.
 - Future settings'in frozen history'yi değiştirmediği ve actual living'in future living varsayımını otomatik değiştirmediği doğrulandı.
 - Actual kart ödemesinin exact statement'a bir kez uygulanması, unpaid kredinin outstanding kalması ve 31 → Şubat review tarihi doğrulandı.

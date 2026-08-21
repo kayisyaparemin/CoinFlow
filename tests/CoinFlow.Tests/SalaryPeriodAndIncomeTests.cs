@@ -58,6 +58,35 @@ public sealed class SalaryPeriodAndIncomeTests
         Assert.Equal(new DateOnly(2027, 3, 31), periods[2].Start);
     }
 
+    [Theory]
+    [InlineData(2026, 8, 20, 10, 2026, 9, 10)]
+    [InlineData(2026, 9, 10, 10, 2026, 10, 10)]
+    [InlineData(2026, 9, 11, 10, 2026, 10, 10)]
+    [InlineData(2027, 1, 31, 31, 2027, 2, 28)]
+    [InlineData(2027, 2, 28, 31, 2027, 3, 31)]
+    [InlineData(2028, 1, 31, 31, 2028, 2, 29)]
+    public void NextReviewDate_IsFirstResolvedSalaryDateStrictlyAfterSnapshot(
+        int snapshotYear,
+        int snapshotMonth,
+        int snapshotDay,
+        int salaryDay,
+        int expectedYear,
+        int expectedMonth,
+        int expectedDay)
+    {
+        var snapshot = new DateOnly(
+            snapshotYear,
+            snapshotMonth,
+            snapshotDay);
+
+        var result = _periods.GetNextReviewDate(snapshot, salaryDay);
+
+        Assert.Equal(
+            new DateOnly(expectedYear, expectedMonth, expectedDay),
+            result);
+        Assert.True(result > snapshot);
+    }
+
     [Fact]
     public void SalaryResolver_UsesLatestRecordEffectiveAtPeriodStart()
     {

@@ -80,6 +80,10 @@ public interface ICoinFlowStore
         PeriodPlanSnapshot plan,
         UserSettings? updatedSettings = null,
         CancellationToken cancellationToken = default);
+    Task ReplacePendingFinancialSnapshotPlanAsync(
+        FinancialSnapshot snapshot,
+        PeriodPlanSnapshot plan,
+        CancellationToken cancellationToken = default);
     Task FinalizeFinancialReviewAsync(
         FinancialReviewCommit commit,
         CancellationToken cancellationToken = default);

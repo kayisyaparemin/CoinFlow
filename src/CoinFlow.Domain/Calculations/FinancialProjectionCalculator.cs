@@ -136,7 +136,7 @@ public sealed class FinancialProjectionCalculator(
             openingSavings = endingSavings;
         }
 
-        return new FinancialProjectionResult(result, fundingPlan);
+        return new FinancialProjectionResult(result, fundingPlan, statuses);
     }
 
     private static IReadOnlyList<SalaryPeriod> BuildPeriods(

@@ -4,21 +4,32 @@ using CoinFlow.Domain.Models;
 namespace CoinFlow.Application.Services;
 
 public sealed class PeriodPlanSnapshotService(
-    FinancialProjectionCalculator projectionCalculator)
+    FinancialProjectionCalculator projectionCalculator,
+    SalaryPeriodCalculator salaryPeriodCalculator,
+    SalaryResolver salaryResolver)
 {
     public PeriodPlanSnapshot Freeze(
         FinancialPlan financialPlan,
         FinancialSnapshot snapshot,
         DateTimeOffset createdAtUtc)
     {
+        var reviewDate = salaryPeriodCalculator.GetNextReviewDate(
+            snapshot.SnapshotDate,
+            snapshot.SalaryDay);
         var projectionResult = projectionCalculator.CalculatePlan(
             financialPlan,
             snapshot.ProjectionAnchorDate,
-            1);
-        var projection = projectionResult.Periods.Single();
+            2);
+        var projection = projectionResult.Periods[0];
         var planId = Guid.NewGuid();
-        var lines = projection.MandatoryItems
+        var lines = projectionResult.Periods
+            .SelectMany(x => x.MandatoryItems)
             .Concat(projectionResult.FundingPlan.PreFirstSalaryObligations)
+            .Where(item => item.Type != ObligationType.PlannedLargeExpense)
+            .Where(item => IsInReviewWindow(
+                item.DueDate,
+                snapshot.SnapshotDate,
+                reviewDate))
             .GroupBy(item => new
             {
                 item.PaymentId,
@@ -41,7 +52,12 @@ public sealed class PeriodPlanSnapshotService(
             })
             .ToList();
 
-        foreach (var expense in projection.LargeExpenseItems)
+        foreach (var expense in financialPlan.PlannedLargeExpenses.Where(x =>
+                     x.Status == PlannedExpenseStatus.Planned &&
+                     IsInReviewWindow(
+                         x.ExactDate,
+                         snapshot.SnapshotDate,
+                         reviewDate)))
         {
             lines.Add(new PeriodPlanPaymentLine
             {
@@ -56,7 +72,11 @@ public sealed class PeriodPlanSnapshotService(
         }
 
         // Ödeme tercihi bilinmeyen kartlar da gerçek giriş formunda görünmelidir.
-        foreach (var card in projection.CardPaymentStatuses)
+        foreach (var card in projectionResult.CardPaymentStatuses.Where(x =>
+                     IsInReviewWindow(
+                         x.PaymentDueDate,
+                         snapshot.SnapshotDate,
+                         reviewDate)))
         {
             if (lines.Any(x =>
                     x.SourceType == PlanPaymentSourceType.CreditCard &&
@@ -83,36 +103,108 @@ public sealed class PeriodPlanSnapshotService(
             });
         }
 
+        var orderedLines = lines
+            .OrderBy(x => x.PlannedDate)
+            .ThenBy(x => x.Name)
+            .ToArray();
+        decimal Sum(PlanPaymentSourceType type) => orderedLines
+            .Where(x => x.SourceType == type)
+            .Sum(x => x.PlannedAmount.GetValueOrDefault());
+        var mandatory = orderedLines
+            .Where(x => x.SourceType !=
+                        PlanPaymentSourceType.PlannedLargeExpense)
+            .Sum(x => x.PlannedAmount.GetValueOrDefault());
+        var largeExpenses = Sum(PlanPaymentSourceType.PlannedLargeExpense);
+        var salary = salaryResolver.Resolve(reviewDate, financialPlan.Salaries)
+            ?.Amount ?? 0m;
+        var otherIncome = financialPlan.OtherIncomes
+            .Where(x => IsInReviewWindow(
+                x.ExactDate,
+                snapshot.SnapshotDate,
+                reviewDate))
+            .Sum(x => x.Amount);
+        var plannedIncome = salary + otherIncome;
+        var livingBudget = ResolveLivingBudget(
+            financialPlan.Settings.MonthlyLivingBudget,
+            snapshot.SnapshotDate,
+            reviewDate,
+            snapshot.SalaryDay);
+        var endingBeforeDeficitInterest = snapshot.ProjectionStartingSavings +
+                                          plannedIncome -
+                                          mandatory -
+                                          livingBudget -
+                                          largeExpenses;
+        var deficitInterest = endingBeforeDeficitInterest < 0m
+            ? RoundMoney(
+                Math.Abs(endingBeforeDeficitInterest) *
+                financialPlan.Settings.DeficitFinancingInterestRate)
+            : 0m;
+
         return new PeriodPlanSnapshot
         {
             Id = planId,
             FinancialSnapshotId = snapshot.Id,
-            PeriodStart = projection.PeriodStart,
-            PeriodEnd = projection.PeriodEnd,
-            ReviewAvailableFrom = projection.PeriodEnd,
+            PeriodStart = snapshot.SnapshotDate,
+            PeriodEnd = reviewDate,
+            ReviewAvailableFrom = reviewDate,
             CreatedAtUtc = createdAtUtc,
             StrategyUsed = projection.PaymentAssignmentMode,
-            PaymentWindowStart = projection.PaymentWindowStart,
-            PaymentWindowEnd = projection.PaymentWindowEnd,
-            OpeningSavings = projection.OpeningProjectedSavings,
-            PlannedIncome = projection.TotalIncome,
-            PlannedLoanPayments = projection.LoanPayments,
-            PlannedCardPayments = projection.CreditCardPayments,
-            PlannedTemporaryPayments = projection.TemporaryPayments,
-            PlannedInstallmentPayments = projection.InstallmentPayments,
-            PlannedOtherScheduledPayments = projection.OtherScheduledPayments,
-            PlannedMandatoryPayments = projection.MandatoryOutflow,
-            PlannedLivingBudget = projection.LivingBudget,
-            PlannedLargeExpenses = projection.PlannedLargeCashExpenses,
-            PlannedCardInterest = projection.CardInterestGenerated,
-            PlannedDeficitInterest = projection.DeficitFinancingInterest,
-            PlannedEndingSavings = projection.EndingProjectedSavings,
-            PaymentLines = lines
-                .OrderBy(x => x.PlannedDate)
-                .ThenBy(x => x.Name)
-                .ToArray()
+            PaymentWindowStart = snapshot.SnapshotDate.AddDays(1),
+            PaymentWindowEnd = reviewDate,
+            OpeningSavings = snapshot.ProjectionStartingSavings,
+            PlannedIncome = plannedIncome,
+            PlannedLoanPayments = Sum(PlanPaymentSourceType.Loan),
+            PlannedCardPayments = Sum(PlanPaymentSourceType.CreditCard),
+            PlannedTemporaryPayments = Sum(
+                PlanPaymentSourceType.TemporaryPayment),
+            PlannedInstallmentPayments = Sum(
+                PlanPaymentSourceType.InstallmentPayment),
+            PlannedOtherScheduledPayments = Sum(
+                PlanPaymentSourceType.OtherScheduledPayment),
+            PlannedMandatoryPayments = mandatory,
+            PlannedLivingBudget = livingBudget,
+            PlannedLargeExpenses = largeExpenses,
+            PlannedCardInterest = projectionResult.CardPaymentStatuses
+                .Where(x => IsInReviewWindow(
+                    x.PaymentDueDate,
+                    snapshot.SnapshotDate,
+                    reviewDate))
+                .Sum(x => x.CarryInterest),
+            PlannedDeficitInterest = deficitInterest,
+            PlannedEndingSavings = endingBeforeDeficitInterest -
+                                   deficitInterest,
+            PaymentLines = orderedLines
         };
     }
+
+    private decimal ResolveLivingBudget(
+        decimal monthlyLivingBudget,
+        DateOnly snapshotDate,
+        DateOnly reviewDate,
+        int salaryDay)
+    {
+        var containingPeriod = salaryPeriodCalculator.GetPeriod(
+            snapshotDate,
+            salaryDay);
+        if (snapshotDate == containingPeriod.Start)
+        {
+            return monthlyLivingBudget;
+        }
+
+        var reviewDayCount = reviewDate.DayNumber - snapshotDate.DayNumber;
+        return RoundMoney(
+            monthlyLivingBudget * reviewDayCount /
+            containingPeriod.DayCount);
+    }
+
+    private static bool IsInReviewWindow(
+        DateOnly activityDate,
+        DateOnly snapshotDate,
+        DateOnly reviewDate) =>
+        activityDate > snapshotDate && activityDate <= reviewDate;
+
+    private static decimal RoundMoney(decimal amount) =>
+        decimal.Round(amount, 2, MidpointRounding.AwayFromZero);
 
     private static PlanPaymentSourceType Map(ObligationType type) =>
         type switch

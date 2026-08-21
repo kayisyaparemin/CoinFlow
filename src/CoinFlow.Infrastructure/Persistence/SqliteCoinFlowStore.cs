@@ -572,6 +572,48 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         });
     }
 
+    public async Task ReplacePendingFinancialSnapshotPlanAsync(
+        FinancialSnapshot snapshot,
+        PeriodPlanSnapshot plan,
+        CancellationToken cancellationToken = default)
+    {
+        await InitializeAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        await _database.RunInTransactionAsync(connection =>
+        {
+            var current = connection.Find<FinancialSnapshotRow>(
+                Key(snapshot.Id));
+            if (current is null || !current.IsCurrent)
+            {
+                throw new InvalidOperationException(
+                    "Yalnızca güncel snapshot planı düzeltilebilir.");
+            }
+
+            var oldPlans = connection.Query<PeriodPlanSnapshotRow>(
+                "SELECT * FROM period_plan_snapshots WHERE FinancialSnapshotId = ?",
+                Key(snapshot.Id));
+            if (oldPlans.Any(oldPlan =>
+                    connection.FindWithQuery<PeriodActualRow>(
+                        "SELECT * FROM period_actuals WHERE PeriodPlanSnapshotId = ? LIMIT 1",
+                        oldPlan.Id) is not null))
+            {
+                throw new InvalidOperationException(
+                    "Tamamlanmış dönem planı değiştirilemez.");
+            }
+
+            foreach (var oldPlan in oldPlans)
+            {
+                connection.Execute(
+                    "DELETE FROM period_plan_payment_lines WHERE PeriodPlanSnapshotId = ?",
+                    oldPlan.Id);
+                connection.Delete(oldPlan);
+            }
+
+            connection.Update(ToRow(snapshot with { IsCurrent = true }));
+            InsertPlan(connection, plan);
+        });
+    }
+
     public async Task FinalizeFinancialReviewAsync(
         FinancialReviewCommit commit,
         CancellationToken cancellationToken = default)

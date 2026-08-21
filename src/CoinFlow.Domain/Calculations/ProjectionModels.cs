@@ -95,7 +95,8 @@ public sealed record SalaryPeriodProjection(
 
 public sealed record FinancialProjectionResult(
     IReadOnlyList<SalaryPeriodProjection> Periods,
-    SalaryFundingPlan FundingPlan)
+    SalaryFundingPlan FundingPlan,
+    IReadOnlyList<CreditCardPaymentProjectionStatus> CardPaymentStatuses)
 {
     public decimal TotalCreditCardInterest =>
         Periods.Sum(x => x.CardInterestGenerated);

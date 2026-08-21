@@ -1,4 +1,5 @@
 using CoinFlow.Application.Abstractions;
+using CoinFlow.Domain.Calculations;
 using CoinFlow.Domain.Models;
 
 namespace CoinFlow.Application.Services;
@@ -11,7 +12,8 @@ public sealed record FinancialSnapshotBundle(
 public sealed class FinancialSnapshotService(
     ICoinFlowStore store,
     IClock clock,
-    PeriodPlanSnapshotService planSnapshotService)
+    PeriodPlanSnapshotService planSnapshotService,
+    SalaryPeriodCalculator salaryPeriodCalculator)
 {
     public async Task<FinancialSnapshot?> EnsureInitialSnapshotAsync(
         FinancialPlan plan,
@@ -21,6 +23,46 @@ public sealed class FinancialSnapshotService(
         var current = LatestCurrent(history);
         if (current is not null)
         {
+            var expectedReviewDate = salaryPeriodCalculator
+                .GetNextReviewDate(current.SnapshotDate, current.SalaryDay);
+            var pendingPlan = history.Plans
+                .Where(x => x.FinancialSnapshotId == current.Id)
+                .Where(x => history.Actuals.All(actual =>
+                    actual.PeriodPlanSnapshotId != x.Id))
+                .OrderByDescending(x => x.CreatedAtUtc)
+                .FirstOrDefault();
+            var requiresCadenceRepair = pendingPlan is not null &&
+                (current.NextReviewDate != expectedReviewDate ||
+                 pendingPlan.PeriodStart != current.SnapshotDate ||
+                 pendingPlan.PeriodEnd != expectedReviewDate ||
+                 pendingPlan.ReviewAvailableFrom != expectedReviewDate);
+            if (requiresCadenceRepair)
+            {
+                var correctedSnapshot = current with
+                {
+                    NextReviewDate = expectedReviewDate
+                };
+                var snapshotPlan = plan with
+                {
+                    Settings = plan.Settings with
+                    {
+                        ProjectionStartingSavings =
+                            current.ProjectionStartingSavings,
+                        ProjectionAnchorDate = current.SnapshotDate,
+                        SalaryDay = current.SalaryDay
+                    }
+                };
+                var correctedPlan = planSnapshotService.Freeze(
+                    snapshotPlan,
+                    correctedSnapshot,
+                    clock.UtcNow);
+                await store.ReplacePendingFinancialSnapshotPlanAsync(
+                    correctedSnapshot,
+                    correctedPlan,
+                    cancellationToken);
+                return correctedSnapshot;
+            }
+
             return current;
         }
 

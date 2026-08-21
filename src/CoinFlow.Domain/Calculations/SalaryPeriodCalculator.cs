@@ -52,4 +52,8 @@ public sealed class SalaryPeriodCalculator
             ? containingPeriod.Start
             : containingPeriod.End;
     }
+
+    public DateOnly GetNextReviewDate(
+        DateOnly snapshotDate,
+        int salaryDay) => GetPeriod(snapshotDate, salaryDay).End;
 }

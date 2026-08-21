@@ -23,3 +23,5 @@
 - [x] Persistent `%5` faiz varsayımları, 12 aylık özet ve simulator faiz karşılaştırmasını ekle
 - [x] 12 Aylık ve Simulator inline detaylarını ortak full-screen dönem detayına taşı
 - [x] Summary/flow/deficit/faiz/transition/payment gruplarını ve zero-row filtrelemeyi ekle
+- [x] İlk mid-cycle snapshot'ı ilk sonraki maaş checkpoint'ına bağla ve kısmi yaşam bütçesini oranla
+- [x] Review checkpoint zincirini, ödeme sınırlarını, gecikmiş kaydı ve legacy pending-plan onarımını test et

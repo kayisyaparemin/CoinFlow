@@ -37,9 +37,11 @@ Maaş, tek seferlik gelir, kredi, kart harcaması, kart vadesi, geçici ödeme v
 
 ## Güncel durum ve Plan vs Gerçek
 
-İlk tamamlanmış finansal plan bir `FinancialSnapshot` ve mevcut `FinancialProjectionCalculator` sonucundan dondurulan bir `PeriodPlanSnapshot` oluşturur. Dashboard, 12 Aylık ve Simulator için güncel başlangıç kaynağı son snapshot'ın `ProjectionStartingSavings` ve `ProjectionAnchorDate` değerleridir. Geçmiş plan hiçbir zaman tekrar hesaplanmaz.
+İlk tamamlanmış finansal plan bir `FinancialSnapshot` ve bu doğruluk noktasından sonraki ilk maaş checkpoint'ına kadar dondurulan bir `PeriodPlanSnapshot` oluşturur. `NextReviewDate`, snapshot tarihinden **strictly after** olan ilk geçerli maaş tarihidir; snapshot maaş günündeyse bir sonraki ay kullanılır. Dashboard, 12 Aylık ve Simulator için güncel başlangıç kaynağı son snapshot'ın `ProjectionStartingSavings` ve `ProjectionAnchorDate` değerleridir. Geçmiş plan hiçbir zaman tekrar hesaplanmaz.
 
-Review tarihi geldiğinde üç adımlı akış açılır:
+İlk kullanım maaş döneminin ortasındaysa review penceresi `SnapshotDate < hareket tarihi <= ReviewDate` sınırıyla kısmi oluşturulur. Örneğin 20 Ağustos snapshot'ı 10 Eylül'de review edilir; 5 Eylül kart ve 7 Eylül kredi ödemeleri plana girerken 18 Eylül ödemesi girmez. 30.000 TL aylık yaşam bütçesi, 10 Ağustos–10 Eylül arasındaki 31 günün snapshot sonrasındaki 21 gününe `AwayFromZero` iki hane yuvarlamayla oranlanır: 20.322,58 TL. Snapshot maaş günündeyse sonraki dönem tam bütçeyi kullanır. Bu tarihsel review penceresi 12 Aylık projection ekranından ayrı bir çıktıdır ve 12 aylık hesap motorunun dönemlerini değiştirmez.
+
+Review tarihi geldiğinde (`CurrentDate >= ReviewAvailableFrom`) üç adımlı akış açılır:
 
 1. **Planın:** Dönem başında dondurulan gelir, ödemeler, yaşam bütçesi, faiz ve dönem sonu görülür. İsteğe bağlı revizyon original planı değiştirmeden ayrı saklanır.
 2. **Gerçekte Ne Oldu?:** Planlı ödemeler hazır gelir; ödendi, farklı tutar veya ödenmedi seçilir. Tek toplam yaşam gideri yeterlidir. İsteğe bağlı yaşam kırılımı, plan dışı büyük ödeme ve plan dışı gelir eklenebilir.
@@ -123,7 +125,7 @@ dotnet publish src/CoinFlow.App/CoinFlow.App.csproj -f net8.0-android -c Release
 
 ## Migration
 
-SQLite şema sürümü 8'dir. v8 additive migration snapshot, frozen plan, revision, actual payment/flow ve living breakdown tablolarını ekler; mevcut finans tablolarını drop etmez. Upgrade olan kullanıcıda ilk plan okunurken mevcut canonical durumdan tek bir initial snapshot üretilir; geçmiş aylar için actual uydurulmaz. v7 migration iki planlama faiz varsayımını `%5,00` ile başlatmaya devam eder. Eski global ödeme atama değeri bir kez ilk strategy history kaydına dönüştürülür ve runtime source of truth olmaktan çıkar. Eski kart aggregate alanları yeni kart modeline aktarılır. Kaldırılan mikro harcama, balance snapshot ve acil fon tabloları upgrade sırasında düşürülür.
+SQLite şema sürümü 8'dir. v8 additive migration snapshot, frozen plan, revision, actual payment/flow ve living breakdown tablolarını ekler; mevcut finans tablolarını drop etmez. Upgrade olan kullanıcıda ilk plan okunurken mevcut canonical durumdan tek bir initial snapshot üretilir; geçmiş aylar için actual uydurulmaz. Önceki build'in 20 Ağustos snapshot'ını yanlışlıkla 10 Ekim'e bağlayan tamamlanmamış planı, ilk okumada 20 Ağustos–10 Eylül planıyla atomik olarak değiştirilir; canonical kullanıcı verileri ve tamamlanmış history değiştirilmez. v7 migration iki planlama faiz varsayımını `%5,00` ile başlatmaya devam eder. Eski global ödeme atama değeri bir kez ilk strategy history kaydına dönüştürülür ve runtime source of truth olmaktan çıkar. Eski kart aggregate alanları yeni kart modeline aktarılır. Kaldırılan mikro harcama, balance snapshot ve acil fon tabloları upgrade sırasında düşürülür.
 
 ## CI/CD
 

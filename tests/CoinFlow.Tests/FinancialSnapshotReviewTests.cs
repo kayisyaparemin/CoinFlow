@@ -1,5 +1,6 @@
 using CoinFlow.Application.Abstractions;
 using CoinFlow.Application.Models;
+using CoinFlow.Application.Services;
 using CoinFlow.Domain.Calculations;
 using CoinFlow.Domain.Models;
 using CoinFlow.Infrastructure.Persistence;
@@ -9,7 +10,8 @@ namespace CoinFlow.Tests;
 public sealed class FinancialSnapshotReviewTests
 {
     private static readonly DateOnly InitialDate = new(2026, 8, 20);
-    private static readonly DateOnly ReviewDate = new(2026, 10, 10);
+    private static readonly DateOnly FirstReviewDate = new(2026, 9, 10);
+    private static readonly DateOnly SecondReviewDate = new(2026, 10, 10);
 
     [Fact]
     public async Task FirstUse_CreatesCurrentSnapshotAndFrozenPlan_WithoutHistory()
@@ -18,30 +20,376 @@ public sealed class FinancialSnapshotReviewTests
         {
             var service = TestFactory.Service(store, InitialDate);
             await service.LoadCanonicalDevelopmentDataAsync();
-            var financialPlan = await service.GetFinancialPlanAsync();
+            await service.GetFinancialPlanAsync();
             var history = await store.GetFinancialHistoryAsync();
 
             var snapshot = Assert.Single(history.Snapshots);
             var frozen = Assert.Single(history.Plans);
             Assert.True(snapshot.IsCurrent);
             Assert.Equal(InitialDate, snapshot.SnapshotDate);
-            Assert.Equal(new DateOnly(2026, 10, 10),
-                snapshot.NextReviewDate);
+            Assert.Equal(FirstReviewDate, snapshot.NextReviewDate);
             Assert.Equal(snapshot.Id, frozen.FinancialSnapshotId);
+            Assert.Equal(InitialDate, frozen.PeriodStart);
+            Assert.Equal(FirstReviewDate, frozen.PeriodEnd);
+            Assert.Equal(FirstReviewDate, frozen.ReviewAvailableFrom);
+            Assert.Equal(20_322.58m, frozen.PlannedLivingBudget);
+            Assert.All(frozen.PaymentLines, line =>
+                Assert.True(
+                    line.PlannedDate > InitialDate &&
+                    line.PlannedDate <= FirstReviewDate));
+            Assert.Contains(frozen.PaymentLines, x =>
+                x.SourceType == PlanPaymentSourceType.CreditCard &&
+                x.PlannedDate == new DateOnly(2026, 9, 5));
+            Assert.Contains(frozen.PaymentLines, x =>
+                x.SourceType == PlanPaymentSourceType.Loan &&
+                x.PlannedDate == new DateOnly(2026, 9, 7));
+            Assert.DoesNotContain(frozen.PaymentLines, x =>
+                x.PlannedDate == new DateOnly(2026, 9, 18));
             Assert.Empty(history.Actuals);
             Assert.Empty(await service.GetHistoryPeriodsAsync());
-
-            var projected = Assert.Single(
-                TestFactory.ProjectionCalculator().Calculate(
-                    financialPlan,
-                    InitialDate,
-                    1));
-            Assert.Equal(projected.EndingProjectedSavings,
+            Assert.Equal(115_000m, frozen.PlannedIncome);
+            Assert.Equal(
+                frozen.OpeningSavings + frozen.PlannedIncome -
+                frozen.PlannedMandatoryPayments -
+                frozen.PlannedLivingBudget -
+                frozen.PlannedLargeExpenses -
+                frozen.PlannedDeficitInterest,
                 frozen.PlannedEndingSavings);
-            Assert.Equal(projected.MandatoryOutflow,
-                frozen.PlannedMandatoryPayments);
-            Assert.Equal(projected.PaymentAssignmentMode,
-                frozen.StrategyUsed);
+        });
+    }
+
+    [Fact]
+    public async Task ReviewAvailability_IsDueOnCheckpointAndRemainsDueAfterward()
+    {
+        await WithStore(async store =>
+        {
+            var initial = TestFactory.Service(store, InitialDate);
+            await initial.LoadCanonicalDevelopmentDataAsync();
+            await initial.GetFinancialPlanAsync();
+
+            Assert.False((await TestFactory.Service(
+                store,
+                FirstReviewDate.AddDays(-1))
+                .GetPeriodReviewAvailabilityAsync()).IsDue);
+
+            var onCheckpoint = await TestFactory.Service(
+                store,
+                FirstReviewDate).GetPeriodReviewAvailabilityAsync();
+            Assert.True(onCheckpoint.IsDue);
+            Assert.Equal(InitialDate, onCheckpoint.PendingPlan!.PeriodStart);
+            Assert.Equal(FirstReviewDate, onCheckpoint.PendingPlan.PeriodEnd);
+
+            Assert.True((await TestFactory.Service(
+                store,
+                FirstReviewDate.AddDays(1))
+                .GetPeriodReviewAvailabilityAsync()).IsDue);
+        });
+    }
+
+    [Fact]
+    public void InitialReviewDate_DoesNotDependOnPaymentAssignmentMode()
+    {
+        var basePlan = TestFactory.CanonicalPlan();
+        var snapshot = Snapshot(InitialDate);
+
+        foreach (var mode in new[]
+                 {
+                     PaymentAssignmentMode.PreviousPeriod,
+                     PaymentAssignmentMode.UpcomingPeriod
+                 })
+        {
+            var plan = basePlan with
+            {
+                PaymentAssignmentStrategies =
+                [basePlan.PaymentAssignmentStrategies[0] with { Mode = mode }]
+            };
+            var frozen = Freeze(plan, snapshot);
+
+            Assert.Equal(InitialDate, frozen.PeriodStart);
+            Assert.Equal(FirstReviewDate, frozen.PeriodEnd);
+            Assert.Equal(FirstReviewDate, frozen.ReviewAvailableFrom);
+        }
+    }
+
+    [Fact]
+    public void InitialReviewPaymentWindow_IsSnapshotExclusiveAndReviewInclusive()
+    {
+        var planId = Guid.NewGuid();
+        var dates = new[]
+        {
+            new DateOnly(2026, 8, 15),
+            new DateOnly(2026, 8, 25),
+            new DateOnly(2026, 9, 5),
+            new DateOnly(2026, 9, 10),
+            new DateOnly(2026, 9, 18)
+        };
+        var plan = TestFactory.CanonicalPlan() with
+        {
+            Loans = [],
+            CreditCards = [],
+            PaymentPlans =
+            [
+                new TemporaryPaymentPlan
+                {
+                    Id = planId,
+                    Name = "Sınır testi",
+                    Installments = dates.Select((date, index) =>
+                        new TemporaryPaymentInstallment
+                        {
+                            PlanId = planId,
+                            DueDate = date,
+                            Amount = 1_000m + index
+                        }).ToArray()
+                }
+            ]
+        };
+
+        var frozen = Freeze(plan, Snapshot(InitialDate));
+
+        Assert.Equal(
+            new[]
+            {
+                new DateOnly(2026, 8, 25),
+                new DateOnly(2026, 9, 5),
+                new DateOnly(2026, 9, 10)
+            },
+            frozen.PaymentLines.Select(x => x.PlannedDate));
+    }
+
+    [Fact]
+    public void LivingBudget_IsProratedOnlyForInitialPartialPeriod()
+    {
+        var plan = TestFactory.CanonicalPlan();
+
+        var partial = Freeze(plan, Snapshot(InitialDate));
+        var fullDate = FirstReviewDate;
+        var fullPlan = plan with
+        {
+            Settings = plan.Settings with
+            {
+                ProjectionAnchorDate = fullDate
+            }
+        };
+        var full = Freeze(fullPlan, Snapshot(fullDate));
+
+        Assert.Equal(20_322.58m, partial.PlannedLivingBudget);
+        Assert.Equal(30_000m, full.PlannedLivingBudget);
+    }
+
+    [Fact]
+    public async Task FirstInstallOnSalaryDate_StartsWithNextFullReviewOnly()
+    {
+        await WithStore(async store =>
+        {
+            var plan = TestFactory.CanonicalPlan();
+            await CopyCanonicalStateAsync(
+                plan with
+                {
+                    Settings = plan.Settings with
+                    {
+                        ProjectionAnchorDate = FirstReviewDate
+                    }
+                },
+                store);
+
+            var service = TestFactory.Service(store, FirstReviewDate);
+            await service.GetFinancialPlanAsync();
+            var history = await store.GetFinancialHistoryAsync();
+            var snapshot = Assert.Single(history.Snapshots);
+            var frozen = Assert.Single(history.Plans);
+
+            Assert.Equal(FirstReviewDate, snapshot.SnapshotDate);
+            Assert.Equal(SecondReviewDate, snapshot.NextReviewDate);
+            Assert.Equal(FirstReviewDate, frozen.PeriodStart);
+            Assert.Equal(SecondReviewDate, frozen.PeriodEnd);
+            Assert.Equal(30_000m, frozen.PlannedLivingBudget);
+            Assert.Empty(history.Actuals);
+            Assert.Empty(await service.GetHistoryPeriodsAsync());
+        });
+    }
+
+    [Fact]
+    public async Task ReviewCadence_PreservesInitialPartialThenContinuesMonthly()
+    {
+        await WithStore(async store =>
+        {
+            var initial = TestFactory.Service(store, InitialDate);
+            await initial.LoadCanonicalDevelopmentDataAsync();
+            await initial.GetFinancialPlanAsync();
+
+            Assert.False((await TestFactory.Service(
+                store,
+                FirstReviewDate.AddDays(-1))
+                .GetPeriodReviewAvailabilityAsync()).IsDue);
+
+            var september = TestFactory.Service(store, FirstReviewDate);
+            var septemberAvailability = await september
+                .GetPeriodReviewAvailabilityAsync();
+            Assert.True(septemberAvailability.IsDue);
+            var septemberContext = await september
+                .GetPeriodReviewContextAsync();
+            var firstResult = await september.FinalizePeriodReviewAsync(
+                DefaultDraft(
+                    septemberContext,
+                    septemberContext.OriginalPlan.PlannedLivingBudget));
+
+            Assert.Equal(FirstReviewDate, firstResult.NewSnapshot.SnapshotDate);
+            Assert.Equal(SecondReviewDate, firstResult.NewSnapshot.NextReviewDate);
+            var firstHistory = Assert.Single(
+                await september.GetHistoryPeriodsAsync());
+            Assert.Equal(InitialDate, firstHistory.OriginalPlan.PeriodStart);
+            Assert.Equal(FirstReviewDate, firstHistory.OriginalPlan.PeriodEnd);
+
+            var october = TestFactory.Service(store, SecondReviewDate);
+            var octoberAvailability = await october
+                .GetPeriodReviewAvailabilityAsync();
+            Assert.True(octoberAvailability.IsDue);
+            Assert.Equal(FirstReviewDate,
+                octoberAvailability.PendingPlan!.PeriodStart);
+            Assert.Equal(SecondReviewDate,
+                octoberAvailability.PendingPlan.PeriodEnd);
+            Assert.Equal(30_000m,
+                octoberAvailability.PendingPlan.PlannedLivingBudget);
+        });
+    }
+
+    [Fact]
+    public async Task OverdueReview_UsesScheduledCheckpointAsNewSnapshotDate()
+    {
+        await WithStore(async store =>
+        {
+            var initial = TestFactory.Service(store, InitialDate);
+            await initial.LoadCanonicalDevelopmentDataAsync();
+            await initial.GetFinancialPlanAsync();
+
+            var late = TestFactory.Service(
+                store,
+                FirstReviewDate.AddDays(1));
+            var context = await late.GetPeriodReviewContextAsync();
+            var result = await late.FinalizePeriodReviewAsync(
+                DefaultDraft(context, context.OriginalPlan.PlannedLivingBudget));
+
+            Assert.Equal(FirstReviewDate, result.NewSnapshot.SnapshotDate);
+            Assert.Equal(SecondReviewDate, result.NewSnapshot.NextReviewDate);
+            Assert.Equal(FirstReviewDate.AddDays(1),
+                DateOnly.FromDateTime(result.Actual.FinalizedAtUtc.Date));
+        });
+    }
+
+    [Fact]
+    public async Task JumpingPastMultipleCheckpoints_DoesNotInventActualHistory()
+    {
+        await WithStore(async store =>
+        {
+            var initial = TestFactory.Service(store, InitialDate);
+            await initial.LoadCanonicalDevelopmentDataAsync();
+            await initial.GetFinancialPlanAsync();
+
+            var jumped = TestFactory.Service(
+                store,
+                SecondReviewDate.AddDays(1));
+            var availability = await jumped
+                .GetPeriodReviewAvailabilityAsync();
+            var history = await store.GetFinancialHistoryAsync();
+
+            Assert.True(availability.IsDue);
+            Assert.Equal(InitialDate, availability.PendingPlan!.PeriodStart);
+            Assert.Equal(FirstReviewDate, availability.PendingPlan.PeriodEnd);
+            Assert.Empty(history.Actuals);
+            Assert.Empty(await jumped.GetHistoryPeriodsAsync());
+            Assert.Equal(InitialDate,
+                Assert.Single(history.Snapshots, x => x.IsCurrent)
+                    .SnapshotDate);
+        });
+    }
+
+    [Fact]
+    public async Task PendingLegacyPlan_IsRepairedWithoutDeletingUserData()
+    {
+        await WithStore(async store =>
+        {
+            var service = TestFactory.Service(store, InitialDate);
+            await service.LoadCanonicalDevelopmentDataAsync();
+            await service.GetFinancialPlanAsync();
+            var original = await store.GetFinancialHistoryAsync();
+            var snapshot = Assert.Single(original.Snapshots);
+            var plan = Assert.Single(original.Plans);
+            var legacySnapshot = snapshot with
+            {
+                NextReviewDate = SecondReviewDate
+            };
+            var legacyPlan = plan with
+            {
+                Id = Guid.NewGuid(),
+                PeriodStart = FirstReviewDate,
+                PeriodEnd = SecondReviewDate,
+                ReviewAvailableFrom = SecondReviewDate,
+                PaymentLines = plan.PaymentLines.Select(x => x with
+                {
+                    Id = Guid.NewGuid()
+                }).ToArray()
+            };
+            await store.ReplacePendingFinancialSnapshotPlanAsync(
+                legacySnapshot,
+                legacyPlan);
+
+            await service.GetFinancialPlanAsync();
+            var repaired = await store.GetFinancialHistoryAsync();
+            var repairedSnapshot = Assert.Single(repaired.Snapshots);
+            var repairedPlan = Assert.Single(repaired.Plans);
+
+            Assert.Equal(FirstReviewDate,
+                repairedSnapshot.NextReviewDate);
+            Assert.Equal(InitialDate, repairedPlan.PeriodStart);
+            Assert.Equal(FirstReviewDate, repairedPlan.PeriodEnd);
+            Assert.Equal(20_322.58m,
+                repairedPlan.PlannedLivingBudget);
+            Assert.Empty(repaired.Actuals);
+        });
+    }
+
+    [Fact]
+    public async Task ActualActivityDates_MustStayInsideSnapshotReviewWindow()
+    {
+        await WithStore(async store =>
+        {
+            var initial = TestFactory.Service(store, InitialDate);
+            await initial.LoadCanonicalDevelopmentDataAsync();
+            await initial.GetFinancialPlanAsync();
+            var review = TestFactory.Service(store, FirstReviewDate);
+            var context = await review.GetPeriodReviewContextAsync();
+            var valid = DefaultDraft(
+                context,
+                context.OriginalPlan.PlannedLivingBudget);
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                review.FinalizePeriodReviewAsync(valid with
+                {
+                    Flows =
+                    [
+                        new ActualFlowDraft(
+                            ActualFlowType.UnplannedIncome,
+                            "Snapshot günündeki gelir",
+                            "Diğer",
+                            InitialDate,
+                            1_000m)
+                    ]
+                }));
+
+            var firstPayment = valid.Payments[0];
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                review.FinalizePeriodReviewAsync(valid with
+                {
+                    Payments = valid.Payments.Select(x =>
+                        x.PeriodPlanPaymentLineId ==
+                        firstPayment.PeriodPlanPaymentLineId
+                            ? x with
+                            {
+                                ActualPaymentDate =
+                                    FirstReviewDate.AddDays(1)
+                            }
+                            : x).ToArray()
+                }));
         });
     }
 
@@ -61,7 +409,7 @@ public sealed class FinancialSnapshotReviewTests
                 oldSnapshotId = Assert.Single(
                     (await first.GetFinancialHistoryAsync()).Snapshots).Id;
 
-                var review = TestFactory.Service(first, ReviewDate);
+                var review = TestFactory.Service(first, FirstReviewDate);
                 var context = await review.GetPeriodReviewContextAsync();
                 var draft = DefaultDraft(context, 37_500m);
                 var preview = await review.PreviewPeriodReviewAsync(draft);
@@ -69,7 +417,12 @@ public sealed class FinancialSnapshotReviewTests
                 var result = await review.FinalizePeriodReviewAsync(
                     draft with { ConfirmedStartingSavings = confirmed });
 
-                Assert.Equal(ReviewDate, result.NewSnapshot.SnapshotDate);
+                Assert.Equal(
+                    FirstReviewDate,
+                    result.NewSnapshot.SnapshotDate);
+                Assert.Equal(
+                    SecondReviewDate,
+                    result.NewSnapshot.NextReviewDate);
                 Assert.Equal(oldSnapshotId,
                     result.NewSnapshot.PreviousSnapshotId);
                 Assert.Equal(confirmed,
@@ -82,17 +435,17 @@ public sealed class FinancialSnapshotReviewTests
             {
                 var restarted = TestFactory.Service(
                     restartedStore,
-                    ReviewDate);
+                    FirstReviewDate);
                 var plan = await restarted.GetFinancialPlanAsync();
                 var history = await restartedStore
                     .GetFinancialHistoryAsync();
                 var latest = Assert.Single(history.Snapshots, x =>
                     x.IsCurrent);
 
-                Assert.Equal(ReviewDate, latest.SnapshotDate);
+                Assert.Equal(FirstReviewDate, latest.SnapshotDate);
                 Assert.Equal(confirmed,
                     plan.Settings.ProjectionStartingSavings);
-                Assert.Equal(ReviewDate,
+                Assert.Equal(FirstReviewDate,
                     plan.Settings.ProjectionAnchorDate);
                 Assert.Single(history.Actuals);
                 Assert.Single(await restarted.GetHistoryPeriodsAsync());
@@ -118,7 +471,7 @@ public sealed class FinancialSnapshotReviewTests
             var initial = TestFactory.Service(store, InitialDate);
             await initial.LoadCanonicalDevelopmentDataAsync();
             await initial.GetFinancialPlanAsync();
-            var review = TestFactory.Service(store, ReviewDate);
+            var review = TestFactory.Service(store, FirstReviewDate);
             var context = await review.GetPeriodReviewContextAsync();
             var originalEnding = context.OriginalPlan.PlannedEndingSavings;
             var result = await review.FinalizePeriodReviewAsync(
@@ -137,7 +490,7 @@ public sealed class FinancialSnapshotReviewTests
 
             var period = Assert.Single(
                 await review.GetHistoryPeriodsAsync());
-            Assert.Equal(30_000m,
+            Assert.Equal(20_322.58m,
                 period.OriginalPlan.PlannedLivingBudget);
             Assert.Equal(35_000m,
                 Assert.IsType<PeriodPlanRevision>(period.Revision)
@@ -163,7 +516,7 @@ public sealed class FinancialSnapshotReviewTests
             await initial.LoadCanonicalDevelopmentDataAsync();
             var originalPlan = await initial.GetFinancialPlanAsync();
             var originalCard = Assert.Single(originalPlan.CreditCards);
-            var review = TestFactory.Service(store, ReviewDate);
+            var review = TestFactory.Service(store, FirstReviewDate);
             var context = await review.GetPeriodReviewContextAsync();
             var cardLines = context.OriginalPlan.PaymentLines
                 .Where(x =>
@@ -224,7 +577,7 @@ public sealed class FinancialSnapshotReviewTests
             var initial = TestFactory.Service(store, InitialDate);
             await initial.LoadCanonicalDevelopmentDataAsync();
             await initial.GetFinancialPlanAsync();
-            var review = TestFactory.Service(store, ReviewDate);
+            var review = TestFactory.Service(store, FirstReviewDate);
             var context = await review.GetPeriodReviewContextAsync();
             var loanLine = context.OriginalPlan.PaymentLines.First(x =>
                 x.SourceType == PlanPaymentSourceType.Loan);
@@ -247,10 +600,10 @@ public sealed class FinancialSnapshotReviewTests
 
             var after = (await review.GetFinancialPlanAsync()).Loans
                 .Single(x => x.Id == loanLine.SourceEntityId);
-            Assert.Equal(before.RemainingInstallmentCount - 1,
+            Assert.Equal(before.RemainingInstallmentCount,
                 after.RemainingInstallmentCount);
             Assert.True(after.IsActive);
-            Assert.Equal(ReviewDate, after.NextPaymentDate);
+            Assert.Equal(FirstReviewDate, after.NextPaymentDate);
             Assert.Contains(
                 (await review.GetFuturePeriodsAsync(periodCount: 1))[0]
                 .MandatoryItems,
@@ -266,7 +619,7 @@ public sealed class FinancialSnapshotReviewTests
             var initial = TestFactory.Service(store, InitialDate);
             await initial.LoadCanonicalDevelopmentDataAsync();
             await initial.GetFinancialPlanAsync();
-            var review = TestFactory.Service(store, ReviewDate);
+            var review = TestFactory.Service(store, FirstReviewDate);
             var context = await review.GetPeriodReviewContextAsync();
             var before = await review.GetFinancialPlanAsync();
 
@@ -345,7 +698,7 @@ public sealed class FinancialSnapshotReviewTests
                 var initial = TestFactory.Service(storeA, InitialDate);
                 await initial.LoadCanonicalDevelopmentDataAsync();
                 await initial.GetFinancialPlanAsync();
-                var review = TestFactory.Service(storeA, ReviewDate);
+                var review = TestFactory.Service(storeA, FirstReviewDate);
                 var context = await review.GetPeriodReviewContextAsync();
                 await review.FinalizePeriodReviewAsync(
                     DefaultDraft(context, 37_500m));
@@ -358,7 +711,7 @@ public sealed class FinancialSnapshotReviewTests
             await using (var storeB = NewStore(pathB))
             {
                 await CopyCanonicalStateAsync(octoberState, storeB);
-                var fresh = TestFactory.Service(storeB, ReviewDate);
+                var fresh = TestFactory.Service(storeB, FirstReviewDate);
                 var projectionB = await fresh.GetFuturePeriodsAsync(
                     periodCount: 3);
 
@@ -395,6 +748,47 @@ public sealed class FinancialSnapshotReviewTests
             Assert.Empty(history.Revisions);
             Assert.Empty(history.Actuals);
         });
+    }
+
+    private static FinancialSnapshot Snapshot(DateOnly date) => new()
+    {
+        SnapshotDate = date,
+        ProjectionAnchorDate = date,
+        ProjectionStartingSavings = 0m,
+        SalaryDay = 10,
+        IsCurrent = true,
+        Source = FinancialSnapshotSource.Initial,
+        CreatedAtUtc = new DateTimeOffset(
+            date.Year,
+            date.Month,
+            date.Day,
+            12,
+            0,
+            0,
+            TimeSpan.Zero)
+    };
+
+    private static PeriodPlanSnapshot Freeze(
+        FinancialPlan source,
+        FinancialSnapshot snapshot)
+    {
+        var plan = source with
+        {
+            Settings = source.Settings with
+            {
+                ProjectionAnchorDate = snapshot.SnapshotDate,
+                ProjectionStartingSavings =
+                    snapshot.ProjectionStartingSavings,
+                SalaryDay = snapshot.SalaryDay
+            }
+        };
+        return new PeriodPlanSnapshotService(
+            TestFactory.ProjectionCalculator(),
+            new SalaryPeriodCalculator(),
+            new SalaryResolver()).Freeze(
+            plan,
+            snapshot,
+            snapshot.CreatedAtUtc);
     }
 
     private static PeriodReviewDraft DefaultDraft(

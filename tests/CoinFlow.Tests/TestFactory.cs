@@ -47,7 +47,11 @@ internal static class TestFactory
         var snapshotService = new FinancialSnapshotService(
             store,
             clock,
-            new PeriodPlanSnapshotService(projectionCalculator));
+            new PeriodPlanSnapshotService(
+                projectionCalculator,
+                new SalaryPeriodCalculator(),
+                new SalaryResolver()),
+            new SalaryPeriodCalculator());
         var comparison = new PlanActualComparisonCalculator();
         var reviewService = new PeriodReviewService(
             store,

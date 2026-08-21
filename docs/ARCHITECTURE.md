@@ -40,6 +40,8 @@ Bağımlılık yönü `App → Application → Domain`; `Infrastructure → Appl
 ## Tarih ve para kuralları
 
 - Maaş dönemi `[başlangıç, bitiş)` semantiğine sahiptir.
+- Snapshot review tarihi `SalaryPeriodCalculator.GetNextReviewDate` ile çözülür ve snapshot'tan strictly sonra gelen ilk maaş tarihidir. Review hareket penceresi `(SnapshotDate, ReviewDate]` semantiğine sahiptir; ödeme atama modu bu checkpoint'ı değiştirmez.
+- Maaş dönemi ortasındaki ilk snapshot'ın yaşam bütçesi `MonthlyLivingBudget × review gün sayısı / tam maaş dönemi gün sayısı` ile iki hane `AwayFromZero` oranlanır. Maaş günündeki snapshot tam aylık bütçeyi kullanır.
 - `ProjectionAnchorDate`, anchor öncesini plan dışı sayar ve ilk projection maaşını anchor'daki veya anchor sonrasındaki ilk maaş olarak belirler.
 - `PaymentAssignmentStrategyResolver`, her maaşta effective tarihi o maaştan büyük olmayan en yeni history kaydını seçer.
 - `SalaryFundingPlanner`, son kapsanan günü izler; her maaşta yalnız yeni coverage aralığını atar. `Previous → Upcoming` geçişinde gap'i catch-up olarak dahil eder, `Upcoming → Previous` geçişinde daha önce fonlanan günleri tekrar saymaz.
@@ -85,7 +87,7 @@ Canonical kart/kredi/plan state + yeni UserSettings baseline
 New Current FinancialSnapshot + New Frozen Plan
 ```
 
-- `PeriodPlanSnapshotService`, mevcut projection motorunun ilk dönem sonucunu kategori toplamları, strategy/payment window context'i ve ödeme satırlarıyla dondurur.
+- `PeriodPlanSnapshotService`, snapshot→ilk sonraki maaş checkpoint aralığını doğrudan dondurur. Ödeme adaylarını mevcut projection/kart motorundan alır, yalnız `(SnapshotDate, ReviewDate]` satırlarını tutar ve ilk kısmi yaşam bütçesini oranlar. Bu historical pencere 12 Aylık projection dönemlerini değiştirmez.
 - `PeriodReviewService`, due kontrolü, actual doğrulaması ve idempotent finalization orkestrasyonunu yapar.
 - `FinancialStateReconciliationService`, başlangıç birikimi semantics'ini değiştirmeden dönem sonu önerisini hesaplar.
 - `CreditCardActualPaymentReconciler`, actual kart ödemesini exact due-date statement ile eşler; kalan principal ve carry faizini canonical karta bir kez uygular.
@@ -93,6 +95,8 @@ New Current FinancialSnapshot + New Frozen Plan
 - `PlanActualComparisonCalculator` ve `HistoryQueryService` yalnız frozen tarihsel veriyi okur. Gelecek ayar değişiklikleri eski planı yeniden hesaplamaz.
 
 SQLite finalization transaction'ı source snapshot'ın hâlâ current olduğunu ve plan için actual bulunmadığını kontrol eder. Unique `PeriodPlanSnapshotId` indeksi hızlı çift dokunma/retry durumunda ikinci actual ve snapshot oluşmasını engeller.
+
+Normal veya gecikmiş finalization yeni snapshot'ı cihazın açıldığı güne değil planın `ReviewAvailableFrom` checkpoint'ına yazar. Böylece 20 Ağustos → 10 Eylül → 10 Ekim zinciri korunur. Tarih ileri alınırsa pending review due olur fakat actual otomatik üretilmez. Henüz actual'ı olmayan eski hatalı current plan, `ReplacePendingFinancialSnapshotPlanAsync` transaction'ıyla yeniden dondurulabilir; completed historical planlar değiştirilemez.
 
 ## Veri ve migration
 

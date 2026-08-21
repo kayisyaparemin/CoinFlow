@@ -172,7 +172,7 @@ public sealed class PeriodReviewService(
             financialPlan,
             plan,
             provisional.Payments,
-            clock.Today);
+            plan.ReviewAvailableFrom);
         var updatedPlan = financialPlan with
         {
             Loans = instruments.Loans,
@@ -183,7 +183,7 @@ public sealed class PeriodReviewService(
         var newBundle = snapshotService.Build(
             updatedPlan,
             provisional.ConfirmedEndingSavings,
-            clock.Today,
+            plan.ReviewAvailableFrom,
             FinancialSnapshotSource.MonthlyUpdate,
             "Dönem güncellemesi",
             current.Id);
@@ -247,10 +247,11 @@ public sealed class PeriodReviewService(
         }
 
         if (validateReviewDate && draft.Flows.Any(x =>
-                x.Date > clock.Today))
+                x.Date <= snapshot.SnapshotDate ||
+                x.Date > plan.ReviewAvailableFrom))
         {
             throw new InvalidOperationException(
-                "Plan dışı gelir veya ödeme tarihi gelecekte olamaz.");
+                "Plan dışı hareket tarihi dönem aralığında olmalıdır.");
         }
 
         var actualId = Guid.NewGuid();
@@ -281,10 +282,12 @@ public sealed class PeriodReviewService(
                     "Ödendi olarak işaretlenen tutar sıfırdan büyük olmalıdır.");
             }
 
-            if (validateReviewDate && input.ActualPaymentDate > clock.Today)
+            if (validateReviewDate && input.ActualPaymentDate is DateOnly date &&
+                (date <= snapshot.SnapshotDate ||
+                 date > plan.ReviewAvailableFrom))
             {
                 throw new InvalidOperationException(
-                    "Gerçek ödeme tarihi gelecekte olamaz.");
+                    "Gerçek ödeme tarihi dönem aralığında olmalıdır.");
             }
 
             var normalizedStatus =
