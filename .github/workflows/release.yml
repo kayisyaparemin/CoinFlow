@@ -37,6 +37,16 @@ jobs:
             exit 1
           }
 
+      - name: Compute stable release metadata
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          version_code=$((100000 + GITHUB_RUN_NUMBER))
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "version_code=$version_code" >> "$GITHUB_OUTPUT"
+
       - name: Set up .NET from global.json
         uses: actions/setup-dotnet@v4
         with:
@@ -83,7 +93,8 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
+          version="${{ steps.version.outputs.version }}"
+          version_code="${{ steps.version.outputs.version_code }}"
           dotnet publish "$PROJECT" \
             -f net8.0-android \
             -c Release \
@@ -91,7 +102,7 @@ jobs:
             -p:AndroidPackageFormat=apk \
             -p:CoinFlowDevBuild=false \
             -p:CoinFlowVersion="$version" \
-            -p:CoinFlowBuildNumber="${GITHUB_RUN_NUMBER}" \
+            -p:CoinFlowBuildNumber="$version_code" \
             -p:CoinFlowCommit="${GITHUB_SHA::7}" \
             -p:AndroidKeyStore=true \
             -p:AndroidSigningKeyStore="$COINFLOW_KEYSTORE" \
@@ -118,10 +129,35 @@ jobs:
           package_id="$($aapt dump badging "$apk" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")"
           [[ "$package_id" == "com.coinflow.mobile" ]] || { echo "Unexpected package id: $package_id" >&2; exit 1; }
           mkdir -p artifacts
-          output="artifacts/Mizan-${GITHUB_REF_NAME}.apk"
+          output="artifacts/Mizan-${{ steps.version.outputs.version }}.apk"
           cp "$apk" "$output"
           unzip -t "$output" >/dev/null
           echo "artifact_path=$output" >> "$GITHUB_OUTPUT"
+
+      - name: Write stable release notes
+        shell: bash
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          cat > release-notes.md <<NOTES
+          # Mizan $version
+
+          Mizan'ın kararlı üretim sürümü.
+
+          Mizan, bugünkü finansal durumundan yola çıkarak önündeki maaş dönemlerini görmene ve finansal kararların etkisini simüle etmene yardımcı olur.
+
+          ### İlk sürümde
+
+          - Güncel finansal durum
+          - 12 maaş dönemlik ileriye bakış
+          - Kredi ve kredi kartı ödeme planları
+          - Maaş kullanım düzeni
+          - Tahmini faiz ve finansman açığı
+          - Finansal karar simülatörü
+          - Planı uygulama
+          - Plan vs Gerçek dönem takibi
+          - Finansal geçmiş
+          - Ne zaman karşılayabilirim? hesaplaması
+          NOTES
 
       - name: Create stable GitHub Release
         env:
@@ -132,7 +168,7 @@ jobs:
           gh release create "$GITHUB_REF_NAME" "${{ steps.apk.outputs.artifact_path }}" \
             --verify-tag \
             --title "Mizan $GITHUB_REF_NAME" \
-            --generate-notes
+            --notes-file release-notes.md
 
       - name: Remove temporary keystore
         if: always()

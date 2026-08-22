@@ -129,4 +129,4 @@ SQLite şema sürümü 8'dir. v8 additive migration snapshot, frozen plan, revis
 
 ## CI/CD
 
-Mevcut GitHub Actions development ve stable workflow'ları korunmuştur. Development hattı test edip `Mizan-dev-latest.apk` prerelease asset'i üretir. Stable hattı repository secret'larındaki release keystore ile `Mizan-vX.Y.Z.apk` üretir; release anahtarı repoya yazılmaz.
+Mevcut GitHub Actions development ve stable workflow'ları korunmuştur. Development hattı test edip `Mizan-dev-latest.apk` prerelease asset'i üretir. Stable hattı repository secret'larındaki release keystore ile `Mizan-X.Y.Z.apk` üretir; release anahtarı repoya yazılmaz.
