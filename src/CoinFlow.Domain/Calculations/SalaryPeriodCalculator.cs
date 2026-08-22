@@ -53,6 +53,16 @@ public sealed class SalaryPeriodCalculator
             : containingPeriod.End;
     }
 
+    public DateOnly GetFirstSalaryStrictlyAfter(
+        DateOnly anchorDate,
+        int salaryDay)
+    {
+        var first = GetFirstSalaryOnOrAfter(anchorDate, salaryDay);
+        return first > anchorDate
+            ? first
+            : CalendarRules.AddMonthsKeepingDay(first, 1, salaryDay);
+    }
+
     public DateOnly GetNextReviewDate(
         DateOnly snapshotDate,
         int salaryDay) => GetPeriod(snapshotDate, salaryDay).End;

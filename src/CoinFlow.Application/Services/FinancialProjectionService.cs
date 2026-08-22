@@ -9,9 +9,14 @@ public sealed class FinancialProjectionService(
 {
     public DashboardSnapshot BuildDashboard(
         FinancialPlan plan,
-        DateOnly asOf)
+        DateOnly asOf,
+        DateOnly? firstSalaryDate = null)
     {
-        var projection = projectionCalculator.CalculatePlan(plan, asOf, 12);
+        var projection = projectionCalculator.CalculatePlan(
+            plan,
+            asOf,
+            12,
+            firstSalaryDate);
         var periods = projection.Periods;
         var current = periods[0];
         var preFirst = projection.FundingPlan.PreFirstSalaryObligations
@@ -59,6 +64,7 @@ public sealed class FinancialProjectionService(
     public IReadOnlyList<SalaryPeriodProjection> BuildFuturePeriods(
         FinancialPlan plan,
         DateOnly asOf,
-        int periodCount) =>
-        projectionCalculator.Calculate(plan, asOf, periodCount);
+        int periodCount,
+        DateOnly? firstSalaryDate = null) =>
+        projectionCalculator.Calculate(plan, asOf, periodCount, firstSalaryDate);
 }

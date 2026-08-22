@@ -13,21 +13,25 @@ public sealed class FinancialProjectionCalculator(
     public IReadOnlyList<SalaryPeriodProjection> Calculate(
         FinancialPlan plan,
         DateOnly asOf,
-        int periodCount = 12) =>
-        CalculatePlan(plan, asOf, periodCount).Periods;
+        int periodCount = 12,
+        DateOnly? firstSalaryDate = null) =>
+        CalculatePlan(plan, asOf, periodCount, firstSalaryDate).Periods;
 
     public FinancialProjectionResult CalculatePlan(
         FinancialPlan plan,
         DateOnly asOf,
-        int periodCount = 12)
+        int periodCount = 12,
+        DateOnly? firstSalaryDate = null)
     {
         Validate(plan);
         var anchor = plan.Settings.ProjectionAnchorDate == default
             ? asOf
             : plan.Settings.ProjectionAnchorDate;
-        var firstSalary = salaryPeriodCalculator.GetFirstSalaryOnOrAfter(
-            anchor,
-            plan.Settings.SalaryDay);
+        var firstSalary = firstSalaryDate ??
+                          salaryPeriodCalculator.GetFirstSalaryOnOrAfter(
+                              anchor,
+                              plan.Settings.SalaryDay);
+        ValidateProjectionBoundary(anchor, firstSalary, plan.Settings.SalaryDay);
         var periods = BuildPeriods(
             firstSalary,
             plan.Settings.SalaryDay,
@@ -301,6 +305,28 @@ public sealed class FinancialProjectionCalculator(
         {
             throw new InvalidOperationException(
                 "Planlanan büyük harcama negatif olamaz.");
+        }
+    }
+
+    private void ValidateProjectionBoundary(
+        DateOnly anchor,
+        DateOnly firstSalary,
+        int salaryDay)
+    {
+        if (salaryPeriodCalculator.GetPeriod(firstSalary, salaryDay).Start !=
+            firstSalary)
+        {
+            throw new InvalidOperationException(
+                "Projection başlangıç maaşı geçerli bir maaş tarihi olmalıdır.");
+        }
+
+        var earliest = salaryPeriodCalculator.GetFirstSalaryOnOrAfter(
+            anchor,
+            salaryDay);
+        if (firstSalary < earliest)
+        {
+            throw new InvalidOperationException(
+                "Projection başlangıç maaşı planlama anchor tarihinden önce olamaz.");
         }
     }
 

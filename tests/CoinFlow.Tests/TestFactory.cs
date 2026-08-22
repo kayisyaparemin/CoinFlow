@@ -79,6 +79,8 @@ internal static class TestFactory
             new PaymentAssignmentStrategyResolver(
                 new SalaryPeriodCalculator()),
             new SalaryPeriodCalculator(),
+            new ProjectionBoundaryResolver(
+                new SalaryPeriodCalculator()),
             snapshotService,
             historicalPlanRevisionService,
             reviewService,

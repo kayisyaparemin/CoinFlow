@@ -13,6 +13,7 @@ public sealed class CoinFlowService(
     TargetAmountCalculator targetAmountCalculator,
     PaymentAssignmentStrategyResolver strategyResolver,
     SalaryPeriodCalculator salaryPeriodCalculator,
+    ProjectionBoundaryResolver projectionBoundaryResolver,
     FinancialSnapshotService snapshotService,
     HistoricalPlanRevisionService historicalPlanRevisionService,
     PeriodReviewService reviewService,
@@ -101,13 +102,16 @@ public sealed class CoinFlowService(
         CancellationToken cancellationToken = default)
     {
         var date = asOf ?? clock.Today;
-        var plan = await GetFinancialPlanAsync(cancellationToken);
-        if (!CanBuildProjection(plan))
+        var query = await GetProjectionPlanAsync(date, cancellationToken);
+        if (!CanBuildProjection(query.Plan))
         {
             return null;
         }
 
-        return projectionService.BuildDashboard(plan, date);
+        return projectionService.BuildDashboard(
+            query.Plan,
+            date,
+            query.Boundary?.FirstUnrealizedSalaryDate);
     }
 
     public async Task<IReadOnlyList<SalaryPeriodProjection>>
@@ -117,13 +121,17 @@ public sealed class CoinFlowService(
             CancellationToken cancellationToken = default)
     {
         var date = asOf ?? clock.Today;
-        var plan = await GetFinancialPlanAsync(cancellationToken);
-        if (!CanBuildProjection(plan))
+        var query = await GetProjectionPlanAsync(date, cancellationToken);
+        if (!CanBuildProjection(query.Plan))
         {
             return [];
         }
 
-        return projectionService.BuildFuturePeriods(plan, date, periodCount);
+        return projectionService.BuildFuturePeriods(
+            query.Plan,
+            date,
+            periodCount,
+            query.Boundary?.FirstUnrealizedSalaryDate);
     }
 
     public async Task<SimulationResult> SimulateAsync(
@@ -132,14 +140,18 @@ public sealed class CoinFlowService(
         CancellationToken cancellationToken = default)
     {
         var date = asOf ?? clock.Today;
-        var plan = await GetFinancialPlanAsync(cancellationToken);
-        if (!CanBuildProjection(plan))
+        var query = await GetProjectionPlanAsync(date, cancellationToken);
+        if (!CanBuildProjection(query.Plan))
         {
             throw new InvalidOperationException(
                 "Simülasyon yapabilmek için önce maaşını ve maaş kullanım düzenini oluştur.");
         }
 
-        return simulationCalculator.Calculate(plan, date, request);
+        return simulationCalculator.Calculate(
+            query.Plan,
+            date,
+            request,
+            firstSalaryDate: query.Boundary?.FirstUnrealizedSalaryDate);
     }
 
     public async Task<SalaryPeriodProjection?> FindTargetPeriodAsync(
@@ -773,7 +785,8 @@ public sealed class CoinFlowService(
         GetPaymentAssignmentStrategyOverviewAsync(
             CancellationToken cancellationToken = default)
     {
-        var plan = await GetFinancialPlanAsync(cancellationToken);
+        var query = await GetProjectionPlanAsync(clock.Today, cancellationToken);
+        var plan = query.Plan;
         var history = plan.PaymentAssignmentStrategies
             .OrderBy(x => x.EffectiveFromSalaryDate)
             .ThenBy(x => x.CreatedAt)
@@ -781,8 +794,11 @@ public sealed class CoinFlowService(
         var anchor = plan.Settings.ProjectionAnchorDate == default
             ? clock.Today
             : plan.Settings.ProjectionAnchorDate;
-        var firstProjectionSalary = salaryPeriodCalculator
-            .GetFirstSalaryOnOrAfter(anchor, plan.Settings.SalaryDay);
+        var firstProjectionSalary =
+            query.Boundary?.FirstUnrealizedSalaryDate ??
+            salaryPeriodCalculator.GetFirstSalaryOnOrAfter(
+                anchor,
+                plan.Settings.SalaryDay);
         var referenceSalary = salaryPeriodCalculator
             .GetPeriod(clock.Today, plan.Settings.SalaryDay)
             .Start;
@@ -830,16 +846,19 @@ public sealed class CoinFlowService(
             DateOnly effectiveSalaryDate,
             CancellationToken cancellationToken = default)
     {
-        var plan = await GetFinancialPlanAsync(cancellationToken);
+        var query = await GetProjectionPlanAsync(clock.Today, cancellationToken);
+        var plan = query.Plan;
         ValidateStrategyDate(plan, effectiveSalaryDate);
         var currentMode = ResolveModeBeforeChange(plan, effectiveSalaryDate);
         var request = CreateStrategySimulationRequest(
             newMode,
             effectiveSalaryDate,
             "Maaş kullanım düzeni önizlemesi");
-        var firstSalary = salaryPeriodCalculator.GetFirstSalaryOnOrAfter(
-            plan.Settings.ProjectionAnchorDate,
-            plan.Settings.SalaryDay);
+        var firstSalary =
+            query.Boundary?.FirstUnrealizedSalaryDate ??
+            salaryPeriodCalculator.GetFirstSalaryOnOrAfter(
+                plan.Settings.ProjectionAnchorDate,
+                plan.Settings.SalaryDay);
         var effectiveIndex = Math.Max(
             0,
             ((effectiveSalaryDate.Year - firstSalary.Year) * 12) +
@@ -848,7 +867,8 @@ public sealed class CoinFlowService(
             plan,
             clock.Today,
             request,
-            Math.Min(60, Math.Max(12, effectiveIndex + 1)));
+            Math.Min(60, Math.Max(12, effectiveIndex + 1)),
+            firstSalary);
         var row = result.Rows.Single(x =>
             x.Scenario.PeriodStart == effectiveSalaryDate);
         return new PaymentStrategyChangePreview(
@@ -993,6 +1013,48 @@ public sealed class CoinFlowService(
         plan.Salaries.Count > 0 &&
         plan.PaymentAssignmentStrategies.Count > 0 &&
         plan.Settings.ProjectionAnchorDate != default;
+
+    private async Task<ProjectionQueryPlan> GetProjectionPlanAsync(
+        DateOnly asOf,
+        CancellationToken cancellationToken)
+    {
+        var plan = await GetFinancialPlanAsync(cancellationToken);
+        if (!CanBuildProjection(plan))
+        {
+            return new ProjectionQueryPlan(plan, null);
+        }
+
+        var history = await store.GetFinancialHistoryAsync(cancellationToken);
+        var currentSnapshot = FinancialSnapshotService.LatestCurrent(history);
+        if (currentSnapshot is null)
+        {
+            return new ProjectionQueryPlan(plan, null);
+        }
+
+        var boundary = projectionBoundaryResolver.Resolve(
+            history,
+            currentSnapshot,
+            plan.Settings,
+            asOf);
+        return new ProjectionQueryPlan(
+            ApplyProjectionBoundary(plan, boundary),
+            boundary);
+    }
+
+    private static FinancialPlan ApplyProjectionBoundary(
+        FinancialPlan plan,
+        ProjectionBoundary boundary) => plan with
+    {
+        Settings = plan.Settings with
+        {
+            ProjectionStartingSavings = boundary.StartingSavings,
+            ProjectionAnchorDate = boundary.ProjectionAnchorDate
+        }
+    };
+
+    private sealed record ProjectionQueryPlan(
+        FinancialPlan Plan,
+        ProjectionBoundary? Boundary);
 
     private static void ValidateCreditCardPaymentSettings(CreditCard card)
     {

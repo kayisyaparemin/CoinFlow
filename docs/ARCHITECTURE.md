@@ -8,6 +8,7 @@ CoinFlow'un merkezi çıktısı `SalaryPeriodProjection` modelidir. Dashboard, 1
 FinancialPlan
    ├─ SalaryPeriodCalculator
    ├─ ProjectionAnchorDate filter
+   ├─ ProjectionBoundaryResolver (history'den ilk unrealized maaş)
    ├─ PaymentAssignmentStrategyResolver (effective-dated history)
    ├─ SalaryResolver + IncomeProjectionCalculator
    ├─ LoanScheduleCalculator
@@ -21,7 +22,7 @@ FinancialPlan
  Dashboard / 12 Aylık / Simulator baseline + scenario
 ```
 
-Son finalized current snapshot, canonical `UserSettings.ProjectionStartingSavings` ve `ProjectionAnchorDate` ile aynı başlangıç semantiğini taşır. İlk kurulum ve aylık yenileme `FinancialSnapshotService` üzerinden aynı `FinancialPlan` biçimini üretir; projection veya simulator için ikinci bir hesap motoru yoktur.
+Current/future query'leri, latest current snapshot ve history üzerinden runtime projection boundary türetir. İlk kurulumda `ProjectionAnchorDate` anchor'daki veya sonraki ilk maaşı seçebilir; finalized `PeriodActual` sonucu oluşan snapshot'ta ise `PeriodActual.ResultFinancialSnapshotId` provenance'ı kullanılır ve ilk unrealized maaş kapatılan `PeriodEnd` checkpoint'ından strictly sonra çözülür. `NextProjectionSalaryDate` gibi ikinci bir kalıcı cursor tutulmaz; projection veya simulator için ikinci bir hesap motoru yoktur.
 
 `SalaryPeriodDetailPresenter`, hesaplanmış `SalaryPeriodProjection` sonucunu presentation-only summary, flow, kategori, faiz, transition ve bağımsız ödeme satırlarına ayırır. Formül çalıştırmaz. 12 Aylık ve Simulator aynı `SalaryPeriodDetailPage` / `SalaryPeriodDetailViewModel` ikilisini kullanır; Simulator yalnız aynı modele baseline karşılaştırmasını ekler. Shell navigation hesaplanmış result nesnesini taşır, detail page finans motorunu yeniden kurmaz.
 
@@ -43,6 +44,7 @@ Bağımlılık yönü `App → Application → Domain`; `Infrastructure → Appl
 - Snapshot review tarihi `SalaryPeriodCalculator.GetNextReviewDate` ile çözülür ve snapshot'tan strictly sonra gelen ilk maaş tarihidir. Review hareket penceresi `(SnapshotDate, ReviewDate]` semantiğine sahiptir; ödeme atama modu bu checkpoint'ı değiştirmez.
 - Maaş dönemi ortasındaki ilk snapshot'ın yaşam bütçesi `MonthlyLivingBudget × review gün sayısı / tam maaş dönemi gün sayısı` ile iki hane `AwayFromZero` oranlanır. Maaş günündeki snapshot tam aylık bütçeyi kullanır.
 - `ProjectionAnchorDate`, anchor öncesini plan dışı sayar ve ilk projection maaşını anchor'daki veya anchor sonrasındaki ilk maaş olarak belirler.
+- Actual finalization sonrası current/future projection, obligation anchor'ını kapatılan checkpoint'te tutar fakat ilk projection maaşını strictly sonrasına taşır. Böylece taşınan ödenmemiş yükümlülükler kaybolmaz, kapatılmış checkpoint maaşı ise tekrar income olmaz.
 - `PaymentAssignmentStrategyResolver`, her maaşta effective tarihi o maaştan büyük olmayan en yeni history kaydını seçer.
 - `SalaryFundingPlanner`, son kapsanan günü izler; her maaşta yalnız yeni coverage aralığını atar. `Previous → Upcoming` geçişinde gap'i catch-up olarak dahil eder, `Upcoming → Previous` geçişinde daha önce fonlanan günleri tekrar saymaz.
 - `PreviousPeriod` penceresi `(önceki maaş, mevcut maaş]` olduğundan maaş günü ödemesi hiçbir zaman bir ay geriye kaymaz.
@@ -89,6 +91,7 @@ New Current FinancialSnapshot + New Frozen Plan
 
 - `PeriodPlanSnapshotService`, snapshot→ilk sonraki maaş checkpoint aralığını doğrudan dondurur. Ödeme adaylarını mevcut projection/kart motorundan alır, yalnız `(SnapshotDate, ReviewDate]` satırlarını tutar ve ilk kısmi yaşam bütçesini oranlar. Bu historical pencere 12 Aylık projection dönemlerini değiştirmez.
 - `PeriodReviewService`, due kontrolü, actual doğrulaması ve idempotent finalization orkestrasyonunu yapar.
+- `ProjectionBoundaryResolver`, latest current snapshot'ın bir `PeriodActual.ResultFinancialSnapshotId` sonucu olup olmadığını history'den anlık çözer. Actual-generated snapshot için closed checkpoint `PeriodActual.PeriodEnd`, first unrealized salary ise salary calendar'da strictly sonraki maaştır.
 - `FinancialStateReconciliationService`, başlangıç birikimi semantics'ini değiştirmeden dönem sonu önerisini hesaplar.
 - `CreditCardActualPaymentReconciler`, actual kart ödemesini exact due-date statement ile eşler; kalan principal ve carry faizini canonical karta bir kez uygular.
 - `FinancialInstrumentReconciliationService`, ödenen kredi/taksitleri ilerletir; ödenmeyen veya kaçırılmış yükümlülükleri yeni anchor'a taşıyarak gelecek plandan kaybolmalarını engeller.

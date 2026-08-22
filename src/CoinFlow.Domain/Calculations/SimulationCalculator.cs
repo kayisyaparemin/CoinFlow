@@ -89,18 +89,21 @@ public sealed class SimulationCalculator(
         FinancialPlan currentPlan,
         DateOnly asOf,
         SimulationRequest request,
-        int periodCount = 12)
+        int periodCount = 12,
+        DateOnly? firstSalaryDate = null)
     {
         Validate(request);
         var baseline = projectionCalculator.Calculate(
             currentPlan,
             asOf,
-            periodCount);
+            periodCount,
+            firstSalaryDate);
         var scenarioPlan = BuildScenarioPlan(currentPlan, request);
         var scenario = projectionCalculator.Calculate(
             scenarioPlan,
             asOf,
-            periodCount);
+            periodCount,
+            firstSalaryDate);
         var rows = baseline
             .Zip(scenario, (current, planned) =>
                 new SimulationImpactRow(current, planned))
