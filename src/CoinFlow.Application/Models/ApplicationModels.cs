@@ -59,3 +59,20 @@ public sealed record SimulationApplyResult(
     SimulationApplyDestination Destination,
     bool AlreadyApplied,
     string Message);
+
+public sealed record SimulationPersistenceBatch(
+    IReadOnlyList<PlannedLargeExpense> PlannedLargeExpenses,
+    IReadOnlyList<TemporaryPaymentPlan> PaymentPlans,
+    IReadOnlyList<CreditCard> CreditCards,
+    IReadOnlyList<OneTimeIncome> OtherIncomes,
+    IReadOnlyList<SalaryScheduleEntry> Salaries,
+    IReadOnlyList<PaymentAssignmentStrategy> PaymentAssignmentStrategies)
+{
+    public static readonly SimulationPersistenceBatch Empty = new(
+        [],
+        [],
+        [],
+        [],
+        [],
+        []);
+}

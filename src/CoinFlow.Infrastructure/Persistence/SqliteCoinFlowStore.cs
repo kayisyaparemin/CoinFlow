@@ -1,5 +1,6 @@
 using System.Globalization;
 using CoinFlow.Application.Abstractions;
+using CoinFlow.Application.Models;
 using CoinFlow.Domain.Calculations;
 using CoinFlow.Domain.Models;
 using SQLite;
@@ -516,6 +517,79 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         await _database.ExecuteAsync(
             "DELETE FROM planned_large_expenses WHERE Id = ?",
             Key(id));
+    }
+
+    public async Task ApplySimulationBatchAsync(
+        SimulationPersistenceBatch batch,
+        CancellationToken cancellationToken = default)
+    {
+        await InitializeAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        await _database.RunInTransactionAsync(connection =>
+        {
+            foreach (var expense in batch.PlannedLargeExpenses)
+            {
+                connection.InsertOrReplace(ToRow(expense));
+            }
+
+            foreach (var plan in batch.PaymentPlans)
+            {
+                connection.InsertOrReplace(new PaymentPlanRow
+                {
+                    Id = Key(plan.Id),
+                    Name = plan.Name,
+                    Kind = (int)plan.Kind,
+                    OriginalAmount = plan.OriginalAmount,
+                    TotalRepaymentAmount = plan.TotalRepaymentAmount
+                });
+                connection.Execute(
+                    "DELETE FROM payment_installments WHERE PlanId = ?",
+                    Key(plan.Id));
+                foreach (var installment in plan.Installments)
+                {
+                    connection.Insert(
+                        ToRow(installment with { PlanId = plan.Id }));
+                }
+            }
+
+            foreach (var card in batch.CreditCards)
+            {
+                connection.InsertOrReplace(ToRow(card));
+                connection.Execute(
+                    "DELETE FROM card_installments WHERE CreditCardId = ?",
+                    Key(card.Id));
+                foreach (var charge in card.Charges)
+                {
+                    connection.Insert(
+                        ToRow(charge with { CreditCardId = card.Id }));
+                }
+
+                connection.Execute(
+                    "DELETE FROM credit_card_payment_plans WHERE CreditCardId = ?",
+                    Key(card.Id));
+                foreach (var payment in card.PaymentPlans)
+                {
+                    connection.Insert(
+                        ToRow(payment with { CreditCardId = card.Id }));
+                }
+            }
+
+            foreach (var income in batch.OtherIncomes)
+            {
+                connection.InsertOrReplace(ToRow(income));
+            }
+
+            foreach (var salary in batch.Salaries)
+            {
+                connection.InsertOrReplace(ToRow(salary));
+            }
+
+            foreach (var strategy in batch.PaymentAssignmentStrategies)
+            {
+                connection.InsertOrReplace(ToRow(strategy));
+            }
+        });
     }
 
     public async Task<FinancialHistoryData> GetFinancialHistoryAsync(

@@ -94,15 +94,28 @@ public sealed class SimulationCalculator(
         DateOnly asOf,
         SimulationRequest request,
         int periodCount = 12,
+        DateOnly? firstSalaryDate = null) =>
+        Calculate(
+            currentPlan,
+            asOf,
+            [request],
+            periodCount,
+            firstSalaryDate);
+
+    public SimulationResult Calculate(
+        FinancialPlan currentPlan,
+        DateOnly asOf,
+        IReadOnlyList<SimulationRequest> requests,
+        int periodCount = 12,
         DateOnly? firstSalaryDate = null)
     {
-        Validate(request);
+        Validate(requests);
         var baseline = projectionCalculator.Calculate(
             currentPlan,
             asOf,
             periodCount,
             firstSalaryDate);
-        var scenarioPlan = BuildScenarioPlan(currentPlan, request);
+        var scenarioPlan = BuildScenarioPlan(currentPlan, requests);
         var scenario = projectionCalculator.Calculate(
             scenarioPlan,
             asOf,
@@ -126,9 +139,13 @@ public sealed class SimulationCalculator(
             .Max();
         var recovery = scenario.FirstOrDefault(x =>
             x.HasCarryOverDeficit && x.EndingProjectedSavings >= 0m);
-        var totalCost = ResolveTotalCost(request);
-        decimal? financingCost = request.Type == SimulationScenarioType.FinancingLoan
-            ? (request.TotalRepaymentAmount ?? request.Amount) - request.Amount
+        var totalCost = requests.Sum(ResolveTotalCost);
+        var financingCosts = requests
+            .Where(x => x.Type == SimulationScenarioType.FinancingLoan)
+            .Select(x => (x.TotalRepaymentAmount ?? x.Amount) - x.Amount)
+            .ToArray();
+        decimal? financingCost = financingCosts.Length > 0
+            ? financingCosts.Sum()
             : null;
         var risk = new SimulationRiskSummary(
             scenario.Min(x => x.AvailableAfterMandatory),
@@ -160,13 +177,31 @@ public sealed class SimulationCalculator(
 
     public FinancialPlan BuildScenarioPlan(
         FinancialPlan plan,
-        SimulationRequest request)
+        SimulationRequest request) =>
+        BuildScenarioPlan(plan, [request]);
+
+    public FinancialPlan BuildScenarioPlan(
+        FinancialPlan plan,
+        IReadOnlyList<SimulationRequest> requests)
     {
-        Validate(request);
-        request = request.ScenarioId == Guid.Empty
-            ? request with { ScenarioId = Guid.NewGuid() }
-            : request;
-        return request.Type switch
+        Validate(requests);
+        var scenarioPlan = plan;
+        foreach (var request in requests.OrderBy(SortKey))
+        {
+            scenarioPlan = BuildScenarioPlanCore(
+                scenarioPlan,
+                request.ScenarioId == Guid.Empty
+                    ? request with { ScenarioId = Guid.NewGuid() }
+                    : request);
+        }
+
+        return scenarioPlan;
+    }
+
+    private FinancialPlan BuildScenarioPlanCore(
+        FinancialPlan plan,
+        SimulationRequest request) =>
+        request.Type switch
         {
             SimulationScenarioType.CashPurchase =>
                 AddLargeExpense(plan, request),
@@ -223,7 +258,14 @@ public sealed class SimulationCalculator(
                 AddCardFullPayment(plan, request),
             _ => throw new ArgumentOutOfRangeException(nameof(request.Type))
         };
-    }
+
+    private static (DateOnly Date, int Type, string Name, decimal Amount, Guid Id)
+        SortKey(SimulationRequest request) => (
+            request.EffectiveSalaryDate ?? request.StartDate,
+            (int)request.Type,
+            request.Name.Trim(),
+            request.Amount,
+            request.ScenarioId);
 
     private static FinancialPlan AddPaymentStrategy(
         FinancialPlan plan,
@@ -591,6 +633,40 @@ public sealed class SimulationCalculator(
         {
             throw new InvalidOperationException(
                 "İlk ödeme tarihi başlangıç tarihinden önce olamaz.");
+        }
+    }
+
+    public static void Validate(IReadOnlyList<SimulationRequest> requests)
+    {
+        if (requests.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Simülasyon için en az bir koşul eklemelisin.");
+        }
+
+        foreach (var request in requests)
+        {
+            Validate(request);
+        }
+
+        var conflictingSalary = requests
+            .Where(x => x.Type == SimulationScenarioType.SalaryChange)
+            .GroupBy(x => x.StartDate)
+            .FirstOrDefault(x => x.Count() > 1);
+        if (conflictingSalary is not null)
+        {
+            throw new InvalidOperationException(
+                $"{conflictingSalary.Key.ToString("dd MMMM yyyy", TurkishCulture)} için iki farklı maaş değişikliği var. Simülasyonu çalıştırmadan önce birini düzenle veya kaldır.");
+        }
+
+        var conflictingStrategy = requests
+            .Where(x => x.Type == SimulationScenarioType.PaymentStrategyChange)
+            .GroupBy(x => x.EffectiveSalaryDate ?? x.StartDate)
+            .FirstOrDefault(x => x.Count() > 1);
+        if (conflictingStrategy is not null)
+        {
+            throw new InvalidOperationException(
+                $"{conflictingStrategy.Key.ToString("dd MMMM yyyy", TurkishCulture)} maaşı için iki farklı kullanım düzeni değişikliği var. Simülasyonu çalıştırmadan önce birini düzenle veya kaldır.");
         }
     }
 }

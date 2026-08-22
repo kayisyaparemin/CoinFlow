@@ -71,14 +71,88 @@
                         <Entry Text="{Binding TotalRepaymentAmount}" Keyboard="Numeric" />
                     </VerticalStackLayout>
 
-                    <Button Text="Simülasyon Yap" Command="{Binding CalculateCommand}" />
+                    <Button Text="{Binding AddConditionButtonText}"
+                            Command="{Binding AddConditionCommand}" />
                 </VerticalStackLayout>
             </Border>
 
             <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" />
             <Label Text="{Binding StatusMessage}" IsVisible="{Binding HasStatus}" TextColor="{StaticResource Error}" />
 
-            <VerticalStackLayout IsVisible="{Binding HasResults}" Spacing="14">
+            <Border IsVisible="{Binding IsPlanAvailable}">
+                <VerticalStackLayout Spacing="12">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                        <Label Text="Simülasyon Planı" Style="{StaticResource SectionTitle}" />
+                        <Label Grid.Column="1"
+                               Text="{Binding DraftConditionCountText}"
+                               Style="{StaticResource MutedText}" />
+                    </Grid>
+                    <Label Text="Önce denemek istediğin en az bir koşul ekle."
+                           IsVisible="{Binding HasNoDraftConditions}"
+                           Style="{StaticResource MutedText}" />
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding DraftConditions}"
+                                         IsVisible="{Binding HasDraftConditions}"
+                                         Spacing="8">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate>
+                                <Border Padding="12"
+                                        BackgroundColor="{StaticResource ProjectionSurface}">
+                                    <VerticalStackLayout Spacing="7">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                            <VerticalStackLayout Spacing="3">
+                                                <Label Text="{Binding DateText}"
+                                                       FontFamily="OpenSansSemibold" />
+                                                <Label Text="{Binding SummaryText}"
+                                                       Style="{StaticResource MutedText}" />
+                                                <Label Text="{Binding TypeText}"
+                                                       FontSize="12"
+                                                       TextColor="{StaticResource ProjectionText}" />
+                                            </VerticalStackLayout>
+                                            <HorizontalStackLayout Grid.Column="1"
+                                                                   Spacing="6"
+                                                                   VerticalOptions="Center">
+                                                <Button Text="Düzenle"
+                                                        Command="{Binding Source={x:Reference PageRoot}, Path=BindingContext.EditConditionCommand}"
+                                                        CommandParameter="{Binding .}"
+                                                        Style="{StaticResource SecondaryButton}" />
+                                                <Button Text="Sil"
+                                                        Command="{Binding Source={x:Reference PageRoot}, Path=BindingContext.RemoveConditionCommand}"
+                                                        CommandParameter="{Binding .}"
+                                                        Style="{StaticResource SecondaryButton}" />
+                                            </HorizontalStackLayout>
+                                        </Grid>
+                                    </VerticalStackLayout>
+                                </Border>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                        <Button Text="{Binding RunSimulationButtonText}"
+                                Command="{Binding CalculateCommand}"
+                                IsEnabled="{Binding CanRunSimulation}" />
+                        <Button Grid.Column="1"
+                                Text="Planı Temizle"
+                                Command="{Binding ClearDraftCommand}"
+                                IsVisible="{Binding HasMultipleDraftConditions}"
+                                Style="{StaticResource SecondaryButton}" />
+                    </Grid>
+                </VerticalStackLayout>
+            </Border>
+
+            <Border IsVisible="{Binding HasStaleResult}"
+                    BackgroundColor="{StaticResource WarningSurface}">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Plan değişti."
+                           Style="{StaticResource SectionTitle}" />
+                    <Label Text="Yeni sonucu görmek için simülasyonu güncelle."
+                           TextColor="{StaticResource WarningText}" />
+                    <Button Text="Simülasyonu Güncelle"
+                            Command="{Binding CalculateCommand}"
+                            IsEnabled="{Binding CanRunSimulation}" />
+                </VerticalStackLayout>
+            </Border>
+
+            <VerticalStackLayout IsVisible="{Binding HasCurrentResults}" Spacing="14">
                 <Border BackgroundColor="{StaticResource SoftSky}">
                     <VerticalStackLayout Spacing="10">
                         <Label Text="BU PLANLA ÖNÜNDE NE VAR?" Style="{StaticResource Eyebrow}" />

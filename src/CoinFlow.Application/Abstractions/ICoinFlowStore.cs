@@ -1,3 +1,4 @@
+using CoinFlow.Application.Models;
 using CoinFlow.Domain.Models;
 
 namespace CoinFlow.Application.Abstractions;
@@ -71,6 +72,9 @@ public interface ICoinFlowStore
         CancellationToken cancellationToken = default);
     Task DeletePlannedLargeExpenseAsync(
         Guid id,
+        CancellationToken cancellationToken = default);
+    Task ApplySimulationBatchAsync(
+        SimulationPersistenceBatch batch,
         CancellationToken cancellationToken = default);
 
     Task<FinancialHistoryData> GetFinancialHistoryAsync(

@@ -1,6 +1,7 @@
 using CoinFlow.Domain.Calculations;
 using CoinFlow.Domain.Models;
 using CoinFlow.Application.Models;
+using CoinFlow.Application.Services;
 using CoinFlow.Infrastructure.Persistence;
 
 namespace CoinFlow.Tests;
@@ -366,6 +367,209 @@ public sealed class SimulationTests
     }
 
     [Fact]
+    public async Task CompositeSimulation_SixConditionsShareOneHypotheticalWorld_WithoutCanonicalMutation()
+    {
+        await WithStore(async store =>
+        {
+            var service = TestFactory.Service(store);
+            var before = await service.GetFinancialPlanAsync();
+            var requests = CompositeRequests(before);
+
+            var result = await service.SimulateAsync(requests);
+            var after = await service.GetFinancialPlanAsync();
+            var scenarioPlan = new SimulationCalculator(_projection, _installments)
+                .BuildScenarioPlan(before, requests);
+
+            Assert.Equal(before.PaymentPlans.Count, after.PaymentPlans.Count);
+            Assert.Equal(before.PlannedLargeExpenses.Count, after.PlannedLargeExpenses.Count);
+            Assert.Equal(before.OtherIncomes.Count, after.OtherIncomes.Count);
+            Assert.Equal(before.Salaries.Count, after.Salaries.Count);
+            Assert.Equal(
+                before.CreditCards.Single().Charges.Count,
+                after.CreditCards.Single().Charges.Count);
+
+            Assert.Equal(
+                before.CreditCards.Single().Charges.Count + 12,
+                scenarioPlan.CreditCards.Single().Charges.Count);
+            Assert.Equal(before.PaymentPlans.Count + 2, scenarioPlan.PaymentPlans.Count);
+            Assert.Contains(scenarioPlan.OtherIncomes, x => x.Id == requests[4].ScenarioId);
+            Assert.Contains(scenarioPlan.Salaries, x => x.Id == requests[5].ScenarioId);
+            Assert.Contains(result.Scenario, x =>
+                x.CreditCardPayments > result.Baseline.Single(y => y.PeriodStart == x.PeriodStart).CreditCardPayments);
+            Assert.Contains(result.Scenario, x =>
+                x.OtherScheduledPayments > result.Baseline.Single(y => y.PeriodStart == x.PeriodStart).OtherScheduledPayments);
+            Assert.Contains(result.Scenario, x =>
+                x.OtherIncome > result.Baseline.Single(y => y.PeriodStart == x.PeriodStart).OtherIncome);
+            Assert.Contains(result.Scenario, x =>
+                x.SalaryIncome > result.Baseline.Single(y => y.PeriodStart == x.PeriodStart).SalaryIncome);
+        });
+    }
+
+    [Fact]
+    public void CompositeSimulation_RemoveOneRecalculatesFromFreshCanonicalPlan()
+    {
+        var plan = TestFactory.CanonicalPlan();
+        var requests = CompositeRequests(plan);
+        var calculator = new SimulationCalculator(_projection, _installments);
+
+        var six = calculator.Calculate(
+            plan,
+            new DateOnly(2026, 8, 20),
+            requests);
+        var scenarioAfterSix = calculator.BuildScenarioPlan(plan, requests);
+        var fiveRequests = requests
+            .Where(x => x.ScenarioId != requests[2].ScenarioId)
+            .ToArray();
+        var five = calculator.Calculate(
+            plan,
+            new DateOnly(2026, 8, 20),
+            fiveRequests);
+        var directFive = calculator.Calculate(
+            plan,
+            new DateOnly(2026, 8, 20),
+            fiveRequests);
+        var chainedFive = calculator.Calculate(
+            scenarioAfterSix,
+            new DateOnly(2026, 8, 20),
+            fiveRequests);
+
+        Assert.NotEqual(
+            six.Scenario.Select(x => x.EndingProjectedSavings),
+            five.Scenario.Select(x => x.EndingProjectedSavings));
+        Assert.NotEqual(
+            chainedFive.Scenario.Select(x => x.EndingProjectedSavings),
+            five.Scenario.Select(x => x.EndingProjectedSavings));
+        Assert.Equal(
+            directFive.Scenario.Select(x => x.EndingProjectedSavings),
+            five.Scenario.Select(x => x.EndingProjectedSavings));
+    }
+
+    [Fact]
+    public void CompositeSimulation_AddOrderDoesNotChangeProjection()
+    {
+        var plan = TestFactory.CanonicalPlan();
+        var requests = CompositeRequests(plan).Take(4).ToArray();
+        var calculator = new SimulationCalculator(_projection, _installments);
+
+        var forward = calculator.Calculate(
+            plan,
+            new DateOnly(2026, 8, 20),
+            requests);
+        var reversed = calculator.Calculate(
+            plan,
+            new DateOnly(2026, 8, 20),
+            requests.Reverse().ToArray());
+
+        Assert.Equal(
+            forward.Scenario.Select(x => x.MandatoryOutflow),
+            reversed.Scenario.Select(x => x.MandatoryOutflow));
+        Assert.Equal(
+            forward.Scenario.Select(x => x.CreditCardPayments),
+            reversed.Scenario.Select(x => x.CreditCardPayments));
+        Assert.Equal(
+            forward.Scenario.Select(x => x.EndingProjectedSavings),
+            reversed.Scenario.Select(x => x.EndingProjectedSavings));
+    }
+
+    [Fact]
+    public void CompositeSimulation_MultipleCardInstallmentsUseSharedStatementEngine()
+    {
+        var plan = TestFactory.CanonicalPlan();
+        var requests = CompositeRequests(plan).Take(2).ToArray();
+        var calculator = new SimulationCalculator(_projection, _installments);
+
+        var scenarioPlan = calculator.BuildScenarioPlan(plan, requests);
+        var card = scenarioPlan.CreditCards.Single();
+        var addedCharges = card.Charges
+            .Where(x => requests.Any(request =>
+                x.Id == request.ScenarioId ||
+                x.Description.StartsWith(request.Name, StringComparison.Ordinal)))
+            .ToArray();
+        var statements = new CreditCardStatementCalculator().Project(
+            card,
+            8,
+            useProjectionFallback: true);
+        var result = calculator.Calculate(
+            plan,
+            new DateOnly(2026, 8, 20),
+            requests);
+
+        Assert.Equal(12, addedCharges.Length);
+        Assert.Equal(165_000m, addedCharges.Sum(x => x.Amount));
+        Assert.Contains(statements, x =>
+            x.StatementCloseDate >= new DateOnly(2026, 11, 25) &&
+            x.NewCharges > 0m);
+        Assert.Contains(statements, x =>
+            x.StatementCloseDate >= new DateOnly(2027, 1, 25) &&
+            x.NewCharges > 0m);
+        Assert.Contains(result.Rows, x =>
+            x.Scenario.CreditCardPayments != x.Baseline.CreditCardPayments);
+    }
+
+    [Fact]
+    public void CompositeSimulation_ContradictorySalaryConditionsAreBlocked()
+    {
+        var plan = TestFactory.CanonicalPlan();
+        var requests = new[]
+        {
+            new SimulationRequest(
+                SimulationScenarioType.SalaryChange,
+                "Yeni maaş",
+                130_000m,
+                new DateOnly(2027, 6, 1),
+                ScenarioId: Guid.NewGuid()),
+            new SimulationRequest(
+                SimulationScenarioType.SalaryChange,
+                "Alternatif maaş",
+                150_000m,
+                new DateOnly(2027, 6, 1),
+                ScenarioId: Guid.NewGuid())
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new SimulationCalculator(_projection, _installments)
+                .Calculate(
+                    plan,
+                    new DateOnly(2026, 8, 20),
+                    requests));
+        Assert.Contains("iki farklı maaş değişikliği", exception.Message);
+    }
+
+    [Fact]
+    public void CompositeInsights_DescribeConsequencesNotConditionList()
+    {
+        var plan = CarryOverPlan();
+        var requests = new[]
+        {
+            new SimulationRequest(
+                SimulationScenarioType.CashPurchase,
+                "Kasım harcaması",
+                60_000m,
+                new DateOnly(2026, 9, 20),
+                ScenarioId: Guid.NewGuid()),
+            new SimulationRequest(
+                SimulationScenarioType.FutureIncome,
+                "Mayıs bonusu",
+                45_000m,
+                new DateOnly(2026, 11, 20),
+                ScenarioId: Guid.NewGuid())
+        };
+
+        var result = new SimulationCalculator(_projection, _installments)
+            .Calculate(
+                plan,
+                new DateOnly(2026, 8, 20),
+                requests,
+                periodCount: 4);
+        var summary = new SimulatorInsightService().Build(result.Scenario);
+        var text = string.Join(" ", summary.NarrativeInsights);
+
+        Assert.Contains("finansman açığı", text);
+        Assert.DoesNotContain("Kasım harcaması", text);
+        Assert.DoesNotContain("Mayıs bonusu", text);
+    }
+
+    [Fact]
     public async Task ApplyPlan_RequiresConfirmationThenPersists()
     {
         await WithStore(async store =>
@@ -389,6 +593,128 @@ public sealed class SimulationTests
                 (await service.GetFinancialPlanAsync())
                 .PlannedLargeExpenses);
             Assert.Equal(350_000m, applied.Amount);
+        }, seed: false);
+    }
+
+    [Fact]
+    public async Task ApplyCompositeSimulation_PersistsAllConditionsOnce_AndPreventsDoubleApply()
+    {
+        var path = Path.Combine(
+            Path.GetTempPath(),
+            $"coinflow-composite-apply-{Guid.NewGuid():N}.db");
+        SqliteCoinFlowStore? store = new(
+            path,
+            developmentFeaturesEnabled: false,
+            new DateOnly(2026, 8, 20));
+        try
+        {
+            await PrepareCanonicalPlanAsync(store);
+            var service = TestFactory.Service(store);
+            var plan = await service.GetFinancialPlanAsync();
+            var requests = CompositeRequests(plan).Take(5).ToArray();
+
+            var result = await service.ApplySimulationAsync(
+                requests,
+                confirmed: true);
+            var applied = await service.GetFinancialPlanAsync();
+            var duplicate = await service.ApplySimulationAsync(
+                requests,
+                confirmed: true);
+            var afterDuplicate = await service.GetFinancialPlanAsync();
+
+            Assert.False(result.AlreadyApplied);
+            Assert.True(duplicate.AlreadyApplied);
+            Assert.Equal(2, applied.PaymentPlans.Count);
+            Assert.Equal(2, afterDuplicate.PaymentPlans.Count);
+            Assert.Single(applied.OtherIncomes);
+            Assert.Single(afterDuplicate.OtherIncomes);
+            Assert.Equal(
+                plan.CreditCards.Single().Charges.Count + 12,
+                applied.CreditCards.Single().Charges.Count);
+            Assert.Equal(
+                applied.CreditCards.Single().Charges.Count,
+                afterDuplicate.CreditCards.Single().Charges.Count);
+        }
+        finally
+        {
+            if (store is not null)
+            {
+                await store.DisposeAsync();
+            }
+
+            DeleteDatabase(path);
+        }
+    }
+
+    [Fact]
+    public async Task ApplySimulationBatch_RollsBackAllRowsWhenOneConditionFails()
+    {
+        await WithStore(async store =>
+        {
+            var expenseId = Guid.NewGuid();
+            var incomeId = Guid.NewGuid();
+            var planId = Guid.NewGuid();
+            var duplicateChild = Guid.NewGuid();
+            var batch = new SimulationPersistenceBatch(
+                [
+                    new PlannedLargeExpense
+                    {
+                        Id = expenseId,
+                        Name = "Should rollback",
+                        Amount = 25_000m,
+                        ExactDate = new DateOnly(2027, 1, 15)
+                    }
+                ],
+                [
+                    new TemporaryPaymentPlan
+                    {
+                        Id = planId,
+                        Name = "Broken",
+                        Kind = PaymentPlanKind.Installment,
+                        Installments =
+                        [
+                            new TemporaryPaymentInstallment
+                            {
+                                Id = duplicateChild,
+                                PlanId = planId,
+                                DueDate = new DateOnly(2027, 1, 20),
+                                Amount = 5_000m
+                            },
+                            new TemporaryPaymentInstallment
+                            {
+                                Id = duplicateChild,
+                                PlanId = planId,
+                                DueDate = new DateOnly(2027, 2, 20),
+                                Amount = 5_000m
+                            }
+                        ]
+                    }
+                ],
+                [],
+                [
+                    new OneTimeIncome
+                    {
+                        Id = incomeId,
+                        Description = "Should rollback",
+                        Amount = 10_000m,
+                        ExactDate = new DateOnly(2027, 1, 15)
+                    }
+                ],
+                [],
+                []);
+
+            await Assert.ThrowsAnyAsync<Exception>(() =>
+                store.ApplySimulationBatchAsync(batch));
+
+            Assert.DoesNotContain(
+                await store.GetPlannedLargeExpensesAsync(),
+                x => x.Id == expenseId);
+            Assert.DoesNotContain(
+                await store.GetOtherIncomesAsync(),
+                x => x.Id == incomeId);
+            Assert.DoesNotContain(
+                await store.GetPaymentPlansAsync(),
+                x => x.Id == planId);
         }, seed: false);
     }
 
@@ -707,6 +1033,62 @@ public sealed class SimulationTests
             ScenarioId: Guid.NewGuid());
 
         Assert.ThrowsAny<Exception>(() => SimulationCalculator.Validate(request));
+    }
+
+    private static SimulationRequest[] CompositeRequests(FinancialPlan plan)
+    {
+        var cardId = plan.CreditCards.Single().Id;
+        return
+        [
+            new SimulationRequest(
+                SimulationScenarioType.CreditCardInstallmentPurchase,
+                "Kasım Axess",
+                120_000m,
+                new DateOnly(2026, 11, 15),
+                9,
+                CreditCardId: cardId,
+                ScenarioId: Guid.Parse(
+                    "11111111-1111-1111-1111-111111111111")),
+            new SimulationRequest(
+                SimulationScenarioType.CreditCardInstallmentPurchase,
+                "Ocak Axess",
+                45_000m,
+                new DateOnly(2027, 1, 15),
+                3,
+                CreditCardId: cardId,
+                ScenarioId: Guid.Parse(
+                    "22222222-2222-2222-2222-222222222222")),
+            new SimulationRequest(
+                SimulationScenarioType.FutureOneTimePayment,
+                "Mart nakit ödeme",
+                20_000m,
+                new DateOnly(2027, 3, 15),
+                ScenarioId: Guid.Parse(
+                    "33333333-3333-3333-3333-333333333333")),
+            new SimulationRequest(
+                SimulationScenarioType.RecurringPayment,
+                "Düzenli ödeme",
+                8_000m,
+                new DateOnly(2027, 4, 1),
+                4,
+                new DateOnly(2027, 4, 20),
+                ScenarioId: Guid.Parse(
+                    "44444444-4444-4444-4444-444444444444")),
+            new SimulationRequest(
+                SimulationScenarioType.FutureIncome,
+                "Haziran ek gelir",
+                30_000m,
+                new DateOnly(2027, 6, 5),
+                ScenarioId: Guid.Parse(
+                    "55555555-5555-5555-5555-555555555555")),
+            new SimulationRequest(
+                SimulationScenarioType.SalaryChange,
+                "Temmuz maaşı",
+                190_000m,
+                new DateOnly(2027, 7, 1),
+                ScenarioId: Guid.Parse(
+                    "66666666-6666-6666-6666-666666666666"))
+        ];
     }
 
     private static async Task PrepareCanonicalPlanAsync(

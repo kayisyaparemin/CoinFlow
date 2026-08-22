@@ -137,6 +137,15 @@ public sealed class CoinFlowService(
     public async Task<SimulationResult> SimulateAsync(
         SimulationRequest request,
         DateOnly? asOf = null,
+        CancellationToken cancellationToken = default) =>
+        await SimulateAsync(
+            [request],
+            asOf,
+            cancellationToken);
+
+    public async Task<SimulationResult> SimulateAsync(
+        IReadOnlyList<SimulationRequest> requests,
+        DateOnly? asOf = null,
         CancellationToken cancellationToken = default)
     {
         var date = asOf ?? clock.Today;
@@ -150,7 +159,7 @@ public sealed class CoinFlowService(
         return simulationCalculator.Calculate(
             query.Plan,
             date,
-            request,
+            requests,
             firstSalaryDate: query.Boundary?.FirstUnrealizedSalaryDate);
     }
 
@@ -169,6 +178,15 @@ public sealed class CoinFlowService(
     public async Task<SimulationApplyResult> ApplySimulationAsync(
         SimulationRequest request,
         bool confirmed,
+        CancellationToken cancellationToken = default) =>
+        await ApplySimulationAsync(
+            [request],
+            confirmed,
+            cancellationToken);
+
+    public async Task<SimulationApplyResult> ApplySimulationAsync(
+        IReadOnlyList<SimulationRequest> requests,
+        bool confirmed,
         CancellationToken cancellationToken = default)
     {
         if (!confirmed)
@@ -177,125 +195,168 @@ public sealed class CoinFlowService(
                 "Plan, açık kullanıcı onayı olmadan uygulanamaz.");
         }
 
-        SimulationCalculator.Validate(request);
-        if (request.ScenarioId == Guid.Empty)
+        SimulationCalculator.Validate(requests);
+        if (requests.Any(x => x.ScenarioId == Guid.Empty))
         {
             throw new InvalidOperationException(
                 "Uygulanacak simülasyon kimliği bulunamadı. Planı yeniden simüle edin.");
         }
 
         var current = await GetFinancialPlanAsync(cancellationToken);
-        var existingResult = FindAppliedSimulation(current, request);
-        if (existingResult is not null)
+        var existingResults = requests
+            .Select(request => FindAppliedSimulation(current, request))
+            .ToArray();
+        if (existingResults.All(x => x is not null))
         {
-            return existingResult with { AlreadyApplied = true };
+            var first = existingResults[0]!;
+            return first with
+            {
+                AlreadyApplied = true,
+                Message = requests.Count == 1
+                    ? first.Message
+                    : "Bu simülasyon planı daha önce finans planına eklendi."
+            };
         }
 
-        if (request.Type == SimulationScenarioType.SalaryChange &&
-            current.Salaries.Any(x => x.EffectiveDate == request.StartDate))
+        if (existingResults.Any(x => x is not null))
+        {
+            throw new InvalidOperationException(
+                "Bu simülasyon planının bir kısmı daha önce uygulanmış. Tekrar kaydı önlemek için planı temizleyip yeniden oluştur.");
+        }
+
+        ValidateSimulationApplyConflicts(current, requests);
+
+        var scenario = simulationCalculator.BuildScenarioPlan(current, requests);
+        var batch = BuildSimulationPersistenceBatch(scenario, requests);
+        await store.ApplySimulationBatchAsync(batch, cancellationToken);
+
+        await CapturePlanningChangeAsync(
+            "Simülasyon planı uygulandı",
+            cancellationToken);
+        return AppliedResult(requests, batch);
+    }
+
+    private static void ValidateSimulationApplyConflicts(
+        FinancialPlan current,
+        IReadOnlyList<SimulationRequest> requests)
+    {
+        var conflictingSalary = requests.FirstOrDefault(request =>
+            request.Type == SimulationScenarioType.SalaryChange &&
+            current.Salaries.Any(x => x.EffectiveDate == request.StartDate));
+        if (conflictingSalary is not null)
         {
             throw new InvalidOperationException(
                 "Bu tarihte zaten bir maaş kaydı var. Geçmişi korumak için farklı bir geçerlilik tarihi seçin.");
         }
 
-        var strategyDate = request.EffectiveSalaryDate ?? request.StartDate;
-        if (request.Type == SimulationScenarioType.PaymentStrategyChange &&
+        var conflictingStrategy = requests.FirstOrDefault(request =>
+            request.Type == SimulationScenarioType.PaymentStrategyChange &&
             current.PaymentAssignmentStrategies.Any(x =>
-                x.EffectiveFromSalaryDate == strategyDate))
+                x.EffectiveFromSalaryDate ==
+                (request.EffectiveSalaryDate ?? request.StartDate)));
+        if (conflictingStrategy is not null)
         {
             throw new InvalidOperationException(
                 "Bu maaş tarihinde zaten bir kullanım düzeni var. Önceki kayıt değiştirilemez.");
         }
+    }
 
-        var scenario = simulationCalculator.BuildScenarioPlan(current, request);
-        SimulationApplyResult result;
+    private static SimulationPersistenceBatch BuildSimulationPersistenceBatch(
+        FinancialPlan scenario,
+        IReadOnlyList<SimulationRequest> requests)
+    {
+        var requestIds = requests.Select(x => x.ScenarioId).ToHashSet();
+        var cardIds = requests
+            .Where(x => x.Type is
+                SimulationScenarioType.CreditCardSinglePayment or
+                SimulationScenarioType.CreditCardInstallmentPurchase or
+                SimulationScenarioType.CreditCardFullPayment)
+            .Select(x => x.CreditCardId ?? throw new InvalidOperationException(
+                "Kart koşulunda kredi kartı bulunamadı."))
+            .Distinct()
+            .ToHashSet();
 
-        switch (request.Type)
+        return new SimulationPersistenceBatch(
+            scenario.PlannedLargeExpenses
+                .Where(x => requestIds.Contains(x.Id))
+                .ToArray(),
+            scenario.PaymentPlans
+                .Where(x => requestIds.Contains(x.Id))
+                .ToArray(),
+            scenario.CreditCards
+                .Where(x => cardIds.Contains(x.Id))
+                .ToArray(),
+            scenario.OtherIncomes
+                .Where(x => requestIds.Contains(x.Id))
+                .ToArray(),
+            scenario.Salaries
+                .Where(x => requestIds.Contains(x.Id))
+                .ToArray(),
+            scenario.PaymentAssignmentStrategies
+                .Where(x => requestIds.Contains(x.Id))
+                .ToArray());
+    }
+
+    private static SimulationApplyResult AppliedResult(
+        IReadOnlyList<SimulationRequest> requests,
+        SimulationPersistenceBatch batch)
+    {
+        if (requests.Count == 1)
         {
-            case SimulationScenarioType.CashPurchase:
-                var expense = scenario.PlannedLargeExpenses.Single(x =>
-                    x.Id == request.ScenarioId);
-                await store.UpsertPlannedLargeExpenseAsync(
-                    expense,
-                    cancellationToken);
-                result = AppliedResult(
-                    request,
-                    expense.Id,
-                    SimulationApplyDestination.Payments,
-                    "Plan finans planına eklendi.");
-                break;
-            case SimulationScenarioType.CreditCardSinglePayment:
-            case SimulationScenarioType.CreditCardInstallmentPurchase:
-            case SimulationScenarioType.CreditCardFullPayment:
-                var changedCard = scenario.CreditCards.Single(x =>
-                    x.Id == request.CreditCardId);
-                await store.UpsertCreditCardAsync(changedCard, cancellationToken);
-                result = AppliedResult(
-                    request,
-                    changedCard.Id,
-                    SimulationApplyDestination.CreditCard,
-                    $"Plan {changedCard.Bank} {changedCard.Name} kartına eklendi.");
-                break;
-            case SimulationScenarioType.FinancingLoan:
-            case SimulationScenarioType.CashDebt:
-            case SimulationScenarioType.FutureOneTimePayment:
-            case SimulationScenarioType.RecurringPayment:
-                var paymentPlan = scenario.PaymentPlans.Single(x =>
-                    x.Id == request.ScenarioId);
-                await store.UpsertPaymentPlanAsync(
-                    paymentPlan,
-                    cancellationToken);
-                result = AppliedResult(
-                    request,
-                    paymentPlan.Id,
-                    SimulationApplyDestination.Payments,
-                    "Plan finans planına eklendi.");
-                break;
-            case SimulationScenarioType.FutureIncome:
-                var income = scenario.OtherIncomes.Single(x =>
-                    x.Id == request.ScenarioId);
-                await store.UpsertOtherIncomeAsync(
-                    income,
-                    cancellationToken);
-                result = AppliedResult(
-                    request,
-                    income.Id,
-                    SimulationApplyDestination.Income,
-                    "Gelir finans planına eklendi.");
-                break;
-            case SimulationScenarioType.SalaryChange:
-                var salary = scenario.Salaries.Single(x =>
-                    x.Id == request.ScenarioId);
-                await store.UpsertSalaryAsync(
-                    salary,
-                    cancellationToken);
-                result = AppliedResult(
-                    request,
-                    salary.Id,
-                    SimulationApplyDestination.SalaryHistory,
-                    "Maaş değişikliği kaydedildi.");
-                break;
-            case SimulationScenarioType.PaymentStrategyChange:
-                var strategy = scenario.PaymentAssignmentStrategies.Single(x =>
-                    x.Id == request.ScenarioId);
-                await SavePaymentAssignmentStrategyAsync(
-                    strategy,
-                    confirmedHistoricalCorrection: false,
-                    cancellationToken);
-                result = AppliedResult(
-                    request,
-                    strategy.Id,
-                    SimulationApplyDestination.Settings,
-                    "Maaş kullanım düzeni kaydedildi.");
-                break;
-            default:
-                throw new ArgumentOutOfRangeException(nameof(request.Type));
+            var request = requests[0];
+            return request.Type switch
+            {
+                SimulationScenarioType.CashPurchase =>
+                    AppliedResult(
+                        request,
+                        batch.PlannedLargeExpenses.Single().Id,
+                        SimulationApplyDestination.Payments,
+                        "Plan finans planına eklendi."),
+                SimulationScenarioType.CreditCardSinglePayment or
+                    SimulationScenarioType.CreditCardInstallmentPurchase or
+                    SimulationScenarioType.CreditCardFullPayment =>
+                    AppliedResult(
+                        request,
+                        batch.CreditCards.Single().Id,
+                        SimulationApplyDestination.CreditCard,
+                        $"Plan {batch.CreditCards.Single().Bank} {batch.CreditCards.Single().Name} kartına eklendi."),
+                SimulationScenarioType.FinancingLoan or
+                    SimulationScenarioType.CashDebt or
+                    SimulationScenarioType.FutureOneTimePayment or
+                    SimulationScenarioType.RecurringPayment =>
+                    AppliedResult(
+                        request,
+                        batch.PaymentPlans.Single().Id,
+                        SimulationApplyDestination.Payments,
+                        "Plan finans planına eklendi."),
+                SimulationScenarioType.FutureIncome =>
+                    AppliedResult(
+                        request,
+                        batch.OtherIncomes.Single().Id,
+                        SimulationApplyDestination.Income,
+                        "Gelir finans planına eklendi."),
+                SimulationScenarioType.SalaryChange =>
+                    AppliedResult(
+                        request,
+                        batch.Salaries.Single().Id,
+                        SimulationApplyDestination.SalaryHistory,
+                        "Maaş değişikliği kaydedildi."),
+                SimulationScenarioType.PaymentStrategyChange =>
+                    AppliedResult(
+                        request,
+                        batch.PaymentAssignmentStrategies.Single().Id,
+                        SimulationApplyDestination.Settings,
+                        "Maaş kullanım düzeni kaydedildi."),
+                _ => throw new ArgumentOutOfRangeException(nameof(requests))
+            };
         }
 
-        await CapturePlanningChangeAsync(
-            "Simülasyon planı uygulandı",
-            cancellationToken);
-        return result;
+        return new SimulationApplyResult(
+            requests[0].ScenarioId,
+            Guid.Empty,
+            SimulationApplyDestination.Payments,
+            AlreadyApplied: false,
+            $"{requests.Count} koşul finans planına eklendi.");
     }
 
     private static SimulationApplyResult? FindAppliedSimulation(
