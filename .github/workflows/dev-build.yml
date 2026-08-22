@@ -75,7 +75,7 @@ jobs:
         run: |
           set -euo pipefail
           short_sha="${GITHUB_SHA::7}"
-          version_name="1.0.0-dev.${GITHUB_RUN_NUMBER}"
+          version_name="1.0.1-dev.${GITHUB_RUN_NUMBER}"
           dotnet publish "$PROJECT" \
             -f net8.0-android \
             -c Release \
@@ -121,17 +121,17 @@ jobs:
           version_code="$(sed -n "s/^package:.* versionCode='\([^']*\)'.*/\1/p" <<< "$badging")"
           version_name="$(sed -n "s/^package:.* versionName='\([^']*\)'.*/\1/p" <<< "$badging")"
           application_label="$(sed -n "s/^application-label:'\([^']*\)'.*/\1/p" <<< "$badging" | head -n 1)"
-          [[ "$package_id" == "com.coinflow.mobile" ]] || { echo "Unexpected package id: $package_id" >&2; exit 1; }
+          [[ "$package_id" == "com.coinflow.mobile.dev" ]] || { echo "Unexpected package id: $package_id" >&2; exit 1; }
           [[ "$version_code" == "$GITHUB_RUN_NUMBER" ]] || { echo "Unexpected version code: $version_code" >&2; exit 1; }
-          [[ "$version_name" == "1.0.0-dev.${GITHUB_RUN_NUMBER}" ]] || { echo "Unexpected version name: $version_name" >&2; exit 1; }
-          [[ "$application_label" == "Mizan" ]] || { echo "Unexpected application label: $application_label" >&2; exit 1; }
+          [[ "$version_name" == "1.0.1-dev.${GITHUB_RUN_NUMBER}" ]] || { echo "Unexpected version name: $version_name" >&2; exit 1; }
+          [[ "$application_label" == "Mizan Dev" ]] || { echo "Unexpected application label: $application_label" >&2; exit 1; }
           mkdir -p artifacts
           short_sha="${GITHUB_SHA::7}"
-          cp "$apk" "artifacts/Mizan-dev-${short_sha}.apk"
-          cp "$apk" artifacts/Mizan-dev-latest.apk
-          unzip -t artifacts/Mizan-dev-latest.apk >/dev/null
+          cp "$apk" "artifacts/Mizan-Dev-${short_sha}.apk"
+          cp "$apk" artifacts/Mizan-Dev.apk
+          unzip -t artifacts/Mizan-Dev.apk >/dev/null
           echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
-          echo "artifact_path=artifacts/Mizan-dev-${short_sha}.apk" >> "$GITHUB_OUTPUT"
+          echo "artifact_path=artifacts/Mizan-Dev-${short_sha}.apk" >> "$GITHUB_OUTPUT"
           echo "version_code=$version_code" >> "$GITHUB_OUTPUT"
           echo "version_name=$version_name" >> "$GITHUB_OUTPUT"
           echo "signing_sha256=$signing_sha256" >> "$GITHUB_OUTPUT"
@@ -152,9 +152,9 @@ jobs:
           set -euo pipefail
           gh release delete dev-latest --cleanup-tag --yes >/dev/null 2>&1 || true
           build_date="$(date -u +'%Y-%m-%d %H:%M UTC')"
-          gh release create dev-latest artifacts/Mizan-dev-latest.apk \
+          gh release create dev-latest artifacts/Mizan-Dev.apk \
             --target "$GITHUB_SHA" \
-            --title "Mizan - Pre-V1 Development Candidate" \
+            --title "Mizan Dev - Development Candidate" \
             --notes "Commit: $GITHUB_SHA
           Build: #$GITHUB_RUN_NUMBER
           Version: ${{ steps.apk.outputs.version_name }}

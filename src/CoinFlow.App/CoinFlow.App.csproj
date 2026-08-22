@@ -7,13 +7,15 @@
     <SingleProject>true</SingleProject>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <ApplicationTitle>Mizan</ApplicationTitle>
-    <ApplicationId>com.coinflow.mobile</ApplicationId>
     <CoinFlowVersion Condition="'$(CoinFlowVersion)' == ''">0.1.0</CoinFlowVersion>
     <CoinFlowBuildNumber Condition="'$(CoinFlowBuildNumber)' == ''">1</CoinFlowBuildNumber>
     <CoinFlowCommit Condition="'$(CoinFlowCommit)' == ''">local</CoinFlowCommit>
     <CoinFlowDevBuild Condition="'$(CoinFlowDevBuild)' == '' and '$(Configuration)' == 'Debug'">true</CoinFlowDevBuild>
     <CoinFlowDevBuild Condition="'$(CoinFlowDevBuild)' == ''">false</CoinFlowDevBuild>
+    <ApplicationTitle Condition="'$(CoinFlowDevBuild)' == 'true'">Mizan Dev</ApplicationTitle>
+    <ApplicationTitle Condition="'$(CoinFlowDevBuild)' != 'true'">Mizan</ApplicationTitle>
+    <ApplicationId Condition="'$(CoinFlowDevBuild)' == 'true'">com.coinflow.mobile.dev</ApplicationId>
+    <ApplicationId Condition="'$(CoinFlowDevBuild)' != 'true'">com.coinflow.mobile</ApplicationId>
     <ApplicationDisplayVersion>$(CoinFlowVersion)</ApplicationDisplayVersion>
     <ApplicationVersion>$(CoinFlowBuildNumber)</ApplicationVersion>
     <DefineConstants Condition="'$(CoinFlowDevBuild)' == 'true'">$(DefineConstants);COINFLOW_DEV_BUILD</DefineConstants>

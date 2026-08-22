@@ -9,7 +9,7 @@ on:
       version:
         description: Version name for signing smoke test
         required: false
-        default: '1.0.0'
+        default: '1.0.1'
 
 permissions:
   contents: write
@@ -162,6 +162,38 @@ jobs:
           echo "artifact_path=$output" >> "$GITHUB_OUTPUT"
           echo "signing_sha256=$signing_sha256" >> "$GITHUB_OUTPUT"
 
+      - name: Verify production signing continuity with v1.0.0
+        if: steps.version.outputs.release_tag != 'v1.0.0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline_dir="$RUNNER_TEMP/mizan-v1-baseline"
+          mkdir -p "$baseline_dir"
+          gh release download v1.0.0 \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'Mizan-*.apk' \
+            --dir "$baseline_dir"
+          baseline_apk="$(find "$baseline_dir" -type f -name '*.apk' | head -n 1)"
+          [[ -n "$baseline_apk" && -f "$baseline_apk" ]] || { echo "Could not find published v1.0.0 APK." >&2; exit 1; }
+          apksigner="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner -print | sort -V | tail -n 1)"
+          aapt="$(find "$ANDROID_HOME/build-tools" -type f -name aapt -print | sort -V | tail -n 1)"
+          baseline_certs="$("$apksigner" verify --print-certs "$baseline_apk")"
+          baseline_badging="$("$aapt" dump badging "$baseline_apk")"
+          baseline_signing_sha256="$(sed -n "s/.*certificate SHA-256 digest: //p" <<< "$baseline_certs" | head -n 1)"
+          baseline_package_id="$(sed -n "s/^package: name='\([^']*\)'.*/\1/p" <<< "$baseline_badging")"
+          baseline_version_code="$(sed -n "s/^package:.* versionCode='\([^']*\)'.*/\1/p" <<< "$baseline_badging")"
+          [[ "$baseline_package_id" == "com.coinflow.mobile" ]] || { echo "Unexpected v1.0.0 package id: $baseline_package_id" >&2; exit 1; }
+          [[ "$baseline_signing_sha256" == "${{ steps.apk.outputs.signing_sha256 }}" ]] || {
+            echo "Production signing certificate mismatch with v1.0.0." >&2
+            exit 1
+          }
+          [[ "${{ steps.version.outputs.version_code }}" -gt "$baseline_version_code" ]] || {
+            echo "Production versionCode must be greater than v1.0.0; baseline=$baseline_version_code current=${{ steps.version.outputs.version_code }}" >&2
+            exit 1
+          }
+
       - name: Write stable release notes
         shell: bash
         run: |
@@ -169,22 +201,14 @@ jobs:
           cat > release-notes.md <<NOTES
           # Mizan $version
 
-          Mizan'ın ilk kararlı sürümü.
+          Bu sürüm Simülatör'ün ileriye dönük finansal görünümünü daha anlaşılır hale getirir.
 
-          Mizan, bugünkü finansal durumundan yola çıkarak önündeki maaş dönemlerini görmene ve finansal kararların etkisini simüle etmene yardımcı olur.
+          ### Değişiklikler
 
-          ### İlk sürümde
-
-          - Güncel finansal durum
-          - 12 maaş dönemlik ileriye bakış
-          - Kredi ve kredi kartı ödeme planları
-          - Maaş kullanım düzeni
-          - Tahmini faiz ve finansman açığı
-          - Finansal karar simülatörü
-          - Planı uygulama
-          - Plan vs Gerçek dönem takibi
-          - Finansal geçmiş
-          - Ne zaman karşılayabilirim? hesabı
+          - Simülatör artık girdiğin planı tekrar etmek yerine önündeki dönemlerde finansal olarak ne yaşayacağını öne çıkarır.
+          - Sıkışık dönemler, gelirlerin yetmediği aylar, finansman açığı ve toparlanma daha anlaşılır gösterilir.
+          - Dönem detaylarında gelir, toplam ihtiyaç ve dönem sonu görünümü sadeleştirildi.
+          - Çeşitli stabilite ve geliştirme süreci iyileştirmeleri yapıldı.
           NOTES
 
       - name: Upload signed APK artifact
