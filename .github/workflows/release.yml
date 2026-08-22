@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version name for signing smoke test
+        required: false
+        default: '1.0.0'
 
 permissions:
   contents: write
@@ -28,24 +34,30 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Validate semantic version tag
-        shell: bash
-        run: |
-          set -euo pipefail
-          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
-            echo "Stable tags must match vX.Y.Z; received: $GITHUB_REF_NAME" >&2
-            exit 1
-          }
-
-      - name: Compute stable release metadata
+      - name: Resolve release version
         id: version
         shell: bash
         run: |
           set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+              echo "Stable tags must match vX.Y.Z; received: $GITHUB_REF_NAME" >&2
+              exit 1
+            }
+            version="${GITHUB_REF_NAME#v}"
+            release_tag="$GITHUB_REF_NAME"
+          else
+            version="${{ github.event.inputs.version }}"
+            [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+              echo "Smoke test version must match X.Y.Z; received: $version" >&2
+              exit 1
+            }
+            release_tag="v$version"
+          fi
           version_code=$((100000 + GITHUB_RUN_NUMBER))
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "version_code=$version_code" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
 
       - name: Set up .NET from global.json
         uses: actions/setup-dotnet@v4
@@ -126,13 +138,29 @@ jobs:
           aapt="$(find "$ANDROID_HOME/build-tools" -type f -name aapt -print | sort -V | tail -n 1)"
           [[ -x "$apksigner" && -x "$aapt" ]] || { echo "Android verification tools not found." >&2; exit 1; }
           "$apksigner" verify --verbose "$apk"
-          package_id="$($aapt dump badging "$apk" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")"
+          certs="$("$apksigner" verify --print-certs "$apk")"
+          echo "$certs"
+          if grep -q "CN=Android Debug" <<< "$certs"; then
+            echo "Debug signing certificate detected; refusing stable artifact." >&2
+            exit 1
+          fi
+          signing_sha256="$(sed -n "s/.*certificate SHA-256 digest: //p" <<< "$certs" | head -n 1)"
+          [[ -n "$signing_sha256" ]] || { echo "Signing certificate SHA-256 was not found." >&2; exit 1; }
+          badging="$("$aapt" dump badging "$apk")"
+          package_id="$(sed -n "s/^package: name='\([^']*\)'.*/\1/p" <<< "$badging")"
+          version_code="$(sed -n "s/^package:.* versionCode='\([^']*\)'.*/\1/p" <<< "$badging")"
+          version_name="$(sed -n "s/^package:.* versionName='\([^']*\)'.*/\1/p" <<< "$badging")"
+          application_label="$(sed -n "s/^application-label:'\([^']*\)'.*/\1/p" <<< "$badging" | head -n 1)"
           [[ "$package_id" == "com.coinflow.mobile" ]] || { echo "Unexpected package id: $package_id" >&2; exit 1; }
+          [[ "$version_code" == "${{ steps.version.outputs.version_code }}" ]] || { echo "Unexpected version code: $version_code" >&2; exit 1; }
+          [[ "$version_name" == "${{ steps.version.outputs.version }}" ]] || { echo "Unexpected version name: $version_name" >&2; exit 1; }
+          [[ "$application_label" == "Mizan" ]] || { echo "Unexpected application label: $application_label" >&2; exit 1; }
           mkdir -p artifacts
           output="artifacts/Mizan-${{ steps.version.outputs.version }}.apk"
           cp "$apk" "$output"
           unzip -t "$output" >/dev/null
           echo "artifact_path=$output" >> "$GITHUB_OUTPUT"
+          echo "signing_sha256=$signing_sha256" >> "$GITHUB_OUTPUT"
 
       - name: Write stable release notes
         shell: bash
@@ -141,7 +169,7 @@ jobs:
           cat > release-notes.md <<NOTES
           # Mizan $version
 
-          Mizan'ın kararlı üretim sürümü.
+          Mizan'ın ilk kararlı sürümü.
 
           Mizan, bugünkü finansal durumundan yola çıkarak önündeki maaş dönemlerini görmene ve finansal kararların etkisini simüle etmene yardımcı olur.
 
@@ -156,18 +184,27 @@ jobs:
           - Planı uygulama
           - Plan vs Gerçek dönem takibi
           - Finansal geçmiş
-          - Ne zaman karşılayabilirim? hesaplaması
+          - Ne zaman karşılayabilirim? hesabı
           NOTES
 
+      - name: Upload signed APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mizan-signed-apk
+          path: ${{ steps.apk.outputs.artifact_path }}
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Create stable GitHub Release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          gh release create "$GITHUB_REF_NAME" "${{ steps.apk.outputs.artifact_path }}" \
+          gh release create "${{ steps.version.outputs.release_tag }}" "${{ steps.apk.outputs.artifact_path }}" \
             --verify-tag \
-            --title "Mizan $GITHUB_REF_NAME" \
+            --title "Mizan ${{ steps.version.outputs.release_tag }}" \
             --notes-file release-notes.md
 
       - name: Remove temporary keystore
