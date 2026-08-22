@@ -7,7 +7,7 @@
         <VerticalStackLayout Padding="24,30,24,36" Spacing="16">
             <Label Text="İLK PLANLAMA ADIMI" Style="{StaticResource Eyebrow}" />
             <Label Text="Maaşını nasıl kullanıyorsun?" Style="{StaticResource PageTitle}" />
-            <Label Text="Ödemeleri hangi maaşa göre planladığını seç. Bunu daha sonra değiştirebilirsin; CoinFlow değişiklik tarihçesini otomatik olarak korur."
+            <Label Text="Ödemeleri hangi maaşa göre planladığını seç. Bunu daha sonra değiştirebilirsin; Mizan değişiklik tarihçesini otomatik olarak korur."
                    Style="{StaticResource MutedText}" />
 
             <Border>

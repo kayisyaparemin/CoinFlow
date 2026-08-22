@@ -295,7 +295,7 @@
                 </VerticalStackLayout>
 
                 <VerticalStackLayout IsVisible="{Binding Detail.HasInterestRows}" Spacing="10">
-                    <Label Text="Faiz Maliyeti" Style="{StaticResource SectionTitle}" />
+                    <Label Text="Faiz Yükü" Style="{StaticResource SectionTitle}" />
                     <Border BackgroundColor="{StaticResource InterestSurface}">
                         <VerticalStackLayout Spacing="12">
                             <VerticalStackLayout BindableLayout.ItemsSource="{Binding Detail.InterestRows}"

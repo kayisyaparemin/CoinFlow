@@ -8,7 +8,7 @@
         <VerticalStackLayout Padding="20,18,20,36" Spacing="16">
             <Label Text="PLANLAMADAN ÖNCE DENE" Style="{StaticResource Eyebrow}" />
             <Label Text="Simülatör" Style="{StaticResource PageTitle}" />
-            <Label Text="Mevcut Plan ve Yeni Plan aynı 12 maaş dönemi üzerinden karşılaştırılır. Simüle Et, finans kayıtlarını değiştirmez." Style="{StaticResource MutedText}" />
+            <Label Text="Mevcut Plan ve Yeni Plan aynı 12 maaş dönemi üzerinden karşılaştırılır. Simülasyon Yap, finans kayıtlarını değiştirmez." Style="{StaticResource MutedText}" />
             <Label Text="{Binding AssignmentModeText}"
                    IsVisible="{Binding IsPlanAvailable}"
                    FontFamily="OpenSansSemibold" />
@@ -71,7 +71,7 @@
                         <Entry Text="{Binding TotalRepaymentAmount}" Keyboard="Numeric" />
                     </VerticalStackLayout>
 
-                    <Button Text="Simüle Et" Command="{Binding CalculateCommand}" />
+                    <Button Text="Simülasyon Yap" Command="{Binding CalculateCommand}" />
                 </VerticalStackLayout>
             </Border>
 
@@ -81,16 +81,17 @@
             <VerticalStackLayout IsVisible="{Binding HasResults}" Spacing="14">
                 <Border BackgroundColor="{StaticResource SoftSky}">
                     <VerticalStackLayout Spacing="8">
-                        <Label Text="KARAR ÖZETİ" Style="{StaticResource Eyebrow}" />
-                        <Label Text="{Binding FriendlySummary}" Style="{StaticResource SectionTitle}" />
+                        <Label Text="BU PLANIN ETKİSİ" Style="{StaticResource Eyebrow}" />
+                        <Label Text="Bu Planın Etkisi" Style="{StaticResource SectionTitle}" />
+                        <Label Text="{Binding FriendlySummary}" Style="{StaticResource MutedText}" />
                         <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="7">
-                            <Label Text="Mevcut Plan • 12 ay sonu" Style="{StaticResource MutedText}" />
+                            <Label Text="Mevcut Plan" Style="{StaticResource MutedText}" />
                             <Label Grid.Column="1" Text="{Binding BaselineEnding}" />
-                            <Label Grid.Row="1" Text="Yeni Plan • 12 ay sonu" Style="{StaticResource MutedText}" />
+                            <Label Grid.Row="1" Text="Yeni Plan" Style="{StaticResource MutedText}" />
                             <Label Grid.Row="1" Grid.Column="1" Text="{Binding ScenarioEnding}" FontFamily="OpenSansSemibold" />
-                            <Label Grid.Row="2" Text="Fark" Style="{StaticResource MutedText}" />
+                            <Label Grid.Row="2" Text="Finansal Etki" Style="{StaticResource MutedText}" />
                             <Label Grid.Row="2" Grid.Column="1" Text="{Binding EndingDifference}" FontFamily="OpenSansSemibold" />
-                            <Label Grid.Row="3" Text="Yeni planın toplam maliyeti" Style="{StaticResource MutedText}" />
+                            <Label Grid.Row="3" Text="Yeni planın toplam yükü" Style="{StaticResource MutedText}" />
                             <Label Grid.Row="3" Grid.Column="1" Text="{Binding TotalScenarioCost}" />
                         </Grid>
                         <Grid IsVisible="{Binding HasFinancingCost}" ColumnDefinitions="*,Auto">
@@ -100,9 +101,9 @@
                         <Grid ColumnDefinitions="*,Auto"
                               RowDefinitions="Auto,Auto,Auto"
                               RowSpacing="5">
-                            <Label Text="Mevcut Planın faizi" Style="{StaticResource MutedText}" />
+                            <Label Text="Mevcut Plan faiz yükü" Style="{StaticResource MutedText}" />
                             <Label Grid.Column="1" Text="{Binding BaselineInterest}" />
-                            <Label Grid.Row="1" Text="Bu planla faiz" Style="{StaticResource MutedText}" />
+                            <Label Grid.Row="1" Text="Yeni Plan faiz yükü" Style="{StaticResource MutedText}" />
                             <Label Grid.Row="1" Grid.Column="1" Text="{Binding ScenarioInterest}" />
                             <Label Grid.Row="2" Text="{Binding InterestDifferenceTitle}" FontFamily="OpenSansSemibold" />
                             <Label Grid.Row="2" Grid.Column="1" Text="{Binding InterestDifference}" FontFamily="OpenSansSemibold" />
@@ -119,22 +120,24 @@
 
                 <Border>
                     <VerticalStackLayout Spacing="8">
-                        <Label Text="Risk Özeti" Style="{StaticResource SectionTitle}" />
-                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="7">
+                        <Label Text="12 Aylık Etki" Style="{StaticResource SectionTitle}" />
+                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="7">
                             <Label Text="En sıkışık dönem" Style="{StaticResource MutedText}" />
                             <Label Grid.Column="1" Text="{Binding TightestPeriod}" />
-                            <Label Grid.Row="1" Text="En düşük kullanılabilir alan" Style="{StaticResource MutedText}" />
+                            <Label Grid.Row="1" Text="En düşük zorunlular sonrası" Style="{StaticResource MutedText}" />
                             <Label Grid.Row="1" Grid.Column="1" Text="{Binding LowestAvailable}" />
-                            <Label Grid.Row="2" Text="En düşük tasarruf kapasitesi" Style="{StaticResource MutedText}" />
+                            <Label Grid.Row="2" Text="En düşük dönem neti" Style="{StaticResource MutedText}" />
                             <Label Grid.Row="2" Grid.Column="1" Text="{Binding LowestSavingsCapacity}" />
-                            <Label Grid.Row="3" Text="En düşük tahmini birikim" Style="{StaticResource MutedText}" />
+                            <Label Grid.Row="3" Text="En Düşük Tahmini Durum" Style="{StaticResource MutedText}" />
                             <Label Grid.Row="3" Grid.Column="1" Text="{Binding LowestProjectedSavings}" />
-                            <Label Grid.Row="4" Text="İlk finansman açığı dönemi" Style="{StaticResource MutedText}" />
-                            <Label Grid.Row="4" Grid.Column="1" Text="{Binding FirstNegativePeriod}" />
-                            <Label Grid.Row="5" Text="Maksimum devreden açık" Style="{StaticResource MutedText}" />
-                            <Label Grid.Row="5" Grid.Column="1" Text="{Binding MaximumCarryOverDeficit}" />
-                            <Label Grid.Row="6" Text="Açığın kapanacağı dönem" Style="{StaticResource MutedText}" />
-                            <Label Grid.Row="6" Grid.Column="1" Text="{Binding RecoveryPeriod}" />
+                            <Label Grid.Row="4" Text="Aylık Ek Yük" Style="{StaticResource MutedText}" IsVisible="{Binding HasMonthlyBurden}" />
+                            <Label Grid.Row="4" Grid.Column="1" Text="{Binding MonthlyBurden}" IsVisible="{Binding HasMonthlyBurden}" />
+                            <Label Grid.Row="5" Text="İlk Açık Verilen Dönem" Style="{StaticResource MutedText}" />
+                            <Label Grid.Row="5" Grid.Column="1" Text="{Binding FirstNegativePeriod}" />
+                            <Label Grid.Row="6" Text="Maksimum devreden açık" Style="{StaticResource MutedText}" />
+                            <Label Grid.Row="6" Grid.Column="1" Text="{Binding MaximumCarryOverDeficit}" />
+                            <Label Grid.Row="7" Text="Açığın Kapandığı Dönem" Style="{StaticResource MutedText}" />
+                            <Label Grid.Row="7" Grid.Column="1" Text="{Binding RecoveryPeriod}" />
                         </Grid>
                         <Button Text="{Binding ApplyButtonText}"
                                 IsEnabled="{Binding CanApplyPlan}"
@@ -162,14 +165,14 @@
                                     <Grid ColumnDefinitions="*,Auto"
                                           RowDefinitions="Auto,Auto,Auto"
                                           RowSpacing="6">
-                                        <Label Text="Mevcut Plan dönem sonu" Style="{StaticResource MutedText}" />
+                                        <Label Text="Mevcut Plan dönem sonu durumu" Style="{StaticResource MutedText}" />
                                         <Label Grid.Column="1" Text="{Binding BaselineSavings}" />
-                                        <Label Grid.Row="1" Text="Yeni Plan dönem sonu" Style="{StaticResource MutedText}" />
+                                        <Label Grid.Row="1" Text="Yeni Plan dönem sonu durumu" Style="{StaticResource MutedText}" />
                                         <Label Grid.Row="1"
                                                Grid.Column="1"
                                                Text="{Binding ScenarioSavings}"
                                                FontFamily="OpenSansSemibold" />
-                                        <Label Grid.Row="2" Text="Fark" Style="{StaticResource MutedText}" />
+                                        <Label Grid.Row="2" Text="Finansal Etki" Style="{StaticResource MutedText}" />
                                         <Label Grid.Row="2"
                                                Grid.Column="1"
                                                Text="{Binding Difference}"
@@ -188,7 +191,7 @@
                                             HorizontalOptions="Start"
                                             IsVisible="{Binding HasInterestDifference}"
                                             BackgroundColor="{StaticResource InterestSurface}">
-                                        <Label Text="{Binding InterestDifference, StringFormat='Faiz farkı: {0}'}"
+                                        <Label Text="{Binding InterestDifference, StringFormat='Faiz etkisi: {0}'}"
                                                FontSize="11"
                                                TextColor="{StaticResource InterestText}" />
                                     </Border>

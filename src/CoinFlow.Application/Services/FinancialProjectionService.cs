@@ -33,7 +33,7 @@ public sealed class FinancialProjectionService(
             .Take(5)
             .ToArray();
         var tightest = periods
-            .OrderBy(x => x.EstimatedSavingsCapacity)
+            .OrderBy(x => x.EndingProjectedSavings)
             .ThenBy(x => x.PeriodStart)
             .First();
 
@@ -56,6 +56,7 @@ public sealed class FinancialProjectionService(
             currentStrategy,
             pending,
             plan.Settings.ProjectionAnchorDate,
+            plan.Settings.ProjectionStartingSavings,
             projection.TotalCreditCardInterest,
             projection.TotalDeficitFinancingInterest,
             projection.TotalInterestCost);

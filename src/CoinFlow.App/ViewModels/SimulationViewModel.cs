@@ -76,6 +76,8 @@ public partial class SimulationViewModel(
     [ObservableProperty] private string maximumCarryOverDeficit = "—";
     [ObservableProperty] private string recoveryPeriod = "—";
     [ObservableProperty] private string totalScenarioCost = "—";
+    [ObservableProperty] private string monthlyBurden = string.Empty;
+    [ObservableProperty] private bool hasMonthlyBurden;
     [ObservableProperty] private string financingCost = string.Empty;
     [ObservableProperty] private bool hasFinancingCost;
     [ObservableProperty] private string baselineInterest = "—";
@@ -229,7 +231,7 @@ public partial class SimulationViewModel(
         ScenarioDescription = type switch
         {
             SimulationScenarioType.CashPurchase =>
-                "Tutar, seçtiğin tarihte tahmini birikimden düşer.",
+                "Tutar, seçtiğin tarihte finansal durumundan düşer.",
             SimulationScenarioType.CreditCardSinglePayment =>
                 "Harcama, kartının ekstre kesim ve son ödeme tarihlerine göre hesaplanır.",
             SimulationScenarioType.CreditCardInstallmentPurchase =>
@@ -247,7 +249,7 @@ public partial class SimulationViewModel(
             SimulationScenarioType.SalaryChange =>
                 "Yeni maaş, seçtiğin tarihten itibaren kullanılır.",
             SimulationScenarioType.PaymentStrategyChange =>
-                "Yeni düzen yalnızca seçtiğin maaştan itibaren hesaplanır; Simüle Et finans kayıtlarını değiştirmez.",
+                "Yeni düzen yalnızca seçtiğin maaştan itibaren hesaplanır; Simülasyon Yap finans kayıtlarını değiştirmez.",
             SimulationScenarioType.CreditCardFullPayment =>
                 "Seçilen tarihte ekstrenin tamamı ödenir; sonraki kart faizi ve faiz tasarrufu Mevcut Plan ile karşılaştırılır.",
             _ => string.Empty
@@ -310,7 +312,7 @@ public partial class SimulationViewModel(
     {
         if (_lastRequest is null || !HasResults)
         {
-            SetStatus("Önce Simüle Et ile sonucu hesaplamalısın.");
+            SetStatus("Önce Simülasyon Yap ile sonucu hesaplamalısın.");
             return null;
         }
 
@@ -453,9 +455,7 @@ public partial class SimulationViewModel(
         FirstNegativePeriod =
             result.Risk.FirstDeficitPeriod is { } negative
                 ? SalaryText(negative.Start)
-                : result.Risk.FirstNegativeSavingsCapacityPeriod is { } capacity
-                    ? SalaryText(capacity.Start)
-                    : "Yok";
+                : "12 aylık görünümde finansman açığı oluşmuyor.";
         MaximumCarryOverDeficit = Money(
             result.Risk.MaximumCarryOverDeficit);
         RecoveryPeriod = result.Risk.RecoveryPeriod is { } recovery
@@ -464,6 +464,11 @@ public partial class SimulationViewModel(
                 ? "Gösterilen dönemde kapanmıyor"
                 : "Gerekmedi";
         TotalScenarioCost = Money(result.Risk.TotalScenarioCost);
+        var monthlyBurden = ResolveMonthlyBurden(_lastRequest, result);
+        HasMonthlyBurden = monthlyBurden is not null;
+        MonthlyBurden = monthlyBurden is decimal burden
+            ? Money(burden)
+            : string.Empty;
         HasFinancingCost = result.Risk.FinancingCost is not null;
         FinancingCost = result.Risk.FinancingCost is decimal cost
             ? Money(cost)
@@ -473,7 +478,7 @@ public partial class SimulationViewModel(
         ScenarioInterest = Money(
             result.ScenarioInterest.TotalInterestCost);
         InterestDifferenceTitle = result.AdditionalInterestCost < 0m
-            ? "Tahmini Faiz Tasarrufu"
+            ? "Faiz Tasarrufu"
             : "Ek Faiz Yükü";
         InterestDifference = Money(
             result.AdditionalInterestCost < 0m
@@ -491,8 +496,8 @@ public partial class SimulationViewModel(
                 $"Geçmiş düzenden kapanacak: {Money(transition.TransitionCatchUpAmount)}",
                 $"İleri dönem için ayrılacak: {Money(transition.ForwardFundedAmount)}",
                 $"Toplam geçiş yükü: {Money(transition.MandatoryOutflow)}",
-                $"Tahmini tasarruf: {Money(transition.EstimatedSavingsCapacity)}",
-                $"Tahmini birikim: {Money(transition.EndingProjectedSavings)}");
+                $"Dönem neti: {Money(transition.EstimatedSavingsCapacity)}",
+                $"Dönem sonu durumu: {Money(transition.EndingProjectedSavings)}");
 
         Results.Clear();
         foreach (var row in result.Rows)
@@ -517,6 +522,26 @@ public partial class SimulationViewModel(
         mode == PaymentAssignmentMode.PreviousPeriod
             ? "Maaş kullanımı: Geçmiş dönemi kapatırım"
             : "Maaş kullanımı: Gelecek dönemi karşılarım";
+
+    private static decimal? ResolveMonthlyBurden(
+        SimulationRequest? request,
+        SimulationResult result)
+    {
+        if (request is null || request.PaymentCount <= 1)
+        {
+            return null;
+        }
+
+        return request.Type switch
+        {
+            SimulationScenarioType.CreditCardInstallmentPurchase or
+                SimulationScenarioType.FinancingLoan or
+                SimulationScenarioType.CashDebt or
+                SimulationScenarioType.RecurringPayment =>
+                result.Risk.TotalScenarioCost / request.PaymentCount,
+            _ => null
+        };
+    }
 
     private static string AssignmentText(SalaryPeriodProjection row)
     {

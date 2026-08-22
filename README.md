@@ -1,10 +1,10 @@
 # Mizan
 
-Mizan, maaş gününden bir sonraki maaş gününe kadar olan dönemi esas alan, zorunlu ödemelerden sonra kalan yaşam bütçesini ve tahmini birikimi gösteren Android öncelikli, çevrimdışı bir kişisel finans uygulamasıdır.
+Mizan, maaş gününden bir sonraki maaş gününe kadar olan dönemi esas alan, bugünkü finansal durumdan devam edildiğinde önümüzdeki maaş dönemlerinin nasıl görüneceğini gösteren Android öncelikli, çevrimdışı bir kişisel finans uygulamasıdır.
 
-Uygulama mikro harcama takibi yapmaz. Ana kavramlar maaş dönemi, toplam gelir, zorunlu ödeme, yaşam bütçesi ve birikim kapasitesidir.
+Uygulama mikro harcama takibi yapmaz. Ana kavramlar maaş dönemi, toplam gelir, zorunlu ödeme, yaşam bütçesi, dönem neti ve dönem sonu durumudur.
 
-Mizan ayrıca finansal durumu dönemsel doğruluk noktalarıyla yeniler. Kullanıcı her kahveyi veya market fişini girmez; dönem kapanınca planlanan ödemeleri doğrular, tek bir toplam yaşam gideri girer ve yeni planlama başlangıç birikimini onaylar.
+Mizan ayrıca finansal durumu dönemsel doğruluk noktalarıyla yeniler. Kullanıcı her kahveyi veya market fişini girmez; dönem kapanınca planlanan ödemeleri doğrular, tek bir toplam yaşam gideri girer ve yeni planlama başlangıç durumunu onaylar.
 
 ## Finans modeli
 
@@ -23,13 +23,13 @@ Kalıcı `ProjectionAnchorDate`, günlük hayatın projection dışında kabul e
 Toplam Gelir = Maaş + Döneme denk gelen diğer gelirler
 Zorunlu Ödeme = Krediler + Kart ödemeleri + geçici/taksitli/diğer planlı ödemeler
 Zorunlu Ödemeler Sonrası = Toplam Gelir - Zorunlu Ödeme
-Tahmini Birikim Kapasitesi = Zorunlu Ödemeler Sonrası - Yaşam Bütçesi - Planlı büyük nakit giderler
-Faiz Öncesi Dönem Sonu = Dönem Başı Birikim + Tahmini Birikim Kapasitesi
-Finansman Açığı Faizi = max(0, -Faiz Öncesi Dönem Sonu) × Açık Faiz Oranı
-Dönem Sonu Tahmini Birikim = Faiz Öncesi Dönem Sonu - Finansman Açığı Faizi
+Dönem Neti = Zorunlu Ödemeler Sonrası - Yaşam Bütçesi - Planlı büyük nakit giderler
+Faiz Öncesi Dönem Sonu Durumu = Dönem Başı Durumu + Dönem Neti
+Finansman Açığı Faizi = max(0, -Faiz Öncesi Dönem Sonu Durumu) × Açık Faiz Oranı
+Dönem Sonu Tahmini Durum = Faiz Öncesi Dönem Sonu Durumu - Finansman Açığı Faizi
 ```
 
-Negatif dönem sonu tahmini birikim, hesaplanan finansman açığı faiziyle birlikte sonraki maaş dönemine aynen `OpeningProjectedSavings` olarak taşınır. UI bunu **devreden finansman açığı** olarak gösterir. Bu değer yeni kredi, kart borcu veya zorunlu ödeme değildir; yalnız kümülatif planlama başlangıç durumudur ve dönem sonu hesabında ikinci kez çıkarılmaz.
+Negatif dönem sonu tahmini durum, hesaplanan finansman açığı faiziyle birlikte sonraki maaş dönemine aynen `OpeningProjectedSavings` olarak taşınır. UI bunu **devreden finansman açığı** olarak gösterir. Bu değer yeni kredi, kart borcu veya zorunlu ödeme değildir; yalnız kümülatif planlama başlangıç durumudur ve dönem sonu hesabında ikinci kez çıkarılmaz.
 
 Kart ekstresinde ödenmeyen principal için aylık planlama faizi hesaplanır ve yalnız bir sonraki ekstre opening carry bakiyesine eklenir. Kart faizi mevcut maaş döneminin zorunlu ödemesine tekrar yazılmaz. Kart carry faizi ile genel finansman açığı faizi iki ayrı state ve summary olarak tutulur; ikisi de varsayılan `%5,00`, `decimal` ve iki hane `AwayFromZero` yuvarlama kullanır.
 
@@ -45,11 +45,11 @@ Review tarihi geldiğinde (`CurrentDate >= ReviewAvailableFrom`) üç adımlı a
 
 1. **Planın:** Dönem başında dondurulan gelir, ödemeler, yaşam bütçesi, faiz ve dönem sonu görülür. İsteğe bağlı revizyon original planı değiştirmeden ayrı saklanır.
 2. **Gerçekte Ne Oldu?:** Planlı ödemeler hazır gelir; ödendi, farklı tutar veya ödenmedi seçilir. Tek toplam yaşam gideri yeterlidir. İsteğe bağlı yaşam kırılımı, plan dışı büyük ödeme ve plan dışı gelir eklenebilir.
-3. **Sonuç:** Son plan, gerçek ve fark gösterilir. Kullanıcı yeni başlangıç birikimini doğrular; kayıt tek SQLite transaction'ında actual, canonical borç durumu, yeni current snapshot ve yeni frozen planı oluşturur.
+3. **Sonuç:** Son plan, gerçek ve fark gösterilir. Kullanıcı yeni başlangıç durumunu doğrular; kayıt tek SQLite transaction'ında actual, canonical borç durumu, yeni current snapshot ve yeni frozen planı oluşturur.
 
 ```text
-Yeni Başlangıç Birikimi Önerisi =
-  Önceki Başlangıç Birikimi
+Yeni Başlangıç Durumu Önerisi =
+  Önceki Başlangıç Durumu
   + Planlanan Gelir
   + Plan Dışı Gelir
   - Gerçekleşen Planlı Ödemeler
@@ -64,14 +64,14 @@ Kullanıcı öneriyi gerçek finansal durumuyla düzeltebilir; fark `Reconciliat
 
 Sol üstteki native Shell hamburger menüsü altı kök bölüm içerir; bottom TabBar yoktur:
 
-1. **Ana Sayfa:** Aktif maaş dönemi özeti, yaklaşan ödemeler, 12 dönem özeti ve en sıkışık dönem.
+1. **Ana Sayfa:** Güncel finansal durum, sıradaki maaş dönemi, yaklaşan ödemeler ve 12 ay sonrası özeti.
 2. **12 Aylık:** Compact dönem kartları 12 maaşı hızlı taratır. Karta dokununca ortak full-screen **Dönem Detayı** açılır; summary, finansal akış, açık, zorunlu kırılımı, faiz ve her exact ödeme ayrı görsel satırda gösterilir.
 3. **Simülatör:** Nakit alışveriş, tek çekim/taksitli kart, kart ekstresini tam kapatma, finansman, nakit borç, ileri tarihli tek/tekrarlı ödeme, gelecek gelir, maaş ve maaş kullanım düzeni değişimi senaryoları; baseline ve scenario faiz yükünü karşılaştırır. Dönem kartı aynı Dönem Detayı sayfasını baseline/senaryo/delta modu ile kullanır.
 4. **Gelir & Ödemeler:** Maaş, diğer gelir, kredi, kredi kartı, geçici/taksitli ödeme ve büyük gider yönetimi.
 5. **Geçmiş:** Kapanmış dönemlerde Original Plan, varsa Son Plan, Gerçek, kategori farkları, ödeme durumları ve yeni güncel durum.
 6. **Ayarlar:** Maaş günü, bütçe, kart carry/açık faiz varsayımları, read-only düzen geçmişi ve development araçları.
 
-Simülatörde **Simüle Et** yalnız bellekte hypothetical bir plan üretir. **Planı Uygula** açık onaydan sonra scenario türünü canonical finans kaydına dönüştürür; aynı application kimliği ikinci kez yükümlülük oluşturmaz. Uygulanan kayıt Gelir & Ödemeler içindeki doğru bölümde veya seçili kart detayında hemen açılabilir ve sonraki simulator baseline hesabına normal gerçek veri olarak girer.
+Simülatörde **Simülasyon Yap** yalnız bellekte hypothetical bir plan üretir. **Planı Uygula** açık onaydan sonra scenario türünü canonical finans kaydına dönüştürür; aynı application kimliği ikinci kez yükümlülük oluşturmaz. Uygulanan kayıt Gelir & Ödemeler içindeki doğru bölümde veya seçili kart detayında hemen açılabilir ve sonraki simulator baseline hesabına normal gerçek veri olarak girer.
 
 Ayarlar, düzen geçmişini yalnız bilgi amaçlı gösterir. Kullanıcı bir sonraki değişikliğin başlayacağı maaşı seçer; uygulama eski kayıtları değiştirmeden yeni effective-dated event ekler. Yalnız henüz başlamamış planlanan değişiklik düzenlenebilir veya iptal edilebilir.
 
@@ -97,7 +97,7 @@ Fresh development ve production veritabanları finansal olarak boş açılır; o
 - Burgan Bank: 7.374,59 TL, 9 taksit
 - Eminevim: 20.09.2026 28.167,40 TL; 20.10.2026 28.167,40 TL; 20.11.2026 55.492,20 TL
 - Axess: limit 607.350 TL; devreden 35.201,77 TL; dönem içi 61.283,91 TL; exact future charges
-- Yaşam bütçesi: 30.000 TL; başlangıç birikimi: 0 TL
+- Yaşam bütçesi: 30.000 TL; başlangıç durumu: 0 TL
 - Kart carry ve finansman açığı aylık planlama faizi: `%5,00`
 - Projection anchor: 20.08.2026; ilk projection maaşı: 10.09.2026
 - İlk maaş kullanım düzeni: `UpcomingPeriod`

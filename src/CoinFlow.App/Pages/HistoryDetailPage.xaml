@@ -13,8 +13,8 @@
             <Label Text="{Binding PeriodText}" Style="{StaticResource PageTitle}" />
             <Border BackgroundColor="{StaticResource SoftSky}" StrokeThickness="0"><Label Text="{Binding Summary}" Style="{StaticResource SectionTitle}" /></Border>
             <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
-                <Border BackgroundColor="{StaticResource SoftPink}" StrokeThickness="0"><VerticalStackLayout><Label Text="PLAN" Style="{StaticResource Eyebrow}" /><Label Text="{Binding PlannedEnding}" FontFamily="OpenSansSemibold" /></VerticalStackLayout></Border>
-                <Border Grid.Column="1" BackgroundColor="{StaticResource SoftYellow}" StrokeThickness="0"><VerticalStackLayout><Label Text="GERÇEK" Style="{StaticResource Eyebrow}" /><Label Text="{Binding ActualEnding}" FontFamily="OpenSansSemibold" /></VerticalStackLayout></Border>
+                <Border BackgroundColor="{StaticResource SoftPink}" StrokeThickness="0"><VerticalStackLayout><Label Text="PLANLANAN" Style="{StaticResource Eyebrow}" /><Label Text="{Binding PlannedEnding}" FontFamily="OpenSansSemibold" /></VerticalStackLayout></Border>
+                <Border Grid.Column="1" BackgroundColor="{StaticResource SoftYellow}" StrokeThickness="0"><VerticalStackLayout><Label Text="GERÇEKLEŞEN" Style="{StaticResource Eyebrow}" /><Label Text="{Binding ActualEnding}" FontFamily="OpenSansSemibold" /></VerticalStackLayout></Border>
                 <Border Grid.Column="2" BackgroundColor="{StaticResource SoftLavender}" StrokeThickness="0"><VerticalStackLayout><Label Text="FARK" Style="{StaticResource Eyebrow}" /><Label Text="{Binding Difference}" FontFamily="OpenSansSemibold" /></VerticalStackLayout></Border>
             </Grid>
             <Border>

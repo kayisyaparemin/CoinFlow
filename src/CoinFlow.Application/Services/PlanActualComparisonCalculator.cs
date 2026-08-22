@@ -59,12 +59,12 @@ public sealed class PlanActualComparisonCalculator
     {
         if (endingDifference == 0m)
         {
-            return "Bu dönem planlanan dönem sonu birikimiyle aynı seviyede tamamlandı.";
+            return "Dönem sonu finansal durumun planla aynı seviyede gerçekleşti.";
         }
 
         var direction = endingDifference > 0m ? "üzerinde" : "altında";
         var lead =
-            $"Dönem sonu birikimi planın {Math.Abs(endingDifference):N2} TL {direction} gerçekleşti.";
+            $"Dönem sonu finansal durumun planın {Math.Abs(endingDifference):N2} TL {direction} gerçekleşti.";
         var cause = lines
             .Where(x =>
                 x.Category is not "Dönem düzeltmesi" and

@@ -71,14 +71,14 @@
 
             <Border>
                 <VerticalStackLayout Spacing="9">
-                    <Label Text="Planlama Başlangıç Birikimi" Style="{StaticResource SectionTitle}" />
-                    <Label Text="Planlama başlangıç birikimi" Style="{StaticResource FieldLabel}" />
+                    <Label Text="Planlama Başlangıç Durumu" Style="{StaticResource SectionTitle}" />
+                    <Label Text="Başlangıç tutarı" Style="{StaticResource FieldLabel}" />
                     <Entry Text="{Binding ProjectionStartingSavings}" Keyboard="Numeric" />
-                    <Label Text="Bu tutar yalnızca gelecek tahminlerinin başlangıç noktasıdır; gerçek banka bakiyesi olarak takip edilmez." Style="{StaticResource MutedText}" />
+                    <Label Text="Gelecek hesaplamaları bu tutardan devam eder." Style="{StaticResource MutedText}" />
                     <Label Text="Planlama Başlangıç Tarihi" Style="{StaticResource FieldLabel}" />
                     <Label Text="{Binding ProjectionAnchorText}" FontFamily="OpenSansSemibold" />
                     <Label Text="Bu tarihten önceki hareketler gelecek planına dahil edilmez." Style="{StaticResource MutedText}" />
-                    <Button Text="Ayarları Kaydet" Command="{Binding SaveCommand}" />
+                    <Button Text="Değişiklikleri Kaydet" Command="{Binding SaveCommand}" />
                 </VerticalStackLayout>
             </Border>
 
@@ -91,7 +91,7 @@
                     <Entry Text="{Binding DeficitFinancingInterestRate}" Keyboard="Numeric" />
                     <Label Text="Bu oranlar gelecek tahminleri için kullanılan yaklaşık aylık faiz varsayımlarıdır. Banka faiz, vergi ve ücretlerini birebir temsil etmeyebilir."
                            Style="{StaticResource MutedText}" />
-                    <Button Text="Faiz Varsayımlarını Kaydet" Command="{Binding SaveCommand}" />
+                    <Button Text="Değişiklikleri Kaydet" Command="{Binding SaveCommand}" />
                 </VerticalStackLayout>
             </Border>
 
@@ -100,7 +100,7 @@
             <Border>
                 <VerticalStackLayout Spacing="6">
                     <Label Text="Hakkında" Style="{StaticResource SectionTitle}" />
-                    <Label Text="CoinFlow" FontFamily="OpenSansSemibold" FontSize="20" />
+                    <Label Text="Mizan" FontFamily="OpenSansSemibold" FontSize="20" />
                     <Label Text="{Binding BuildChannel}" Style="{StaticResource MutedText}" />
                     <Label Text="{Binding VersionText}" />
                     <Label Text="{Binding CommitText}" IsVisible="{Binding IsDevelopment}" />

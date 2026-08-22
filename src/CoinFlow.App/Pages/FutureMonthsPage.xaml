@@ -6,9 +6,9 @@
              Title="12 Aylık">
     <Grid RowDefinitions="Auto,*" Padding="20,18,20,12" RowSpacing="14">
         <VerticalStackLayout Spacing="10">
-            <Label Text="12 MAAŞ DÖNEMİ" Style="{StaticResource Eyebrow}" />
-            <Label Text="İleriye Bakış" Style="{StaticResource PageTitle}" />
-            <Label Text="Önümüzdeki 12 maaş dönemindeki gelir, ödeme ve tahmini birikimini gör." Style="{StaticResource MutedText}" />
+            <Label Text="FİNANSAL GÖRÜNÜM" Style="{StaticResource Eyebrow}" />
+            <Label Text="12 Aylık" Style="{StaticResource PageTitle}" />
+            <Label Text="Önümüzdeki 12 maaş döneminde finansal durumunun nasıl değişeceğini gör." Style="{StaticResource MutedText}" />
             <Border Padding="14"
                     IsVisible="{Binding HasInterestSummary}"
                     BackgroundColor="{StaticResource SoftPink}">
@@ -79,11 +79,11 @@
                                     <Label Grid.Column="1" Text="{Binding CarryOverDeficit}" TextColor="{StaticResource Error}" FontFamily="OpenSansSemibold" />
                                 </Grid>
                                 <Grid ColumnDefinitions="*,Auto">
-                                    <Label Text="Tahmini tasarruf" Style="{StaticResource MutedText}" />
+                                    <Label Text="Dönem neti" Style="{StaticResource MutedText}" />
                                     <Label Grid.Column="1" Text="{Binding EstimatedSavings}" FontFamily="OpenSansSemibold" />
                                 </Grid>
                                 <Grid ColumnDefinitions="*,Auto">
-                                    <Label Text="Dönem sonu tahmini birikim" Style="{StaticResource MutedText}" />
+                                    <Label Text="Dönem sonu durumu" Style="{StaticResource MutedText}" />
                                     <Label Grid.Column="1"
                                            Text="{Binding EndingProjectedSavings}"
                                            FontFamily="OpenSansSemibold"
@@ -103,7 +103,7 @@
                                         Margin="0,0,6,5"
                                         IsVisible="{Binding HasInterest}"
                                         BackgroundColor="{StaticResource InterestSurface}">
-                                    <Label Text="{Binding TotalInterest, StringFormat='Faiz: {0}'}"
+                                    <Label Text="{Binding TotalInterest, StringFormat='Faiz yükü: {0}'}"
                                            FontSize="11"
                                            TextColor="{StaticResource InterestText}" />
                                 </Border>

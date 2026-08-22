@@ -198,7 +198,7 @@ public partial class PeriodReviewWizardViewModel(
         try
         {
             await RefreshPreviewAsync(true);
-            SetStatus("Önerilen yeni başlangıç birikimi güncellendi.");
+            SetStatus("Önerilen yeni başlangıç durumu güncellendi.");
         }
         catch (Exception exception)
         {
@@ -272,7 +272,7 @@ public partial class PeriodReviewWizardViewModel(
     {
         var currentBefore = ParseMoney(
             CurrentStartingSavings,
-            "Yeni planlama başlangıç birikimi");
+            "Yeni planlama başlangıç durumu");
         var suggested = await service.PreviewPeriodReviewAsync(
             BuildDraft(false));
         if (updateConfirmedWhenUnchanged &&
@@ -344,7 +344,7 @@ public partial class PeriodReviewWizardViewModel(
         decimal? confirmed = includeConfirmedSavings
             ? ParseMoney(
                 CurrentStartingSavings,
-                "Yeni planlama başlangıç birikimi")
+                "Yeni planlama başlangıç durumu")
             : null;
         return new PeriodReviewDraft(
             context.OriginalPlan.Id,

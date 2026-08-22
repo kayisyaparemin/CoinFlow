@@ -1,3 +1,4 @@
+using System.Globalization;
 using CoinFlow.Domain.Models;
 
 namespace CoinFlow.Domain.Calculations;
@@ -85,6 +86,9 @@ public sealed class SimulationCalculator(
     FinancialProjectionCalculator projectionCalculator,
     InstallmentScheduleCalculator installmentScheduleCalculator)
 {
+    private static readonly CultureInfo TurkishCulture =
+        CultureInfo.GetCultureInfo("tr-TR");
+
     public SimulationResult Calculate(
         FinancialPlan currentPlan,
         DateOnly asOf,
@@ -147,7 +151,11 @@ public sealed class SimulationCalculator(
             scenario,
             rows,
             risk,
-            BuildFriendlySummary(risk, interestDifference));
+            BuildFriendlySummary(
+                risk,
+                interestDifference,
+                scenario[^1].EndingProjectedSavings -
+                baseline[^1].EndingProjectedSavings));
     }
 
     public FinancialPlan BuildScenarioPlan(
@@ -468,38 +476,55 @@ public sealed class SimulationCalculator(
 
     private static string BuildFriendlySummary(
         SimulationRiskSummary risk,
-        decimal additionalInterestCost)
+        decimal additionalInterestCost,
+        decimal endingDifference)
     {
-        var interestMessage = additionalInterestCost switch
+        var parts = new List<string>();
+        parts.Add(endingDifference switch
         {
             > 0m =>
-                $" Bu plan 12 aylık tahmini faiz yükünü {additionalInterestCost:N2} TL artırıyor.",
+                $"Bu plan 12 ay sonundaki tahmini finansal durumunu {Money(Math.Abs(endingDifference))} artırıyor.",
             < 0m =>
-                $" Bu plan 12 ayda yaklaşık {Math.Abs(additionalInterestCost):N2} TL faiz tasarrufu sağlıyor.",
-            _ => " Bu plan 12 aylık tahmini faiz yükünü değiştirmiyor."
-        };
+                $"Bu plan 12 ay sonundaki tahmini finansal durumunu {Money(Math.Abs(endingDifference))} azaltıyor.",
+            _ => "Bu plan 12 ay sonundaki tahmini finansal durumu değiştirmiyor."
+        });
+
         if (risk.FirstNegativeProjectedSavingsPeriod is SalaryPeriod negative)
         {
-            var recovery = risk.RecoveryPeriod is SalaryPeriod recovered
-                ? $" Açık {recovered.Start:dd.MM.yyyy} maaş döneminde kapanıyor."
-                : " Açık gösterilen dönemlerde kapanmıyor.";
-            return $"İlk açık verilen dönem: {negative.Start:dd.MM.yyyy}–{negative.End:dd.MM.yyyy}.{recovery}{interestMessage}";
+            parts.Add(
+                $"Bu plan {PeriodMonth(negative)} döneminde finansman açığı oluşturuyor.");
+            parts.Add(risk.RecoveryPeriod is SalaryPeriod recovered
+                ? $"Açık {PeriodMonth(recovered)} döneminde kapanıyor."
+                : "Açık gösterilen dönemlerde kapanmıyor.");
         }
-
-        if (risk.MaximumCarryOverDeficit > 0m &&
-            risk.RecoveryPeriod is SalaryPeriod openingRecovery)
+        else if (risk.MaximumCarryOverDeficit > 0m)
         {
-            return $"Devreden açık {openingRecovery.Start:dd.MM.yyyy} maaş döneminde kapanıyor.{interestMessage}";
+            parts.Add(risk.RecoveryPeriod is SalaryPeriod openingRecovery
+                ? $"Devreden açık {PeriodMonth(openingRecovery)} döneminde kapanıyor."
+                : "Devreden açık gösterilen dönemlerde kapanmıyor.");
         }
-
-        if (risk.FirstNegativeSavingsCapacityPeriod is SalaryPeriod capacity)
+        else
         {
-            return $"Bu plan {capacity.Start:dd.MM.yyyy}–{capacity.End:dd.MM.yyyy} döneminde yaşam bütçesi sonrası açık oluşturuyor.{interestMessage}";
+            parts.Add("12 aylık görünümde finansman açığı oluşmuyor.");
         }
 
-        return "Bu plan, gösterilen dönemlerde tahmini birikimi negatife düşürmüyor." +
-               interestMessage;
+        parts.Add(additionalInterestCost switch
+        {
+            > 0m =>
+                $"Bu planın tahmini ek faiz yükü {Money(additionalInterestCost)}.",
+            < 0m =>
+                $"Bu plan mevcut plana göre {Money(Math.Abs(additionalInterestCost))} daha düşük faiz yükü oluşturuyor.",
+            _ => "Bu plan tahmini faiz yükünü değiştirmiyor."
+        });
+
+        return string.Join(" ", parts);
     }
+
+    private static string Money(decimal value) =>
+        $"{value.ToString("N2", TurkishCulture)} TL";
+
+    private static string PeriodMonth(SalaryPeriod period) =>
+        period.Start.ToString("MMMM yyyy", TurkishCulture);
 
     public static void Validate(SimulationRequest request)
     {

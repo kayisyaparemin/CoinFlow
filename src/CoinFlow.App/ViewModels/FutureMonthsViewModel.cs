@@ -132,8 +132,8 @@ public partial class FutureMonthsViewModel(
             var target = ParseMoney(TargetAmount, "Hedef tutar");
             var reached = await service.FindTargetPeriodAsync(target);
             TargetResult = reached is null
-                ? $"{Money(target)} seviyesine gösterilen 12 maaş döneminde henüz ulaşılamıyor."
-                : $"{Money(target)} tahmini birikim seviyesine {PeriodText(reached.Period)} döneminde ulaşıyorsun.";
+                ? "Mevcut planla hedef tutara 12 aylık görünüm içinde ulaşılamıyor."
+                : $"Bu plana göre {Money(target)} seviyesine ilk kez {PeriodText(reached.Period)} döneminde ulaşıyorsun.";
             HasTargetResult = true;
             SetStatus(string.Empty);
         }

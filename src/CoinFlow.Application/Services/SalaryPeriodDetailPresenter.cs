@@ -53,7 +53,7 @@ public sealed class SalaryPeriodDetailPresenter
                 scenario.MandatoryOutflow,
                 DetailSemanticType.Mandatory),
             Summary(
-                "TASARRUF",
+                "DÖNEM NETİ",
                 scenario.EstimatedSavingsCapacity,
                 scenario.EstimatedSavingsCapacity < 0m
                     ? DetailSemanticType.Deficit
@@ -111,7 +111,7 @@ public sealed class SalaryPeriodDetailPresenter
         if (row.OpeningProjectedSavings > 0m)
         {
             result.Add(new DetailMetric(
-                "Dönem başı tahmini birikim",
+                "Dönem başı durumu",
                 row.OpeningProjectedSavings,
                 DetailSemanticType.Savings,
                 ShowPositiveSign: true));
@@ -147,13 +147,13 @@ public sealed class SalaryPeriodDetailPresenter
         if (row.DeficitFinancingInterest > 0m)
         {
             result.Add(new DetailMetric(
-                "Finansman açığı faizi",
+                "Faiz yükü",
                 -row.DeficitFinancingInterest,
                 DetailSemanticType.Interest));
         }
 
         result.Add(new DetailMetric(
-            "Dönem sonu tahmini birikim",
+            "Dönem sonu tahmini durum",
             row.EndingProjectedSavings,
             row.EndingProjectedSavings < 0m
                 ? DetailSemanticType.Deficit
@@ -211,7 +211,7 @@ public sealed class SalaryPeriodDetailPresenter
         if (row.DeficitFinancingInterest > 0m)
         {
             result.Add(new DetailMetric(
-                "Finansman açığı faizi",
+                "Finansman açığı faiz yükü",
                 row.DeficitFinancingInterest,
                 DetailSemanticType.Interest));
         }
@@ -342,19 +342,19 @@ public sealed class SalaryPeriodDetailPresenter
                 impact.MandatoryOutflowDifference,
                 higherIsBetter: false),
             Compare(
-                "Tasarruf",
+                "Dönem neti",
                 baseline.EstimatedSavingsCapacity,
                 scenario.EstimatedSavingsCapacity,
                 impact.SavingsCapacityDifference,
                 higherIsBetter: true),
             Compare(
-                "Faiz",
+                "Faiz yükü",
                 baseline.TotalInterestGenerated,
                 scenario.TotalInterestGenerated,
                 impact.InterestDifference,
                 higherIsBetter: false),
             Compare(
-                "Dönem sonu",
+                "Dönem sonu durumu",
                 baseline.EndingProjectedSavings,
                 scenario.EndingProjectedSavings,
                 impact.ProjectedSavingsDifference,

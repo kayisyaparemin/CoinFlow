@@ -159,8 +159,8 @@ public partial class SettingsViewModel(
                 $"Geçmiş düzenden kapanacak: {Money(preview.Scenario.TransitionCatchUpAmount)}",
                 $"Yeni dönem için ayrılacak: {Money(preview.Scenario.ForwardFundedAmount)}",
                 $"Toplam geçiş yükü: {Money(preview.TotalTransitionBurden)}",
-                $"Tahmini tasarruf: {Money(preview.Scenario.EstimatedSavingsCapacity)}",
-                $"Tahmini birikim: {Money(preview.Scenario.EndingProjectedSavings)}",
+                $"Dönem neti: {Money(preview.Scenario.EstimatedSavingsCapacity)}",
+                $"Dönem sonu durumu: {Money(preview.Scenario.EndingProjectedSavings)}",
                 preview.FinancingGap < 0m
                     ? $"Finansman açığı: {Money(preview.FinancingGap)}"
                     : "Finansman açığı oluşmuyor.");
@@ -244,7 +244,7 @@ public partial class SettingsViewModel(
                     "Aylık tahmini yaşam bütçesi"),
                 ProjectionStartingSavings = ParseMoney(
                     ProjectionStartingSavings,
-                    "Planlama başlangıç birikimi"),
+                    "Planlama başlangıç durumu"),
                 ProjectionAnchorDate = _projectionAnchorDate,
                 CreditCardCarryInterestRate = ParseRate(
                     CreditCardCarryInterestRate,

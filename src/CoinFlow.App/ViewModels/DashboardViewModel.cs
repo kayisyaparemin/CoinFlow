@@ -21,6 +21,8 @@ public partial class DashboardViewModel(
     { get; } = [];
 
     [ObservableProperty] private string currentPeriodText = "—";
+    [ObservableProperty] private string currentSnapshotDate = "—";
+    [ObservableProperty] private string planningStartingState = "—";
     [ObservableProperty] private string assignmentModeText = "—";
     [ObservableProperty] private string paymentWindowText = "—";
     [ObservableProperty] private string income = "—";
@@ -109,6 +111,13 @@ public partial class DashboardViewModel(
             IsEmptyState = false;
             var current = dashboard.CurrentPeriod;
 
+            CurrentSnapshotDate = dashboard.ProjectionAnchorDate == default
+                ? "Henüz güncellenmedi"
+                : dashboard.ProjectionAnchorDate.ToString(
+                    "dd MMMM yyyy",
+                    TurkishCulture);
+            PlanningStartingState = Money(
+                dashboard.ProjectionStartingSavings);
             CurrentPeriodText =
                 $"{current.PeriodStart.ToString("dd MMMM yyyy", TurkishCulture)} Maaşı";
             AssignmentModeText = current.PaymentAssignmentMode ==
@@ -145,11 +154,11 @@ public partial class DashboardViewModel(
                 dashboard.TwelvePeriodTotalInterest > 0m;
             TightestPeriod = PeriodText(dashboard.TightestPeriod.Period);
             TightestValue = Money(
-                dashboard.TightestPeriod.EstimatedSavingsCapacity);
-            HasDeficit = current.EstimatedSavingsCapacity < 0m;
+                dashboard.TightestPeriod.EndingProjectedSavings);
+            HasDeficit = current.EndingProjectedSavings < 0m;
             DeficitMessage = HasDeficit
-                ? $"Bu dönemde yaşam bütçesi ve planlı büyük ödemeler sonrası {Money(Math.Abs(current.EstimatedSavingsCapacity))} finansman açığı oluşuyor."
-                : $"Bu dönemin tahmini tasarrufu {Money(current.EstimatedSavingsCapacity)}.";
+                ? $"Dönem sonu durumunda {Money(Math.Abs(current.EndingProjectedSavings))} finansman açığı oluşuyor."
+                : string.Empty;
             HasUndeterminedCardPayment =
                 dashboard.HasUndeterminedCardPayments;
             StrategyStatusText = AssignmentModeText;

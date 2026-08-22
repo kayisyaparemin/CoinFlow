@@ -47,7 +47,7 @@ public partial class HistoryViewModel(CoinFlowService service) : ViewModelBase
             HasSummary = summary is not null;
             if (summary is not null)
             {
-                SummaryTitle = $"Son {summary.PeriodCount} dönem";
+                SummaryTitle = $"Dönem sonu • son {summary.PeriodCount} dönem";
                 SummaryPlanned = Money(summary.Planned, 2);
                 SummaryActual = Money(summary.Actual, 2);
                 SummaryDifference = SignedMoney(summary.Difference);

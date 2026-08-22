@@ -47,9 +47,21 @@
 
             <VerticalStackLayout IsVisible="{Binding HasFinancialPlan}"
                                  Spacing="16">
+            <Border BackgroundColor="{StaticResource SoftSky}">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="GÜNCEL FİNANSAL DURUM" Style="{StaticResource Eyebrow}" />
+                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="7">
+                        <Label Text="Son güncelleme" Style="{StaticResource MutedText}" />
+                        <Label Grid.Column="1" Text="{Binding CurrentSnapshotDate}" FontFamily="OpenSansSemibold" />
+                        <Label Grid.Row="1" Text="Planlama başlangıç durumu" Style="{StaticResource MutedText}" />
+                        <Label Grid.Row="1" Grid.Column="1" Text="{Binding PlanningStartingState}" FontFamily="OpenSansSemibold" />
+                    </Grid>
+                </VerticalStackLayout>
+            </Border>
+
             <Border BackgroundColor="{StaticResource HeroSurface}">
                 <VerticalStackLayout Spacing="10">
-                    <Label Text="SONRAKİ MAAŞ PLANI" Style="{StaticResource Eyebrow}" />
+                    <Label Text="SIRADAKİ MAAŞ DÖNEMİ" Style="{StaticResource Eyebrow}" />
                     <Label Text="{Binding CurrentPeriodText}" Style="{StaticResource SectionTitle}" />
                     <Label Text="{Binding AssignmentModeText}" FontFamily="OpenSansSemibold" />
                     <Label Text="{Binding PaymentWindowText}" Style="{StaticResource MutedText}" />
@@ -75,14 +87,14 @@
                                FontFamily="OpenSansSemibold" />
                         <Label Grid.Row="5" Text="Tahmini yaşam gideri" Style="{StaticResource MutedText}" />
                         <Label Grid.Row="5" Grid.Column="1" Text="{Binding Living}" />
-                        <Label Grid.Row="6" Text="Bu dönemin tahmini tasarrufu" FontFamily="OpenSansSemibold" />
+                        <Label Grid.Row="6" Text="Dönem neti" FontFamily="OpenSansSemibold" />
                         <Label Grid.Row="6" Grid.Column="1" Text="{Binding EstimatedSavings}" FontFamily="OpenSansSemibold" />
                     </Grid>
                     <Label Text="{Binding CarryOverMessage}"
                            IsVisible="{Binding HasCarryOverDeficit}"
                            Style="{StaticResource MutedText}" />
                     <BoxView HeightRequest="1" Color="{StaticResource Line}" />
-                    <Label Text="Dönem sonu tahmini birikim" Style="{StaticResource MutedText}" />
+                    <Label Text="Dönem sonu tahmini durum" Style="{StaticResource MutedText}" />
                     <Label Text="{Binding EndingSavings}" Style="{StaticResource HeroNumber}" />
                     <Label Text="{Binding DeficitMessage}" TextColor="{StaticResource Error}" IsVisible="{Binding HasDeficit}" />
                 </VerticalStackLayout>
@@ -142,15 +154,15 @@
 
             <Border BackgroundColor="{StaticResource SoftSky}">
                 <VerticalStackLayout Spacing="8">
-                    <Label Text="12 AYLIK GÖRÜNÜM" Style="{StaticResource Eyebrow}" />
-                    <Label Text="12 dönem sonunda tahmini birikim" Style="{StaticResource MutedText}" />
+                    <Label Text="12 AY SONRA" Style="{StaticResource Eyebrow}" />
+                    <Label Text="Tahmini finansal durum" Style="{StaticResource MutedText}" />
                     <Label Text="{Binding TwelveMonthSavings}" Style="{StaticResource HeroNumber}" />
-                    <Label Text="En sıkışık dönem" Style="{StaticResource MutedText}" />
+                    <Label Text="En düşük tahmini durum" Style="{StaticResource MutedText}" />
                     <Label Text="{Binding TightestPeriod}" FontFamily="OpenSansSemibold" />
                     <Label Text="{Binding TightestValue}" />
                     <VerticalStackLayout Spacing="4" IsVisible="{Binding HasTwelveMonthInterest}">
                         <BoxView HeightRequest="1" Color="{StaticResource Line}" />
-                        <Label Text="12 ay tahmini faiz yükü" Style="{StaticResource MutedText}" />
+                        <Label Text="Toplam tahmini faiz yükü" Style="{StaticResource MutedText}" />
                         <Label Text="{Binding TwelveMonthInterest}" FontFamily="OpenSansSemibold" FontSize="18" />
                         <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="3">
                             <Label Text="Kart" Style="{StaticResource MutedText}" />
@@ -159,7 +171,8 @@
                             <Label Grid.Row="1" Grid.Column="1" Text="{Binding TwelveMonthDeficitInterest}" />
                         </Grid>
                     </VerticalStackLayout>
-                    <Button Text="Simülatörü Aç" Command="{Binding OpenSimulationCommand}" />
+                    <Label Text="Bir harcama veya finansal kararın etkisini gör." Style="{StaticResource MutedText}" />
+                    <Button Text="Simülasyon Yap" Command="{Binding OpenSimulationCommand}" />
                 </VerticalStackLayout>
             </Border>
 

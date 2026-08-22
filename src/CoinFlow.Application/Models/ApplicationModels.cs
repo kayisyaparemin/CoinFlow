@@ -13,6 +13,7 @@ public sealed record DashboardSnapshot(
     PaymentAssignmentStrategy CurrentStrategy,
     PaymentAssignmentStrategy? PendingStrategy,
     DateOnly ProjectionAnchorDate,
+    decimal ProjectionStartingSavings,
     decimal TwelvePeriodCreditCardInterest,
     decimal TwelvePeriodDeficitFinancingInterest,
     decimal TwelvePeriodTotalInterest);

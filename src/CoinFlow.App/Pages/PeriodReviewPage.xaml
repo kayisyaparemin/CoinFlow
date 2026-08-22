@@ -48,7 +48,7 @@
                         <Label Grid.Row="6" Text="Büyük ödemeler" Style="{StaticResource MutedText}" /><Label Grid.Row="6" Grid.Column="1" Text="{Binding PlannedLarge}" />
                         <Label Grid.Row="7" Text="Tahmini yaşam" Style="{StaticResource MutedText}" /><Label Grid.Row="7" Grid.Column="1" Text="{Binding PlannedLiving}" />
                         <Label Grid.Row="8" Text="Tahmini faiz" Style="{StaticResource MutedText}" /><Label Grid.Row="8" Grid.Column="1" Text="{Binding PlannedInterest}" />
-                        <Label Grid.Row="9" Text="Beklenen dönem sonu" FontFamily="OpenSansSemibold" /><Label Grid.Row="9" Grid.Column="1" Text="{Binding PlannedEnding}" FontFamily="OpenSansSemibold" />
+                        <Label Grid.Row="9" Text="Planlanan dönem sonu" FontFamily="OpenSansSemibold" /><Label Grid.Row="9" Grid.Column="1" Text="{Binding PlannedEnding}" FontFamily="OpenSansSemibold" />
                     </Grid>
                 </Border>
                 <Button Text="Evet, Gerçekte Ne Oldu?" Command="{Binding NextCommand}" />
@@ -142,12 +142,12 @@
 
                 <Border BackgroundColor="{StaticResource SoftLavender}" StrokeThickness="0">
                     <VerticalStackLayout Spacing="8">
-                        <Label Text="Bugünkü Finansal Durum" Style="{StaticResource SectionTitle}" />
-                        <Label Text="Yeni 12 aylık tahmin bu planlama başlangıç birikiminden devam edecek." Style="{StaticResource MutedText}" />
+                        <Label Text="Güncel Finansal Durum" Style="{StaticResource SectionTitle}" />
+                        <Label Text="Gelecek hesaplamaları bu tutardan devam eder." Style="{StaticResource MutedText}" />
                         <Label Text="Hesaplanan öneri" Style="{StaticResource FieldLabel}" />
                         <Label Text="{Binding SuggestedStartingSavings}" FontFamily="OpenSansSemibold" FontSize="20" />
-                        <Entry Text="{Binding CurrentStartingSavings}" Placeholder="Yeni planlama başlangıç birikimi" Keyboard="Numeric" />
-                        <Button Text="Öneriyi yeniden hesapla" Command="{Binding RecalculateSuggestedCommand}" Style="{StaticResource SecondaryButton}" />
+                        <Entry Text="{Binding CurrentStartingSavings}" Placeholder="Yeni planlama başlangıç durumu" Keyboard="Numeric" />
+                        <Button Text="Güncelle" Command="{Binding RecalculateSuggestedCommand}" Style="{StaticResource SecondaryButton}" />
                         <Label Text="Gerçek durum farklıysa tutarı düzeltebilirsin; fark dönem düzeltmesi olarak saklanır." Style="{StaticResource MutedText}" />
                     </VerticalStackLayout>
                 </Border>
@@ -157,8 +157,8 @@
             <VerticalStackLayout IsVisible="{Binding IsStep3}" Spacing="14">
                 <Border BackgroundColor="{StaticResource SoftSky}" StrokeThickness="0"><VerticalStackLayout Spacing="5"><Label Text="3. Sonuç" Style="{StaticResource SectionTitle}" /><Label Text="{Binding ComparisonSummary}" Style="{StaticResource MutedText}" /></VerticalStackLayout></Border>
                 <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
-                    <Border BackgroundColor="{StaticResource SoftPink}" StrokeThickness="0"><VerticalStackLayout><Label Text="PLAN" Style="{StaticResource Eyebrow}" /><Label Text="{Binding ComparisonPlannedEnding}" FontFamily="OpenSansSemibold" /></VerticalStackLayout></Border>
-                    <Border Grid.Column="1" BackgroundColor="{StaticResource SoftYellow}" StrokeThickness="0"><VerticalStackLayout><Label Text="GERÇEK" Style="{StaticResource Eyebrow}" /><Label Text="{Binding ComparisonActualEnding}" FontFamily="OpenSansSemibold" /></VerticalStackLayout></Border>
+                    <Border BackgroundColor="{StaticResource SoftPink}" StrokeThickness="0"><VerticalStackLayout><Label Text="PLANLANAN" Style="{StaticResource Eyebrow}" /><Label Text="{Binding ComparisonPlannedEnding}" FontFamily="OpenSansSemibold" /></VerticalStackLayout></Border>
+                    <Border Grid.Column="1" BackgroundColor="{StaticResource SoftYellow}" StrokeThickness="0"><VerticalStackLayout><Label Text="GERÇEKLEŞEN" Style="{StaticResource Eyebrow}" /><Label Text="{Binding ComparisonActualEnding}" FontFamily="OpenSansSemibold" /></VerticalStackLayout></Border>
                     <Border Grid.Column="2" BackgroundColor="{StaticResource SoftLavender}" StrokeThickness="0"><VerticalStackLayout><Label Text="FARK" Style="{StaticResource Eyebrow}" /><Label Text="{Binding ComparisonDifference}" FontFamily="OpenSansSemibold" /></VerticalStackLayout></Border>
                 </Grid>
                 <VerticalStackLayout BindableLayout.ItemsSource="{Binding ComparisonLines}" Spacing="8">

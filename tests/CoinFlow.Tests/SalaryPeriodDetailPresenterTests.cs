@@ -131,7 +131,7 @@ public sealed class SalaryPeriodDetailPresenterTests
             },
             savings =>
             {
-                Assert.Equal("Tasarruf", savings.Label);
+                Assert.Equal("Dönem neti", savings.Label);
                 Assert.Equal(
                     impact.SavingsCapacityDifference,
                     savings.Difference);
@@ -139,14 +139,14 @@ public sealed class SalaryPeriodDetailPresenterTests
             },
             interest =>
             {
-                Assert.Equal("Faiz", interest.Label);
+                Assert.Equal("Faiz yükü", interest.Label);
                 Assert.Equal(
                     impact.InterestDifference,
                     interest.Difference);
             },
             ending =>
             {
-                Assert.Equal("Dönem sonu", ending.Label);
+                Assert.Equal("Dönem sonu durumu", ending.Label);
                 Assert.Equal(
                     impact.ProjectedSavingsDifference,
                     ending.Difference);
