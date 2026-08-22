@@ -209,14 +209,38 @@ internal sealed class PeriodPlanRevisionRow
 {
     [PrimaryKey] public string Id { get; set; } = string.Empty;
     [Indexed] public string PeriodPlanSnapshotId { get; set; } = string.Empty;
+    public int RevisionNumber { get; set; }
     public string CreatedAtUtc { get; set; } = string.Empty;
+    public string Trigger { get; set; } = string.Empty;
+    public int StrategyUsed { get; set; }
     public decimal PlannedIncome { get; set; }
+    public decimal PlannedLoanPayments { get; set; }
+    public decimal PlannedCardPayments { get; set; }
+    public decimal PlannedTemporaryPayments { get; set; }
+    public decimal PlannedInstallmentPayments { get; set; }
+    public decimal PlannedOtherScheduledPayments { get; set; }
     public decimal PlannedMandatoryPayments { get; set; }
     public decimal PlannedLivingBudget { get; set; }
     public decimal PlannedLargeExpenses { get; set; }
+    public decimal PlannedCardInterest { get; set; }
+    public decimal PlannedDeficitInterest { get; set; }
     public decimal PlannedInterest { get; set; }
     public decimal PlannedEndingSavings { get; set; }
     public string Note { get; set; } = string.Empty;
+}
+
+[Table("period_plan_revision_payment_lines")]
+internal sealed class PeriodPlanRevisionPaymentLineRow
+{
+    [PrimaryKey] public string Id { get; set; } = string.Empty;
+    [Indexed] public string PeriodPlanRevisionId { get; set; } = string.Empty;
+    public string SourceEntityId { get; set; } = string.Empty;
+    public int SourceType { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string PlannedDate { get; set; } = string.Empty;
+    public decimal? PlannedAmount { get; set; }
+    public bool IsEstimate { get; set; }
+    public string Detail { get; set; } = string.Empty;
 }
 
 [Table("period_actuals")]

@@ -367,6 +367,46 @@ public sealed class FinancialProjectionTests
     }
 
     [Fact]
+    public void PreviousFullStatement_AssignsSeptemberStatementToSeptemberSalary()
+    {
+        var canonical = TestFactory.CanonicalPlan();
+        var plan = canonical with
+        {
+            Loans = [canonical.Loans[0]],
+            PaymentPlans = [],
+            CreditCards =
+            [
+                TestFactory.AxessCard() with
+                {
+                    PaymentStrategy = CreditCardPaymentStrategy.FullStatement
+                }
+            ],
+            PaymentAssignmentStrategies =
+            [
+                new PaymentAssignmentStrategy
+                {
+                    Mode = PaymentAssignmentMode.PreviousPeriod,
+                    EffectiveFromSalaryDate = new DateOnly(2026, 9, 10)
+                }
+            ]
+        };
+
+        var row = Assert.Single(_calculator.Calculate(
+            plan,
+            new DateOnly(2026, 8, 20),
+            1));
+
+        Assert.Equal(new DateOnly(2026, 9, 10), row.PeriodStart);
+        Assert.Equal(115_000m, row.TotalIncome);
+        Assert.Equal(14_501.23m, row.LoanPayments);
+        Assert.Equal(96_485.68m, row.CreditCardPayments);
+        Assert.Equal(110_986.91m, row.MandatoryOutflow);
+        Assert.Equal(-25_986.91m, row.EstimatedSavingsCapacity);
+        Assert.Equal(1_299.35m, row.DeficitFinancingInterest);
+        Assert.Equal(-27_286.26m, row.EndingProjectedSavings);
+    }
+
+    [Fact]
     public void DeficitInterest_CompoundsAndStopsOnRecovery()
     {
         var continuing = BasicPlan(40_000m) with

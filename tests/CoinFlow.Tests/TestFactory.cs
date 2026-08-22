@@ -44,14 +44,20 @@ internal static class TestFactory
                 0,
                 0,
                 TimeSpan.Zero));
+        var planSnapshotService = new PeriodPlanSnapshotService(
+            projectionCalculator,
+            new SalaryPeriodCalculator(),
+            new SalaryResolver());
         var snapshotService = new FinancialSnapshotService(
             store,
             clock,
-            new PeriodPlanSnapshotService(
-                projectionCalculator,
-                new SalaryPeriodCalculator(),
-                new SalaryResolver()),
+            planSnapshotService,
             new SalaryPeriodCalculator());
+        var historicalPlanRevisionService =
+            new HistoricalPlanRevisionService(
+                store,
+                clock,
+                planSnapshotService);
         var comparison = new PlanActualComparisonCalculator();
         var reviewService = new PeriodReviewService(
             store,
@@ -74,6 +80,7 @@ internal static class TestFactory
                 new SalaryPeriodCalculator()),
             new SalaryPeriodCalculator(),
             snapshotService,
+            historicalPlanRevisionService,
             reviewService,
             new HistoryQueryService(store, comparison));
     }

@@ -15,15 +15,21 @@ public sealed class HistoryQueryService(
             {
                 var plan = history.Plans.Single(x =>
                     x.Id == actual.PeriodPlanSnapshotId);
-                var revision = history.Revisions
+                var revisions = history.Revisions
                     .Where(x => x.PeriodPlanSnapshotId == plan.Id)
-                    .OrderByDescending(x => x.CreatedAtUtc)
-                    .FirstOrDefault();
+                    .Where(x => DateOnly.FromDateTime(
+                        x.CreatedAtUtc.UtcDateTime.Date) <=
+                        plan.ReviewAvailableFrom)
+                    .OrderBy(x => x.CreatedAtUtc)
+                    .ThenBy(x => x.RevisionNumber)
+                    .ToArray();
+                var revision = revisions.LastOrDefault();
                 var result = history.Snapshots.Single(x =>
                     x.Id == actual.ResultFinancialSnapshotId);
                 return new HistoryPeriod(
                     plan,
                     revision,
+                    revisions.Length,
                     actual,
                     result,
                     comparisonCalculator.Calculate(

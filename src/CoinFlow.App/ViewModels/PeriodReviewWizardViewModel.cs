@@ -33,8 +33,8 @@ public partial class PeriodReviewWizardViewModel(
     [ObservableProperty] private string plannedLiving = string.Empty;
     [ObservableProperty] private string plannedInterest = string.Empty;
     [ObservableProperty] private string plannedEnding = string.Empty;
-    [ObservableProperty] private bool revisePlan;
-    [ObservableProperty] private string revisedLivingBudget = string.Empty;
+    [ObservableProperty] private bool hasPlanRevision;
+    [ObservableProperty] private string planRevisionNotice = string.Empty;
     [ObservableProperty] private string actualLivingSpend = string.Empty;
     [ObservableProperty] private string actualInterest = "0";
     [ObservableProperty] private string currentStartingSavings = string.Empty;
@@ -92,25 +92,30 @@ public partial class PeriodReviewWizardViewModel(
             }
 
             var plan = _context.OriginalPlan;
+            var finalPlan = FinalPlanValues.From(plan, _context.Revision);
             PeriodText =
                 $"{plan.PeriodStart:dd MMMM yyyy} → {plan.PeriodEnd:dd MMMM yyyy}";
-            PlannedIncome = Money(plan.PlannedIncome, 2);
-            PlannedLoans = Money(plan.PlannedLoanPayments, 2);
-            PlannedCards = Money(plan.PlannedCardPayments, 2);
-            PlannedTemporary = Money(plan.PlannedTemporaryPayments, 2);
-            PlannedInstallments = Money(plan.PlannedInstallmentPayments, 2);
-            PlannedOther = Money(plan.PlannedOtherScheduledPayments, 2);
-            PlannedLarge = Money(plan.PlannedLargeExpenses, 2);
-            PlannedLiving = Money(plan.PlannedLivingBudget, 2);
-            PlannedInterest = Money(
-                plan.PlannedCardInterest + plan.PlannedDeficitInterest,
+            PlannedIncome = Money(finalPlan.PlannedIncome, 2);
+            PlannedLoans = Money(finalPlan.PlannedLoanPayments, 2);
+            PlannedCards = Money(finalPlan.PlannedCardPayments, 2);
+            PlannedTemporary = Money(finalPlan.PlannedTemporaryPayments, 2);
+            PlannedInstallments = Money(
+                finalPlan.PlannedInstallmentPayments,
                 2);
-            PlannedEnding = Money(plan.PlannedEndingSavings, 2);
-            RevisedLivingBudget = plan.PlannedLivingBudget.ToString(
+            PlannedOther = Money(finalPlan.PlannedOtherScheduledPayments, 2);
+            PlannedLarge = Money(finalPlan.PlannedLargeExpenses, 2);
+            PlannedLiving = Money(finalPlan.PlannedLivingBudget, 2);
+            PlannedInterest = Money(finalPlan.PlannedInterest, 2);
+            PlannedEnding = Money(finalPlan.PlannedEndingSavings, 2);
+            HasPlanRevision = _context.RevisionCount > 0;
+            PlanRevisionNotice = HasPlanRevision
+                ? $"Bu plan dönem içinde {_context.RevisionCount} kez güncellendi."
+                : string.Empty;
+            var plannedLivingText = finalPlan.PlannedLivingBudget.ToString(
                 "0.##",
                 TurkishCulture);
-            ActualLivingSpend = RevisedLivingBudget;
-            ActualInterest = plan.PlannedDeficitInterest.ToString(
+            ActualLivingSpend = plannedLivingText;
+            ActualInterest = finalPlan.PlannedDeficitInterest.ToString(
                 "0.##",
                 TurkishCulture);
             _lastSuggestedSavings = _context.SuggestedStartingSavings;
@@ -120,7 +125,7 @@ public partial class PeriodReviewWizardViewModel(
                 TurkishCulture);
 
             Payments.Clear();
-            foreach (var line in plan.PaymentLines)
+            foreach (var line in FinalPaymentLines(plan, _context.Revision))
             {
                 var item = new ActualPaymentInputItem
                 {
@@ -162,13 +167,6 @@ public partial class PeriodReviewWizardViewModel(
             SetStatus(string.Empty);
             if (CurrentStep == 1)
             {
-                if (RevisePlan &&
-                    ParseMoney(RevisedLivingBudget, "Revize yaşam planı") < 0m)
-                {
-                    throw new InvalidOperationException(
-                        "Revize yaşam planı negatif olamaz.");
-                }
-
                 CurrentStep = 2;
                 return;
             }
@@ -350,9 +348,6 @@ public partial class PeriodReviewWizardViewModel(
             : null;
         return new PeriodReviewDraft(
             context.OriginalPlan.Id,
-            RevisePlan
-                ? ParseMoney(RevisedLivingBudget, "Revize yaşam planı")
-                : null,
             paymentDrafts,
             living,
             interest,
@@ -364,9 +359,7 @@ public partial class PeriodReviewWizardViewModel(
                 x.Amount)).ToArray(),
             breakdown,
             confirmed,
-            RevisePlan
-                ? "Kapanış sırasında kullanıcı revizyonu"
-                : string.Empty);
+            string.Empty);
     }
 
     private LivingBreakdownDraft Breakdown(string category, string amount) =>
@@ -427,4 +420,54 @@ public partial class PeriodReviewWizardViewModel(
 
     private static string SignedMoney(decimal value) =>
         $"{(value > 0m ? "+" : string.Empty)}{value.ToString("N2", CultureInfo.GetCultureInfo("tr-TR"))} TL";
+
+    private static IReadOnlyList<PeriodPlanPaymentLine> FinalPaymentLines(
+        PeriodPlanSnapshot plan,
+        PeriodPlanRevision? revision) =>
+        revision?.PaymentLines.Count > 0
+            ? revision.PaymentLines
+            : plan.PaymentLines;
+
+    private sealed record FinalPlanValues(
+        decimal PlannedIncome,
+        decimal PlannedLoanPayments,
+        decimal PlannedCardPayments,
+        decimal PlannedTemporaryPayments,
+        decimal PlannedInstallmentPayments,
+        decimal PlannedOtherScheduledPayments,
+        decimal PlannedLargeExpenses,
+        decimal PlannedLivingBudget,
+        decimal PlannedInterest,
+        decimal PlannedDeficitInterest,
+        decimal PlannedEndingSavings)
+    {
+        public static FinalPlanValues From(
+            PeriodPlanSnapshot plan,
+            PeriodPlanRevision? revision) => revision is null
+            ? new FinalPlanValues(
+                plan.PlannedIncome,
+                plan.PlannedLoanPayments,
+                plan.PlannedCardPayments,
+                plan.PlannedTemporaryPayments,
+                plan.PlannedInstallmentPayments,
+                plan.PlannedOtherScheduledPayments,
+                plan.PlannedLargeExpenses,
+                plan.PlannedLivingBudget,
+                plan.PlannedCardInterest + plan.PlannedDeficitInterest,
+                plan.PlannedDeficitInterest,
+                plan.PlannedEndingSavings)
+            : new FinalPlanValues(
+                revision.PlannedIncome,
+                revision.PlannedLoanPayments,
+                revision.PlannedCardPayments,
+                revision.PlannedTemporaryPayments,
+                revision.PlannedInstallmentPayments,
+                revision.PlannedOtherScheduledPayments,
+                revision.PlannedLargeExpenses,
+                revision.PlannedLivingBudget,
+                revision.PlannedCardInterest +
+                revision.PlannedDeficitInterest,
+                revision.PlannedDeficitInterest,
+                revision.PlannedEndingSavings);
+    }
 }

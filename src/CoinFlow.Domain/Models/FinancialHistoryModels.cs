@@ -89,14 +89,25 @@ public sealed record PeriodPlanRevision
 {
     public Guid Id { get; init; } = Guid.NewGuid();
     public Guid PeriodPlanSnapshotId { get; init; }
+    public int RevisionNumber { get; init; }
     public DateTimeOffset CreatedAtUtc { get; init; }
+    public string Trigger { get; init; } = string.Empty;
+    public PaymentAssignmentMode StrategyUsed { get; init; }
     public decimal PlannedIncome { get; init; }
+    public decimal PlannedLoanPayments { get; init; }
+    public decimal PlannedCardPayments { get; init; }
+    public decimal PlannedTemporaryPayments { get; init; }
+    public decimal PlannedInstallmentPayments { get; init; }
+    public decimal PlannedOtherScheduledPayments { get; init; }
     public decimal PlannedMandatoryPayments { get; init; }
     public decimal PlannedLivingBudget { get; init; }
     public decimal PlannedLargeExpenses { get; init; }
+    public decimal PlannedCardInterest { get; init; }
+    public decimal PlannedDeficitInterest { get; init; }
     public decimal PlannedInterest { get; init; }
     public decimal PlannedEndingSavings { get; init; }
     public string Note { get; init; } = string.Empty;
+    public IReadOnlyList<PeriodPlanPaymentLine> PaymentLines { get; init; } = [];
 }
 
 public sealed record PeriodActual

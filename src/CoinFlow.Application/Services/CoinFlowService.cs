@@ -14,6 +14,7 @@ public sealed class CoinFlowService(
     PaymentAssignmentStrategyResolver strategyResolver,
     SalaryPeriodCalculator salaryPeriodCalculator,
     FinancialSnapshotService snapshotService,
+    HistoricalPlanRevisionService historicalPlanRevisionService,
     PeriodReviewService reviewService,
     HistoryQueryService historyService)
 {
@@ -29,6 +30,20 @@ public sealed class CoinFlowService(
         store.LoadCanonicalDevelopmentDataAsync(cancellationToken);
 
     public async Task<FinancialPlan> GetFinancialPlanAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var plan = await LoadFinancialPlanCoreAsync(cancellationToken);
+        await snapshotService.EnsureInitialSnapshotAsync(
+            plan,
+            cancellationToken);
+        await historicalPlanRevisionService.CaptureOpenPlanRevisionAsync(
+            plan,
+            "Açık plan otomatik güncellendi",
+            cancellationToken);
+        return plan;
+    }
+
+    private async Task<FinancialPlan> LoadFinancialPlanCoreAsync(
         CancellationToken cancellationToken = default)
     {
         await InitializeAsync(cancellationToken);
@@ -64,10 +79,21 @@ public sealed class CoinFlowService(
             PlannedLargeExpenses = await largeExpensesTask,
             PaymentAssignmentStrategies = await strategiesTask
         };
+        return plan;
+    }
+
+    private async Task CapturePlanningChangeAsync(
+        string trigger,
+        CancellationToken cancellationToken)
+    {
+        var plan = await LoadFinancialPlanCoreAsync(cancellationToken);
         await snapshotService.EnsureInitialSnapshotAsync(
             plan,
             cancellationToken);
-        return plan;
+        await historicalPlanRevisionService.CaptureOpenPlanRevisionAsync(
+            plan,
+            trigger,
+            cancellationToken);
     }
 
     public async Task<DashboardSnapshot?> GetDashboardAsync(
@@ -254,6 +280,9 @@ public sealed class CoinFlowService(
                 throw new ArgumentOutOfRangeException(nameof(request.Type));
         }
 
+        await CapturePlanningChangeAsync(
+            "Simülasyon planı uygulandı",
+            cancellationToken);
         return result;
     }
 
@@ -329,6 +358,9 @@ public sealed class CoinFlowService(
         }
 
         await store.UpsertSalaryAsync(entry, cancellationToken);
+        await CapturePlanningChangeAsync(
+            "Maaş planı değişti",
+            cancellationToken);
         return await GetInitialPaymentStrategySetupAsync(cancellationToken);
     }
 
@@ -394,12 +426,17 @@ public sealed class CoinFlowService(
         await GetFinancialPlanAsync(cancellationToken);
     }
 
-    public Task DeleteSalaryAsync(
+    public async Task DeleteSalaryAsync(
         Guid id,
-        CancellationToken cancellationToken = default) =>
-        store.DeleteSalaryAsync(id, cancellationToken);
+        CancellationToken cancellationToken = default)
+    {
+        await store.DeleteSalaryAsync(id, cancellationToken);
+        await CapturePlanningChangeAsync(
+            "Maaş planı değişti",
+            cancellationToken);
+    }
 
-    public Task SaveOtherIncomeAsync(
+    public async Task SaveOtherIncomeAsync(
         OneTimeIncome income,
         CancellationToken cancellationToken = default)
     {
@@ -409,15 +446,23 @@ public sealed class CoinFlowService(
                 "Gelir tutarı sıfırdan büyük olmalıdır.");
         }
 
-        return store.UpsertOtherIncomeAsync(income, cancellationToken);
+        await store.UpsertOtherIncomeAsync(income, cancellationToken);
+        await CapturePlanningChangeAsync(
+            "Gelir planı değişti",
+            cancellationToken);
     }
 
-    public Task DeleteOtherIncomeAsync(
+    public async Task DeleteOtherIncomeAsync(
         Guid id,
-        CancellationToken cancellationToken = default) =>
-        store.DeleteOtherIncomeAsync(id, cancellationToken);
+        CancellationToken cancellationToken = default)
+    {
+        await store.DeleteOtherIncomeAsync(id, cancellationToken);
+        await CapturePlanningChangeAsync(
+            "Gelir planı değişti",
+            cancellationToken);
+    }
 
-    public Task SaveLoanAsync(
+    public async Task SaveLoanAsync(
         Loan loan,
         CancellationToken cancellationToken = default)
     {
@@ -429,15 +474,23 @@ public sealed class CoinFlowService(
         }
 
         CalendarRules.ValidateDay(loan.PaymentDay);
-        return store.UpsertLoanAsync(loan, cancellationToken);
+        await store.UpsertLoanAsync(loan, cancellationToken);
+        await CapturePlanningChangeAsync(
+            "Kredi planı değişti",
+            cancellationToken);
     }
 
-    public Task DeleteLoanAsync(
+    public async Task DeleteLoanAsync(
         Guid id,
-        CancellationToken cancellationToken = default) =>
-        store.DeleteLoanAsync(id, cancellationToken);
+        CancellationToken cancellationToken = default)
+    {
+        await store.DeleteLoanAsync(id, cancellationToken);
+        await CapturePlanningChangeAsync(
+            "Kredi planı değişti",
+            cancellationToken);
+    }
 
-    public Task SavePaymentPlanAsync(
+    public async Task SavePaymentPlanAsync(
         TemporaryPaymentPlan plan,
         CancellationToken cancellationToken = default)
     {
@@ -448,15 +501,23 @@ public sealed class CoinFlowService(
                 "Ödeme planında en az bir pozitif ödeme olmalıdır.");
         }
 
-        return store.UpsertPaymentPlanAsync(plan, cancellationToken);
+        await store.UpsertPaymentPlanAsync(plan, cancellationToken);
+        await CapturePlanningChangeAsync(
+            "Planlı ödeme değişti",
+            cancellationToken);
     }
 
-    public Task DeletePaymentPlanAsync(
+    public async Task DeletePaymentPlanAsync(
         Guid id,
-        CancellationToken cancellationToken = default) =>
-        store.DeletePaymentPlanAsync(id, cancellationToken);
+        CancellationToken cancellationToken = default)
+    {
+        await store.DeletePaymentPlanAsync(id, cancellationToken);
+        await CapturePlanningChangeAsync(
+            "Planlı ödeme değişti",
+            cancellationToken);
+    }
 
-    public Task SavePlannedLargeExpenseAsync(
+    public async Task SavePlannedLargeExpenseAsync(
         PlannedLargeExpense expense,
         CancellationToken cancellationToken = default)
     {
@@ -466,17 +527,25 @@ public sealed class CoinFlowService(
                 "Planlı büyük ödeme tutarı 0'dan büyük olmalı.");
         }
 
-        return store.UpsertPlannedLargeExpenseAsync(
+        await store.UpsertPlannedLargeExpenseAsync(
             expense,
+            cancellationToken);
+        await CapturePlanningChangeAsync(
+            "Büyük ödeme planı değişti",
             cancellationToken);
     }
 
-    public Task DeletePlannedLargeExpenseAsync(
+    public async Task DeletePlannedLargeExpenseAsync(
         Guid id,
-        CancellationToken cancellationToken = default) =>
-        store.DeletePlannedLargeExpenseAsync(id, cancellationToken);
+        CancellationToken cancellationToken = default)
+    {
+        await store.DeletePlannedLargeExpenseAsync(id, cancellationToken);
+        await CapturePlanningChangeAsync(
+            "Büyük ödeme planı değişti",
+            cancellationToken);
+    }
 
-    public Task SaveCreditCardAsync(
+    public async Task SaveCreditCardAsync(
         CreditCard card,
         CancellationToken cancellationToken = default)
     {
@@ -487,13 +556,21 @@ public sealed class CoinFlowService(
                 ? clock.Today
                 : card.BalanceAsOfDate
         };
-        return store.UpsertCreditCardAsync(normalized, cancellationToken);
+        await store.UpsertCreditCardAsync(normalized, cancellationToken);
+        await CapturePlanningChangeAsync(
+            "Kart planı değişti",
+            cancellationToken);
     }
 
-    public Task DeleteCreditCardAsync(
+    public async Task DeleteCreditCardAsync(
         Guid id,
-        CancellationToken cancellationToken = default) =>
-        store.DeleteCreditCardAsync(id, cancellationToken);
+        CancellationToken cancellationToken = default)
+    {
+        await store.DeleteCreditCardAsync(id, cancellationToken);
+        await CapturePlanningChangeAsync(
+            "Kart planı değişti",
+            cancellationToken);
+    }
 
     public async Task SaveCreditCardPaymentPlanAsync(
         Guid creditCardId,
@@ -623,6 +700,10 @@ public sealed class CoinFlowService(
                     cancellationToken);
             }
         }
+
+        await CapturePlanningChangeAsync(
+            "Planlama varsayımları değişti",
+            cancellationToken);
     }
 
     public async Task<PeriodReviewAvailability>
@@ -825,6 +906,9 @@ public sealed class CoinFlowService(
                 CreatedAt = existing?.CreatedAt ?? clock.UtcNow
             },
             cancellationToken);
+        await CapturePlanningChangeAsync(
+            "Maaş kullanım düzeni değişti",
+            cancellationToken);
     }
 
     public async Task DeletePaymentAssignmentStrategyAsync(
@@ -859,6 +943,9 @@ public sealed class CoinFlowService(
             plan.Settings.SalaryDay,
             firstSalary);
         await store.DeletePaymentAssignmentStrategyAsync(id, cancellationToken);
+        await CapturePlanningChangeAsync(
+            "Maaş kullanım düzeni değişti",
+            cancellationToken);
     }
 
     private static SimulationRequest CreateStrategySimulationRequest(

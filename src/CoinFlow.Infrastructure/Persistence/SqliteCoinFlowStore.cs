@@ -9,7 +9,7 @@ namespace CoinFlow.Infrastructure.Persistence;
 public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
 {
     private const string DateFormat = "yyyy-MM-dd";
-    private const int CurrentSchemaVersion = 8;
+    private const int CurrentSchemaVersion = 9;
     private const int CurrentCardStatementModelVersion = 6;
     private const decimal DefaultPlanningInterestRate = 0.05m;
     private static readonly Guid LegacyInitialAssignmentStrategyId =
@@ -74,11 +74,13 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
             await _database.CreateTableAsync<PeriodPlanSnapshotRow>();
             await _database.CreateTableAsync<PeriodPlanPaymentLineRow>();
             await _database.CreateTableAsync<PeriodPlanRevisionRow>();
+            await _database.CreateTableAsync<PeriodPlanRevisionPaymentLineRow>();
             await _database.CreateTableAsync<PeriodActualRow>();
             await _database.CreateTableAsync<ActualPaymentRow>();
             await _database.CreateTableAsync<ActualFlowRow>();
             await _database.CreateTableAsync<ActualLivingBreakdownRow>();
 
+            await MigratePeriodPlanRevisionSchemaAsync();
             await MigrateLegacyCreditCardsAsync();
             await RemoveObsoleteDailyTrackingTablesAsync();
 
@@ -139,6 +141,7 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
             connection.DeleteAll<ActualFlowRow>();
             connection.DeleteAll<ActualPaymentRow>();
             connection.DeleteAll<PeriodActualRow>();
+            connection.DeleteAll<PeriodPlanRevisionPaymentLineRow>();
             connection.DeleteAll<PeriodPlanRevisionRow>();
             connection.DeleteAll<PeriodPlanPaymentLineRow>();
             connection.DeleteAll<PeriodPlanSnapshotRow>();
@@ -523,15 +526,20 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         var plansTask = _database.Table<PeriodPlanSnapshotRow>().ToListAsync();
         var linesTask = _database.Table<PeriodPlanPaymentLineRow>().ToListAsync();
         var revisionsTask = _database.Table<PeriodPlanRevisionRow>().ToListAsync();
+        var revisionLinesTask = _database
+            .Table<PeriodPlanRevisionPaymentLineRow>()
+            .ToListAsync();
         var actualsTask = _database.Table<PeriodActualRow>().ToListAsync();
         var paymentsTask = _database.Table<ActualPaymentRow>().ToListAsync();
         var flowsTask = _database.Table<ActualFlowRow>().ToListAsync();
         var breakdownTask = _database.Table<ActualLivingBreakdownRow>().ToListAsync();
         await Task.WhenAll(
             snapshotsTask, plansTask, linesTask, revisionsTask,
-            actualsTask, paymentsTask, flowsTask, breakdownTask);
+            revisionLinesTask, actualsTask, paymentsTask, flowsTask,
+            breakdownTask);
 
         var lines = await linesTask;
+        var revisionLines = await revisionLinesTask;
         var payments = await paymentsTask;
         var flows = await flowsTask;
         var breakdown = await breakdownTask;
@@ -541,7 +549,13 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
                 .Select(row => FromRow(row, lines.Where(x => x.PeriodPlanSnapshotId == row.Id)))
                 .OrderBy(x => x.PeriodStart)
                 .ToArray(),
-            (await revisionsTask).Select(FromRow).OrderBy(x => x.CreatedAtUtc).ToArray(),
+            (await revisionsTask)
+                .Select(row => FromRow(
+                    row,
+                    revisionLines.Where(x =>
+                        x.PeriodPlanRevisionId == row.Id)))
+                .OrderBy(x => x.CreatedAtUtc)
+                .ToArray(),
             (await actualsTask)
                 .Select(row => FromRow(
                     row,
@@ -603,6 +617,17 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
 
             foreach (var oldPlan in oldPlans)
             {
+                var oldRevisions = connection.Query<PeriodPlanRevisionRow>(
+                    "SELECT * FROM period_plan_revisions WHERE PeriodPlanSnapshotId = ?",
+                    oldPlan.Id);
+                foreach (var oldRevision in oldRevisions)
+                {
+                    connection.Execute(
+                        "DELETE FROM period_plan_revision_payment_lines WHERE PeriodPlanRevisionId = ?",
+                        oldRevision.Id);
+                    connection.Delete(oldRevision);
+                }
+
                 connection.Execute(
                     "DELETE FROM period_plan_payment_lines WHERE PeriodPlanSnapshotId = ?",
                     oldPlan.Id);
@@ -611,6 +636,35 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
 
             connection.Update(ToRow(snapshot with { IsCurrent = true }));
             InsertPlan(connection, plan);
+        });
+    }
+
+    public async Task SavePeriodPlanRevisionAsync(
+        PeriodPlanRevision revision,
+        CancellationToken cancellationToken = default)
+    {
+        await InitializeAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        await _database.RunInTransactionAsync(connection =>
+        {
+            var plan = connection.Find<PeriodPlanSnapshotRow>(
+                Key(revision.PeriodPlanSnapshotId));
+            if (plan is null)
+            {
+                throw new InvalidOperationException(
+                    "Revize edilecek dönem planı bulunamadı.");
+            }
+
+            var finalized = connection.FindWithQuery<PeriodActualRow>(
+                "SELECT * FROM period_actuals WHERE PeriodPlanSnapshotId = ? LIMIT 1",
+                Key(revision.PeriodPlanSnapshotId));
+            if (finalized is not null)
+            {
+                throw new InvalidOperationException(
+                    "Tamamlanmış dönem planı revize edilemez.");
+            }
+
+            InsertRevision(connection, revision);
         });
     }
 
@@ -641,7 +695,7 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
 
             if (commit.Revision is not null)
             {
-                connection.Insert(ToRow(commit.Revision));
+                InsertRevision(connection, commit.Revision);
             }
             InsertActual(connection, commit.Actual);
             foreach (var loan in commit.UpdatedLoans)
@@ -1037,28 +1091,85 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
     {
         Id = Key(value.Id),
         PeriodPlanSnapshotId = Key(value.PeriodPlanSnapshotId),
+        RevisionNumber = value.RevisionNumber,
         CreatedAtUtc = FormatInstant(value.CreatedAtUtc),
+        Trigger = value.Trigger,
+        StrategyUsed = (int)value.StrategyUsed,
         PlannedIncome = value.PlannedIncome,
+        PlannedLoanPayments = value.PlannedLoanPayments,
+        PlannedCardPayments = value.PlannedCardPayments,
+        PlannedTemporaryPayments = value.PlannedTemporaryPayments,
+        PlannedInstallmentPayments = value.PlannedInstallmentPayments,
+        PlannedOtherScheduledPayments = value.PlannedOtherScheduledPayments,
         PlannedMandatoryPayments = value.PlannedMandatoryPayments,
         PlannedLivingBudget = value.PlannedLivingBudget,
         PlannedLargeExpenses = value.PlannedLargeExpenses,
+        PlannedCardInterest = value.PlannedCardInterest,
+        PlannedDeficitInterest = value.PlannedDeficitInterest,
         PlannedInterest = value.PlannedInterest,
         PlannedEndingSavings = value.PlannedEndingSavings,
         Note = value.Note
     };
 
-    private static PeriodPlanRevision FromRow(PeriodPlanRevisionRow row) => new()
+    private static PeriodPlanRevision FromRow(
+        PeriodPlanRevisionRow row,
+        IEnumerable<PeriodPlanRevisionPaymentLineRow> lines) => new()
     {
         Id = ParseKey(row.Id),
         PeriodPlanSnapshotId = ParseKey(row.PeriodPlanSnapshotId),
+        RevisionNumber = row.RevisionNumber,
         CreatedAtUtc = ParseInstant(row.CreatedAtUtc),
+        Trigger = row.Trigger,
+        StrategyUsed = (PaymentAssignmentMode)row.StrategyUsed,
         PlannedIncome = row.PlannedIncome,
+        PlannedLoanPayments = row.PlannedLoanPayments,
+        PlannedCardPayments = row.PlannedCardPayments,
+        PlannedTemporaryPayments = row.PlannedTemporaryPayments,
+        PlannedInstallmentPayments = row.PlannedInstallmentPayments,
+        PlannedOtherScheduledPayments = row.PlannedOtherScheduledPayments,
         PlannedMandatoryPayments = row.PlannedMandatoryPayments,
         PlannedLivingBudget = row.PlannedLivingBudget,
         PlannedLargeExpenses = row.PlannedLargeExpenses,
+        PlannedCardInterest = row.PlannedCardInterest,
+        PlannedDeficitInterest = row.PlannedDeficitInterest,
         PlannedInterest = row.PlannedInterest,
         PlannedEndingSavings = row.PlannedEndingSavings,
-        Note = row.Note
+        Note = row.Note,
+        PaymentLines = lines
+            .Select(line => FromRow(line, ParseKey(row.PeriodPlanSnapshotId)))
+            .OrderBy(x => x.PlannedDate)
+            .ThenBy(x => x.Name)
+            .ToArray()
+    };
+
+    private static PeriodPlanRevisionPaymentLineRow ToRevisionRow(
+        Guid revisionId,
+        PeriodPlanPaymentLine value) => new()
+    {
+        Id = Key(value.Id),
+        PeriodPlanRevisionId = Key(revisionId),
+        SourceEntityId = Key(value.SourceEntityId),
+        SourceType = (int)value.SourceType,
+        Name = value.Name,
+        PlannedDate = FormatDate(value.PlannedDate),
+        PlannedAmount = value.PlannedAmount,
+        IsEstimate = value.IsEstimate,
+        Detail = value.Detail
+    };
+
+    private static PeriodPlanPaymentLine FromRow(
+        PeriodPlanRevisionPaymentLineRow row,
+        Guid periodPlanSnapshotId) => new()
+    {
+        Id = ParseKey(row.Id),
+        PeriodPlanSnapshotId = periodPlanSnapshotId,
+        SourceEntityId = ParseKey(row.SourceEntityId),
+        SourceType = (PlanPaymentSourceType)row.SourceType,
+        Name = row.Name,
+        PlannedDate = ParseDate(row.PlannedDate),
+        PlannedAmount = row.PlannedAmount,
+        IsEstimate = row.IsEstimate,
+        Detail = row.Detail
     };
 
     private static PeriodActualRow ToRow(PeriodActual value) => new()
@@ -1207,6 +1318,22 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
         foreach (var item in actual.LivingBreakdown) connection.Insert(ToRow(item with { PeriodActualId = actual.Id }));
     }
 
+    private static void InsertRevision(
+        SQLiteConnection connection,
+        PeriodPlanRevision revision)
+    {
+        connection.Insert(ToRow(revision));
+        foreach (var line in revision.PaymentLines)
+        {
+            connection.Insert(ToRevisionRow(
+                revision.Id,
+                line with
+                {
+                    PeriodPlanSnapshotId = revision.PeriodPlanSnapshotId
+                }));
+        }
+    }
+
     private static void InsertPaymentPlan(SQLiteConnection connection, TemporaryPaymentPlan plan)
     {
         connection.InsertOrReplace(new PaymentPlanRow
@@ -1304,6 +1431,127 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
             "DROP TABLE IF EXISTS emergency_fund_transfers");
     }
 
+    private async Task MigratePeriodPlanRevisionSchemaAsync()
+    {
+        await EnsureColumnAsync(
+            "period_plan_revisions",
+            "RevisionNumber",
+            "RevisionNumber INTEGER NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(
+            "period_plan_revisions",
+            "Trigger",
+            "Trigger TEXT NOT NULL DEFAULT ''");
+        await EnsureColumnAsync(
+            "period_plan_revisions",
+            "StrategyUsed",
+            "StrategyUsed INTEGER NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(
+            "period_plan_revisions",
+            "PlannedLoanPayments",
+            "PlannedLoanPayments decimal NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(
+            "period_plan_revisions",
+            "PlannedCardPayments",
+            "PlannedCardPayments decimal NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(
+            "period_plan_revisions",
+            "PlannedTemporaryPayments",
+            "PlannedTemporaryPayments decimal NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(
+            "period_plan_revisions",
+            "PlannedInstallmentPayments",
+            "PlannedInstallmentPayments decimal NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(
+            "period_plan_revisions",
+            "PlannedOtherScheduledPayments",
+            "PlannedOtherScheduledPayments decimal NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(
+            "period_plan_revisions",
+            "PlannedCardInterest",
+            "PlannedCardInterest decimal NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(
+            "period_plan_revisions",
+            "PlannedDeficitInterest",
+            "PlannedDeficitInterest decimal NOT NULL DEFAULT 0");
+        await BackfillLegacyPeriodPlanRevisionSummariesAsync();
+    }
+
+    private async Task BackfillLegacyPeriodPlanRevisionSummariesAsync()
+    {
+        await _database.ExecuteAsync(
+            """
+            UPDATE period_plan_revisions
+            SET
+                RevisionNumber = CASE
+                    WHEN RevisionNumber = 0 THEN (
+                        SELECT COUNT(*)
+                        FROM period_plan_revisions prior
+                        WHERE prior.PeriodPlanSnapshotId = period_plan_revisions.PeriodPlanSnapshotId
+                          AND prior.CreatedAtUtc <= period_plan_revisions.CreatedAtUtc)
+                    ELSE RevisionNumber
+                END,
+                Trigger = CASE
+                    WHEN Trigger = '' THEN Note
+                    ELSE Trigger
+                END,
+                StrategyUsed = COALESCE((
+                    SELECT StrategyUsed
+                    FROM period_plan_snapshots
+                    WHERE Id = period_plan_revisions.PeriodPlanSnapshotId), StrategyUsed),
+                PlannedLoanPayments = COALESCE((
+                    SELECT PlannedLoanPayments
+                    FROM period_plan_snapshots
+                    WHERE Id = period_plan_revisions.PeriodPlanSnapshotId), PlannedLoanPayments),
+                PlannedCardPayments = COALESCE((
+                    SELECT PlannedCardPayments
+                    FROM period_plan_snapshots
+                    WHERE Id = period_plan_revisions.PeriodPlanSnapshotId), PlannedCardPayments),
+                PlannedTemporaryPayments = COALESCE((
+                    SELECT PlannedTemporaryPayments
+                    FROM period_plan_snapshots
+                    WHERE Id = period_plan_revisions.PeriodPlanSnapshotId), PlannedTemporaryPayments),
+                PlannedInstallmentPayments = COALESCE((
+                    SELECT PlannedInstallmentPayments
+                    FROM period_plan_snapshots
+                    WHERE Id = period_plan_revisions.PeriodPlanSnapshotId), PlannedInstallmentPayments),
+                PlannedOtherScheduledPayments = COALESCE((
+                    SELECT PlannedOtherScheduledPayments
+                    FROM period_plan_snapshots
+                    WHERE Id = period_plan_revisions.PeriodPlanSnapshotId), PlannedOtherScheduledPayments),
+                PlannedCardInterest = COALESCE((
+                    SELECT PlannedCardInterest
+                    FROM period_plan_snapshots
+                    WHERE Id = period_plan_revisions.PeriodPlanSnapshotId), PlannedCardInterest),
+                PlannedDeficitInterest = PlannedInterest - COALESCE((
+                    SELECT PlannedCardInterest
+                    FROM period_plan_snapshots
+                    WHERE Id = period_plan_revisions.PeriodPlanSnapshotId), 0)
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM period_plan_revision_payment_lines
+                WHERE PeriodPlanRevisionId = period_plan_revisions.Id)
+            """);
+    }
+
+    private async Task EnsureColumnAsync(
+        string table,
+        string column,
+        string definition)
+    {
+        var columns = await _database.QueryAsync<TableInfoRow>(
+            $"PRAGMA table_info({table})");
+        if (columns.Any(x => string.Equals(
+                x.Name,
+                column,
+                StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        await _database.ExecuteAsync(
+            $"ALTER TABLE {table} ADD COLUMN {definition}");
+    }
+
     private async Task MigrateLegacyCreditCardsAsync()
     {
         var cards = await _database.Table<CreditCardRow>().ToListAsync();
@@ -1361,5 +1609,11 @@ public sealed class SqliteCoinFlowStore : ICoinFlowStore, IAsyncDisposable
                 CurrentCardStatementModelVersion;
             await _database.UpdateAsync(row);
         }
+    }
+
+    private sealed class TableInfoRow
+    {
+        [Column("name")]
+        public string Name { get; set; } = string.Empty;
     }
 }

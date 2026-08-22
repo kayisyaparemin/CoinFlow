@@ -21,7 +21,7 @@
                 <VerticalStackLayout Spacing="8">
                     <Label Text="Yaşam Giderleri" Style="{StaticResource SectionTitle}" />
                     <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" RowSpacing="7"><Label Text="İlk plan" Style="{StaticResource MutedText}" /><Label Grid.Column="1" Text="{Binding OriginalLiving}" /><Label Grid.Row="1" Text="Son plan" Style="{StaticResource MutedText}" /><Label Grid.Row="1" Grid.Column="1" Text="{Binding FinalLiving}" /><Label Grid.Row="2" Text="Gerçek" Style="{StaticResource MutedText}" /><Label Grid.Row="2" Grid.Column="1" Text="{Binding ActualLiving}" FontFamily="OpenSansSemibold" /></Grid>
-                    <Label Text="Kapanışta plan revize edildi; ilk plan korunuyor." IsVisible="{Binding HasRevision}" Style="{StaticResource MutedText}" />
+                    <Label Text="{Binding RevisionNotice}" IsVisible="{Binding HasRevision}" Style="{StaticResource MutedText}" />
                 </VerticalStackLayout>
             </Border>
             <Label Text="Kategori Farkları" Style="{StaticResource SectionTitle}" />

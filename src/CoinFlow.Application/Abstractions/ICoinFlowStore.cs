@@ -84,6 +84,9 @@ public interface ICoinFlowStore
         FinancialSnapshot snapshot,
         PeriodPlanSnapshot plan,
         CancellationToken cancellationToken = default);
+    Task SavePeriodPlanRevisionAsync(
+        PeriodPlanRevision revision,
+        CancellationToken cancellationToken = default);
     Task FinalizeFinancialReviewAsync(
         FinancialReviewCommit commit,
         CancellationToken cancellationToken = default);

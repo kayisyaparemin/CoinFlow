@@ -15,10 +15,11 @@ public sealed class FinancialInstrumentReconciliationService(
     public ReconciledFinancialInstruments Apply(
         FinancialPlan data,
         PeriodPlanSnapshot plan,
+        IReadOnlyList<PeriodPlanPaymentLine> paymentLines,
         IReadOnlyList<ActualPayment> actualPayments,
         DateOnly newAnchor)
     {
-        var lines = plan.PaymentLines.ToDictionary(x => x.Id);
+        var lines = paymentLines.ToDictionary(x => x.Id);
         var loans = data.Loans.ToDictionary(x => x.Id);
         var paymentPlans = data.PaymentPlans.ToDictionary(x => x.Id);
         var cards = data.CreditCards.ToDictionary(x => x.Id);

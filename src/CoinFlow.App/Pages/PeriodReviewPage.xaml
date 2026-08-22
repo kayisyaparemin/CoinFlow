@@ -33,7 +33,8 @@
                 <Border BackgroundColor="{StaticResource SoftPink}" StrokeThickness="0">
                     <VerticalStackLayout Spacing="5">
                         <Label Text="1. Planın" Style="{StaticResource SectionTitle}" />
-                        <Label Text="Bu dönem başlarken oluşturduğumuz değişmez plan." Style="{StaticResource MutedText}" />
+                        <Label Text="Dönem kapanmadan önceki son planın." Style="{StaticResource MutedText}" />
+                        <Label Text="{Binding PlanRevisionNotice}" IsVisible="{Binding HasPlanRevision}" Style="{StaticResource MutedText}" />
                     </VerticalStackLayout>
                 </Border>
                 <Border>
@@ -49,20 +50,6 @@
                         <Label Grid.Row="8" Text="Tahmini faiz" Style="{StaticResource MutedText}" /><Label Grid.Row="8" Grid.Column="1" Text="{Binding PlannedInterest}" />
                         <Label Grid.Row="9" Text="Beklenen dönem sonu" FontFamily="OpenSansSemibold" /><Label Grid.Row="9" Grid.Column="1" Text="{Binding PlannedEnding}" FontFamily="OpenSansSemibold" />
                     </Grid>
-                </Border>
-                <Border BackgroundColor="{StaticResource SoftYellow}" StrokeThickness="0">
-                    <VerticalStackLayout Spacing="9">
-                        <Label Text="Bu dönem için son planın bu muydu?" Style="{StaticResource SectionTitle}" />
-                        <Grid ColumnDefinitions="*,Auto">
-                            <Label Text="Planı revize et" VerticalOptions="Center" />
-                            <Switch Grid.Column="1" IsToggled="{Binding RevisePlan}" />
-                        </Grid>
-                        <VerticalStackLayout IsVisible="{Binding RevisePlan}" Spacing="6">
-                            <Label Text="Son yaşam gideri planın" Style="{StaticResource FieldLabel}" />
-                            <Entry Text="{Binding RevisedLivingBudget}" Keyboard="Numeric" />
-                            <Label Text="Bu revizyon yalnızca kapanan dönemin karşılaştırmasını etkiler; gelecek varsayımını değiştirmez." Style="{StaticResource MutedText}" />
-                        </VerticalStackLayout>
-                    </VerticalStackLayout>
                 </Border>
                 <Button Text="Evet, Gerçekte Ne Oldu?" Command="{Binding NextCommand}" />
             </VerticalStackLayout>

@@ -28,14 +28,12 @@ public sealed record LivingBreakdownDraft(string Category, decimal Amount);
 
 public sealed record PeriodReviewDraft(
     Guid PeriodPlanSnapshotId,
-    decimal? RevisedLivingBudget,
     IReadOnlyList<ActualPaymentDraft> Payments,
     decimal ActualLivingSpend,
     decimal ActualInterest,
     IReadOnlyList<ActualFlowDraft> Flows,
     IReadOnlyList<LivingBreakdownDraft> LivingBreakdown,
     decimal? ConfirmedStartingSavings,
-    string RevisionNote = "",
     string ActualNote = "");
 
 public sealed record PlanActualComparisonLine(
@@ -55,6 +53,7 @@ public sealed record PeriodReviewContext(
     FinancialSnapshot Snapshot,
     PeriodPlanSnapshot OriginalPlan,
     PeriodPlanRevision? Revision,
+    int RevisionCount,
     PeriodActual? Actual,
     decimal SuggestedStartingSavings,
     PlanActualComparison? Comparison);
@@ -74,6 +73,7 @@ public sealed record FinancialReviewResult(
 public sealed record HistoryPeriod(
     PeriodPlanSnapshot OriginalPlan,
     PeriodPlanRevision? Revision,
+    int RevisionCount,
     PeriodActual Actual,
     FinancialSnapshot ResultSnapshot,
     PlanActualComparison Comparison);

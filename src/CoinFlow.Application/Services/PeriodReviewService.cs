@@ -71,26 +71,31 @@ public sealed class PeriodReviewService(
 
         var source = history.Snapshots.Single(x =>
             x.Id == plan.FinancialSnapshotId);
-        var revision = history.Revisions
+        var revisions = history.Revisions
             .Where(x => x.PeriodPlanSnapshotId == plan.Id)
-            .OrderByDescending(x => x.CreatedAtUtc)
-            .FirstOrDefault();
+            .Where(x => IsValidForFinalPlan(plan, x))
+            .OrderBy(x => x.CreatedAtUtc)
+            .ThenBy(x => x.RevisionNumber)
+            .ToArray();
+        var revision = revisions.LastOrDefault();
         var actual = history.Actuals.SingleOrDefault(x =>
             x.PeriodPlanSnapshotId == plan.Id);
         var comparison = actual is null
             ? null
             : comparisonCalculator.Calculate(plan, revision, actual);
+        var paymentLines = FinalPaymentLines(plan, revision);
+        var planned = FinalPlanValues.From(plan, revision);
         return new PeriodReviewContext(
             source,
             plan,
             revision,
+            revisions.Length,
             actual,
             source.ProjectionStartingSavings +
-            plan.PlannedIncome -
-            plan.PaymentLines.Sum(x =>
-                x.PlannedAmount.GetValueOrDefault()) -
-            plan.PlannedLivingBudget -
-            plan.PlannedDeficitInterest,
+            planned.PlannedIncome -
+            paymentLines.Sum(x => x.PlannedAmount.GetValueOrDefault()) -
+            planned.PlannedLivingBudget -
+            planned.PlannedDeficitInterest,
             comparison);
     }
 
@@ -104,14 +109,13 @@ public sealed class PeriodReviewService(
             ?? throw new InvalidOperationException("Dönem planı bulunamadı.");
         var snapshot = history.Snapshots.Single(x =>
             x.Id == plan.FinancialSnapshotId);
-        var revision = BuildRevision(
-            plan,
-            draft.RevisedLivingBudget,
-            draft.RevisionNote);
+        var revision = SelectFinalRevision(history, plan);
+        var paymentLines = FinalPaymentLines(plan, revision);
         var actual = BuildActual(
             plan,
             snapshot,
             revision,
+            paymentLines,
             draft,
             Guid.Empty,
             false);
@@ -157,20 +161,20 @@ public sealed class PeriodReviewService(
                 "Bu dönem henüz güncellenmeye hazır değil.");
         }
 
-        var revision = BuildRevision(
-            plan,
-            draft.RevisedLivingBudget,
-            draft.RevisionNote);
+        var revision = SelectFinalRevision(history, plan);
+        var paymentLines = FinalPaymentLines(plan, revision);
         var provisional = BuildActual(
             plan,
             current,
             revision,
+            paymentLines,
             draft,
             Guid.Empty,
             true);
         var instruments = instrumentService.Apply(
             financialPlan,
             plan,
+            paymentLines,
             provisional.Payments,
             plan.ReviewAvailableFrom);
         var updatedPlan = financialPlan with
@@ -199,7 +203,7 @@ public sealed class PeriodReviewService(
 
         await store.FinalizeFinancialReviewAsync(
             new FinancialReviewCommit(
-                revision,
+                null,
                 actual,
                 newBundle.Snapshot,
                 newBundle.Plan,
@@ -221,6 +225,7 @@ public sealed class PeriodReviewService(
         PeriodPlanSnapshot plan,
         FinancialSnapshot snapshot,
         PeriodPlanRevision? revision,
+        IReadOnlyList<PeriodPlanPaymentLine> paymentLines,
         PeriodReviewDraft draft,
         Guid resultSnapshotId,
         bool validateReviewDate)
@@ -258,7 +263,7 @@ public sealed class PeriodReviewService(
         var paymentDrafts = draft.Payments
             .GroupBy(x => x.PeriodPlanPaymentLineId)
             .ToDictionary(x => x.Key, x => x.Single());
-        var payments = plan.PaymentLines.Select(line =>
+        var payments = paymentLines.Select(line =>
         {
             var input = paymentDrafts.GetValueOrDefault(line.Id)
                 ?? new ActualPaymentDraft(
@@ -389,38 +394,43 @@ public sealed class PeriodReviewService(
         };
     }
 
-    private PeriodPlanRevision? BuildRevision(
+    private static PeriodPlanRevision? SelectFinalRevision(
+        FinancialHistoryData history,
+        PeriodPlanSnapshot plan) => history.Revisions
+        .Where(x => x.PeriodPlanSnapshotId == plan.Id)
+        .Where(x => IsValidForFinalPlan(plan, x))
+        .OrderBy(x => x.CreatedAtUtc)
+        .ThenBy(x => x.RevisionNumber)
+        .LastOrDefault();
+
+    private static bool IsValidForFinalPlan(
         PeriodPlanSnapshot plan,
-        decimal? revisedLivingBudget,
-        string note)
+        PeriodPlanRevision revision) =>
+        DateOnly.FromDateTime(revision.CreatedAtUtc.UtcDateTime.Date) <=
+        plan.ReviewAvailableFrom;
+
+    private static IReadOnlyList<PeriodPlanPaymentLine> FinalPaymentLines(
+        PeriodPlanSnapshot plan,
+        PeriodPlanRevision? revision) =>
+        revision?.PaymentLines.Count > 0
+            ? revision.PaymentLines
+            : plan.PaymentLines;
+
+    private sealed record FinalPlanValues(
+        decimal PlannedIncome,
+        decimal PlannedLivingBudget,
+        decimal PlannedDeficitInterest)
     {
-        if (revisedLivingBudget is null ||
-            revisedLivingBudget.Value == plan.PlannedLivingBudget)
-        {
-            return null;
-        }
-
-        if (revisedLivingBudget < 0m)
-        {
-            throw new InvalidOperationException(
-                "Revize yaşam planı negatif olamaz.");
-        }
-
-        var livingDifference = revisedLivingBudget.Value -
-                               plan.PlannedLivingBudget;
-        return new PeriodPlanRevision
-        {
-            PeriodPlanSnapshotId = plan.Id,
-            CreatedAtUtc = clock.UtcNow,
-            PlannedIncome = plan.PlannedIncome,
-            PlannedMandatoryPayments = plan.PlannedMandatoryPayments,
-            PlannedLivingBudget = revisedLivingBudget.Value,
-            PlannedLargeExpenses = plan.PlannedLargeExpenses,
-            PlannedInterest = plan.PlannedCardInterest +
-                              plan.PlannedDeficitInterest,
-            PlannedEndingSavings = plan.PlannedEndingSavings -
-                                   livingDifference,
-            Note = note.Trim()
-        };
+        public static FinalPlanValues From(
+            PeriodPlanSnapshot plan,
+            PeriodPlanRevision? revision) => revision is null
+            ? new FinalPlanValues(
+                plan.PlannedIncome,
+                plan.PlannedLivingBudget,
+                plan.PlannedDeficitInterest)
+            : new FinalPlanValues(
+                revision.PlannedIncome,
+                revision.PlannedLivingBudget,
+                revision.PlannedDeficitInterest);
     }
 }

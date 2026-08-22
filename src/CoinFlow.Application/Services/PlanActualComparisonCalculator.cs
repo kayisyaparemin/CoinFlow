@@ -10,47 +10,37 @@ public sealed class PlanActualComparisonCalculator
         PeriodPlanRevision? revision,
         PeriodActual actual)
     {
-        var plannedIncome = revision?.PlannedIncome ?? plan.PlannedIncome;
-        var plannedMandatory = revision?.PlannedMandatoryPayments ??
-                               plan.PlannedMandatoryPayments;
-        var plannedLiving = revision?.PlannedLivingBudget ??
-                            plan.PlannedLivingBudget;
-        var plannedLarge = revision?.PlannedLargeExpenses ??
-                           plan.PlannedLargeExpenses;
-        var plannedInterest = revision?.PlannedInterest ??
-                              plan.PlannedCardInterest +
-                              plan.PlannedDeficitInterest;
-        var plannedEnding = revision?.PlannedEndingSavings ??
-                            plan.PlannedEndingSavings;
+        var planned = FinalPlanValues.From(plan, revision);
         var lines = new[]
         {
-            Line("Gelir", plannedIncome, actual.ActualIncome),
-            Line("Krediler", plan.PlannedLoanPayments,
+            Line("Gelir", planned.PlannedIncome, actual.ActualIncome),
+            Line("Krediler", planned.PlannedLoanPayments,
                 actual.ActualLoanPayments),
-            Line("Kredi kartları", plan.PlannedCardPayments,
+            Line("Kredi kartları", planned.PlannedCardPayments,
                 actual.ActualCardPayments),
-            Line("Geçici ödemeler", plan.PlannedTemporaryPayments,
+            Line("Geçici ödemeler", planned.PlannedTemporaryPayments,
                 actual.ActualTemporaryPayments),
-            Line("Taksitli ödemeler", plan.PlannedInstallmentPayments,
+            Line("Taksitli ödemeler", planned.PlannedInstallmentPayments,
                 actual.ActualInstallmentPayments),
             Line("Diğer planlı ödemeler",
-                plan.PlannedOtherScheduledPayments,
+                planned.PlannedOtherScheduledPayments,
                 actual.ActualOtherScheduledPayments),
-            Line("Zorunlu ödemeler", plannedMandatory,
+            Line("Zorunlu ödemeler", planned.PlannedMandatoryPayments,
                 actual.ActualMandatoryPayments),
-            Line("Büyük ödemeler", plannedLarge,
+            Line("Büyük ödemeler", planned.PlannedLargeExpenses,
                 actual.ActualLargeExpenses),
-            Line("Yaşam giderleri", plannedLiving,
+            Line("Yaşam giderleri", planned.PlannedLivingBudget,
                 actual.ActualLivingSpend),
-            Line("Faiz", plannedInterest, actual.ActualInterest),
+            Line("Faiz", planned.PlannedInterest, actual.ActualInterest),
             Line("Plan dışı ödemeler", 0m,
                 actual.UnplannedPayments),
             Line("Dönem düzeltmesi", 0m,
                 actual.ReconciliationAdjustment)
         };
-        var difference = actual.ConfirmedEndingSavings - plannedEnding;
+        var difference = actual.ConfirmedEndingSavings -
+                         planned.PlannedEndingSavings;
         return new PlanActualComparison(
-            plannedEnding,
+            planned.PlannedEndingSavings,
             actual.ConfirmedEndingSavings,
             difference,
             BuildSummary(difference, lines),
@@ -85,5 +75,48 @@ public sealed class PlanActualComparisonCalculator
         return cause is null
             ? lead
             : $"{lead} En belirgin fark {cause.Category} kaleminde {Math.Abs(cause.Difference):N2} TL oldu.";
+    }
+
+    private sealed record FinalPlanValues(
+        decimal PlannedIncome,
+        decimal PlannedLoanPayments,
+        decimal PlannedCardPayments,
+        decimal PlannedTemporaryPayments,
+        decimal PlannedInstallmentPayments,
+        decimal PlannedOtherScheduledPayments,
+        decimal PlannedMandatoryPayments,
+        decimal PlannedLivingBudget,
+        decimal PlannedLargeExpenses,
+        decimal PlannedInterest,
+        decimal PlannedEndingSavings)
+    {
+        public static FinalPlanValues From(
+            PeriodPlanSnapshot plan,
+            PeriodPlanRevision? revision) => revision is null
+            ? new FinalPlanValues(
+                plan.PlannedIncome,
+                plan.PlannedLoanPayments,
+                plan.PlannedCardPayments,
+                plan.PlannedTemporaryPayments,
+                plan.PlannedInstallmentPayments,
+                plan.PlannedOtherScheduledPayments,
+                plan.PlannedMandatoryPayments,
+                plan.PlannedLivingBudget,
+                plan.PlannedLargeExpenses,
+                plan.PlannedCardInterest + plan.PlannedDeficitInterest,
+                plan.PlannedEndingSavings)
+            : new FinalPlanValues(
+                revision.PlannedIncome,
+                revision.PlannedLoanPayments,
+                revision.PlannedCardPayments,
+                revision.PlannedTemporaryPayments,
+                revision.PlannedInstallmentPayments,
+                revision.PlannedOtherScheduledPayments,
+                revision.PlannedMandatoryPayments,
+                revision.PlannedLivingBudget,
+                revision.PlannedLargeExpenses,
+                revision.PlannedCardInterest +
+                revision.PlannedDeficitInterest,
+                revision.PlannedEndingSavings);
     }
 }

@@ -49,6 +49,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<FinancialProjectionService>();
         builder.Services.AddSingleton<PeriodPlanSnapshotService>();
         builder.Services.AddSingleton<FinancialSnapshotService>();
+        builder.Services.AddSingleton<HistoricalPlanRevisionService>();
         builder.Services.AddSingleton<FinancialStateReconciliationService>();
         builder.Services.AddSingleton<FinancialInstrumentReconciliationService>();
         builder.Services.AddSingleton<PlanActualComparisonCalculator>();

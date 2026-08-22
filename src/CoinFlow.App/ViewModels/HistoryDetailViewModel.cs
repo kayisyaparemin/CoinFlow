@@ -18,6 +18,7 @@ public partial class HistoryDetailViewModel(
     [ObservableProperty] private string finalLiving = string.Empty;
     [ObservableProperty] private string actualLiving = string.Empty;
     [ObservableProperty] private bool hasRevision;
+    [ObservableProperty] private string revisionNotice = string.Empty;
     [ObservableProperty] private string plannedEnding = string.Empty;
     [ObservableProperty] private string actualEnding = string.Empty;
     [ObservableProperty] private string difference = string.Empty;
@@ -42,6 +43,9 @@ public partial class HistoryDetailViewModel(
                 plan.PlannedLivingBudget,
                 2);
             ActualLiving = Money(period.Actual.ActualLivingSpend, 2);
+            RevisionNotice = HasRevision
+                ? $"Plan dönem içinde {period.RevisionCount} kez güncellendi; ilk plan korunuyor."
+                : string.Empty;
             PlannedEnding = Money(
                 period.Comparison.PlannedEndingSavings,
                 2);
