@@ -1,3 +1,4 @@
+using CoinFlow.App.Services;
 using CoinFlow.App.ViewModels;
 
 namespace CoinFlow.App.Pages;
@@ -5,11 +6,15 @@ namespace CoinFlow.App.Pages;
 public partial class PeriodReviewPage : ContentPage
 {
     private readonly PeriodReviewWizardViewModel _viewModel;
+    private readonly IUserFeedbackService _feedback;
 
-    public PeriodReviewPage(PeriodReviewWizardViewModel viewModel)
+    public PeriodReviewPage(
+        PeriodReviewWizardViewModel viewModel,
+        IUserFeedbackService feedback)
     {
         InitializeComponent();
         BindingContext = _viewModel = viewModel;
+        _feedback = feedback;
     }
 
     protected override async void OnAppearing()
@@ -31,7 +36,7 @@ public partial class PeriodReviewPage : ContentPage
     {
         if (!_viewModel.IsSuccess)
         {
-            var close = await DisplayAlert(
+            var close = await _feedback.ConfirmAsync(
                 "Güncellemeden çıkılsın mı?",
                 "Girdiğin bilgiler henüz kaydedilmedi. Çıkmak istiyor musun?",
                 "Çık",

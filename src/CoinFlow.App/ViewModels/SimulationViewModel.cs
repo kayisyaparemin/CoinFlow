@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CoinFlow.App.Models;
+using CoinFlow.App.Services;
 using CoinFlow.Application.Models;
 using CoinFlow.Application.Services;
 using CoinFlow.Domain.Calculations;
@@ -11,7 +12,8 @@ namespace CoinFlow.App.ViewModels;
 
 public partial class SimulationViewModel(
     CoinFlowService service,
-    SimulatorInsightService simulatorInsightService) : ViewModelBase
+    SimulatorInsightService simulatorInsightService,
+    IUserFeedbackService feedback) : ViewModelBase
 {
     public ObservableCollection<SelectionOption<SimulationScenarioType>>
         ScenarioTypes { get; } =
@@ -211,7 +213,7 @@ public partial class SimulationViewModel(
             IsResultStale = false;
             _lastScenarioProjection = [];
             ClearTargetResult();
-            SetStatus(exception.Message);
+            SetStatus(UserFacingMessages.FromException(exception));
         }
     }
 
@@ -354,7 +356,7 @@ public partial class SimulationViewModel(
         }
         catch (Exception exception)
         {
-            SetStatus(exception.Message);
+            SetStatus(UserFacingMessages.FromException(exception));
         }
     }
 
@@ -448,7 +450,13 @@ public partial class SimulationViewModel(
             {
                 HasResults = false;
             }
-            SetStatus(exception.Message);
+            var message = UserFacingMessages.FromException(
+                exception,
+                "Simülasyon hesaplanırken bir sorun oluştu. Tekrar deneyebilirsin.");
+            SetStatus(message);
+            await feedback.ShowErrorAsync(
+                message,
+                title: "Hesaplanamadı");
         }
         finally
         {
@@ -468,7 +476,7 @@ public partial class SimulationViewModel(
         catch (Exception exception)
         {
             ClearTargetResult();
-            SetStatus(exception.Message);
+            SetStatus(UserFacingMessages.FromException(exception));
         }
     }
 
@@ -521,7 +529,9 @@ public partial class SimulationViewModel(
         }
         catch (Exception exception)
         {
-            SetStatus(exception.Message);
+            var message = UserFacingMessages.FromException(exception);
+            SetStatus(message);
+            await feedback.ShowErrorAsync(message);
             return null;
         }
         finally
@@ -626,7 +636,7 @@ public partial class SimulationViewModel(
         catch (Exception exception)
         {
             ClearTargetResult();
-            SetStatus(exception.Message);
+            SetStatus(UserFacingMessages.FromException(exception));
         }
     }
 

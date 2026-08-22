@@ -55,10 +55,6 @@ public partial class InitialStrategyPage : ContentPage
         }
 
         SaveButton.IsEnabled = true;
-        await DisplayAlert(
-            "Düzen kaydedilemedi",
-            StatusMessage(),
-            "Tamam");
     }
 
     protected override bool OnBackButtonPressed()
@@ -69,8 +65,4 @@ public partial class InitialStrategyPage : ContentPage
     private static string DateText(DateOnly date) =>
         date.ToString("d MMMM", CultureInfo.GetCultureInfo("tr-TR"));
 
-    private string StatusMessage() =>
-        string.IsNullOrWhiteSpace(_viewModel.StatusMessage)
-            ? "Lütfen yeniden dene."
-            : _viewModel.StatusMessage;
 }

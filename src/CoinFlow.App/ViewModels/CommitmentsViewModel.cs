@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CoinFlow.App.Models;
+using CoinFlow.App.Services;
 using CoinFlow.Application.Models;
 using CoinFlow.Application.Services;
 using CoinFlow.Domain.Calculations;
@@ -11,7 +12,8 @@ namespace CoinFlow.App.ViewModels;
 
 public partial class CommitmentsViewModel(
     CoinFlowService service,
-    CreditCardStatementCalculator cardCalculator) : ViewModelBase
+    CreditCardStatementCalculator cardCalculator,
+    IUserFeedbackService feedback) : ViewModelBase
 {
     public event Action<InitialPaymentStrategySetup>?
         InitialStrategySetupRequested;
@@ -224,12 +226,16 @@ public partial class CommitmentsViewModel(
         try
         {
             await service.CompleteInitialPaymentStrategySetupAsync(mode);
-            SetStatus("Maaş kullanım düzeni kaydedildi; 12 aylık plan hazır.");
+            SetStatus(string.Empty);
+            await feedback.ShowSuccessAsync(
+                "Maaş kullanım düzeni kaydedildi.");
             return true;
         }
         catch (Exception exception)
         {
-            SetStatus(exception.Message);
+            var message = UserFacingMessages.FromException(exception);
+            SetStatus(message);
+            await feedback.ShowErrorAsync(message);
             return false;
         }
     }
@@ -301,7 +307,7 @@ public partial class CommitmentsViewModel(
         }
         catch (Exception exception)
         {
-            SetStatus(exception.Message);
+            SetStatus(UserFacingMessages.FromException(exception));
         }
     }
 
@@ -327,7 +333,7 @@ public partial class CommitmentsViewModel(
         }
         catch (Exception exception)
         {
-            SetStatus(exception.Message);
+            SetStatus(UserFacingMessages.FromException(exception));
         }
     }
 
@@ -360,7 +366,7 @@ public partial class CommitmentsViewModel(
         }
         catch (Exception exception)
         {
-            SetStatus(exception.Message);
+            SetStatus(UserFacingMessages.FromException(exception));
         }
     }
 
@@ -432,87 +438,150 @@ public partial class CommitmentsViewModel(
     [RelayCommand]
     private async Task SaveAsync()
     {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        Func<Task> persist;
+        string successMessage;
         try
         {
-            switch (SelectedRecordType?.Value)
-            {
-                case "salary":
-                    await service.SaveSalaryAsync(new SalaryScheduleEntry
-                    {
-                        Amount = RequirePositive(ParseMoney(Amount, "Maaş"), "Maaş"),
-                        EffectiveDate = DateOnly.FromDateTime(EffectiveDate),
-                        Description = string.IsNullOrWhiteSpace(Name) ? "Maaş" : Name.Trim()
-                    });
-                    break;
-                case "income":
-                    await service.SaveOtherIncomeAsync(new OneTimeIncome
-                    {
-                        Amount = RequirePositive(ParseMoney(Amount, "Gelir"), "Gelir"),
-                        ExactDate = DateOnly.FromDateTime(EffectiveDate),
-                        Description = string.IsNullOrWhiteSpace(Name) ? "Diğer gelir" : Name.Trim()
-                    });
-                    break;
-                case "loan":
-                    await SaveLoanAsync();
-                    break;
-                case "temporary":
-                case "installment":
-                    await SavePlanAsync();
-                    break;
-                case "card":
-                    await SaveCardAsync();
-                    break;
-                case "large":
-                    await service.SavePlannedLargeExpenseAsync(new PlannedLargeExpense
-                    {
-                        Name = RequireName(),
-                        Amount = RequirePositive(ParseMoney(Amount, "Tutar"), "Tutar"),
-                        ExactDate = DateOnly.FromDateTime(EffectiveDate),
-                        Note = Note.Trim()
-                    });
-                    break;
-                default:
-                    throw new InvalidOperationException("Kayıt türü seçilmelidir.");
-            }
+            persist = BuildPersistOperation(out successMessage);
+        }
+        catch (Exception exception)
+        {
+            SetStatus(UserFacingMessages.FromException(exception));
+            return;
+        }
 
-            SetStatus("Kayıt kaydedildi.");
+        try
+        {
+            IsBusy = true;
+            SetStatus(string.Empty);
+            await persist();
+            SetStatus(string.Empty);
+            await feedback.ShowSuccessAsync(successMessage);
             ResetForm();
             await LoadAsync();
         }
         catch (Exception exception)
         {
-            SetStatus(exception.Message);
+            var message = UserFacingMessages.FromException(exception);
+            SetStatus(message);
+            await feedback.ShowErrorAsync(message);
+        }
+        finally
+        {
+            IsBusy = false;
         }
     }
 
     public async Task DeleteAsync(FinancialRecordLine item)
     {
-        switch (item.Kind)
+        if (IsBusy)
         {
-            case FinancialRecordKind.Salary:
-                await service.DeleteSalaryAsync(item.Id);
-                break;
-            case FinancialRecordKind.OtherIncome:
-                await service.DeleteOtherIncomeAsync(item.Id);
-                break;
-            case FinancialRecordKind.Loan:
-                await service.DeleteLoanAsync(item.Id);
-                break;
-            case FinancialRecordKind.CreditCard:
-                await service.DeleteCreditCardAsync(item.Id);
-                break;
-            case FinancialRecordKind.TemporaryPlan:
-            case FinancialRecordKind.InstallmentPlan:
-                await service.DeletePaymentPlanAsync(item.Id);
-                break;
-            case FinancialRecordKind.LargeExpense:
-                await service.DeletePlannedLargeExpenseAsync(item.Id);
-                break;
-            default:
-                throw new ArgumentOutOfRangeException(nameof(item.Kind));
+            return;
         }
 
-        await LoadAsync();
+        try
+        {
+            IsBusy = true;
+            switch (item.Kind)
+            {
+                case FinancialRecordKind.Salary:
+                    await service.DeleteSalaryAsync(item.Id);
+                    break;
+                case FinancialRecordKind.OtherIncome:
+                    await service.DeleteOtherIncomeAsync(item.Id);
+                    break;
+                case FinancialRecordKind.Loan:
+                    await service.DeleteLoanAsync(item.Id);
+                    break;
+                case FinancialRecordKind.CreditCard:
+                    await service.DeleteCreditCardAsync(item.Id);
+                    break;
+                case FinancialRecordKind.TemporaryPlan:
+                case FinancialRecordKind.InstallmentPlan:
+                    await service.DeletePaymentPlanAsync(item.Id);
+                    break;
+                case FinancialRecordKind.LargeExpense:
+                    await service.DeletePlannedLargeExpenseAsync(item.Id);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(item.Kind));
+            }
+
+            SetStatus(string.Empty);
+            await LoadAsync();
+        }
+        catch (Exception exception)
+        {
+            var message = UserFacingMessages.FromException(exception);
+            SetStatus(message);
+            await feedback.ShowErrorAsync(message);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private Func<Task> BuildPersistOperation(out string successMessage)
+    {
+        switch (SelectedRecordType?.Value)
+        {
+            case "salary":
+                var salary = new SalaryScheduleEntry
+                {
+                    Amount = RequirePositive(ParseMoney(Amount, "Maaş"), "Maaş"),
+                    EffectiveDate = DateOnly.FromDateTime(EffectiveDate),
+                    Description = string.IsNullOrWhiteSpace(Name) ? "Maaş" : Name.Trim()
+                };
+                successMessage = "Maaş kaydedildi.";
+                return () => service.SaveSalaryAsync(salary);
+            case "income":
+                var income = new OneTimeIncome
+                {
+                    Amount = RequirePositive(ParseMoney(Amount, "Gelir"), "Gelir"),
+                    ExactDate = DateOnly.FromDateTime(EffectiveDate),
+                    Description = string.IsNullOrWhiteSpace(Name)
+                        ? "Diğer gelir"
+                        : Name.Trim()
+                };
+                successMessage = "Gelir kaydedildi.";
+                return () => service.SaveOtherIncomeAsync(income);
+            case "loan":
+                var loan = BuildLoan();
+                successMessage = "Kredi kaydedildi.";
+                return () => service.SaveLoanAsync(loan);
+            case "temporary":
+            case "installment":
+                var plan = BuildPlan();
+                successMessage = plan.Kind == PaymentPlanKind.Installment
+                    ? "Taksit planı kaydedildi."
+                    : "Geçici ödeme planı kaydedildi.";
+                return () => service.SavePaymentPlanAsync(plan);
+            case "card":
+                var wasEditingCard = IsEditingCard;
+                var card = BuildCard();
+                successMessage = wasEditingCard
+                    ? "Kredi kartı güncellendi."
+                    : "Kredi kartı kaydedildi.";
+                return () => service.SaveCreditCardAsync(card);
+            case "large":
+                var expense = new PlannedLargeExpense
+                {
+                    Name = RequireName(),
+                    Amount = RequirePositive(ParseMoney(Amount, "Tutar"), "Tutar"),
+                    ExactDate = DateOnly.FromDateTime(EffectiveDate),
+                    Note = Note.Trim()
+                };
+                successMessage = "Planlı ödeme kaydedildi.";
+                return () => service.SavePlannedLargeExpenseAsync(expense);
+            default:
+                throw new InvalidOperationException("Kayıt türü seçilmelidir.");
+        }
     }
 
     [RelayCommand]
@@ -527,7 +596,7 @@ public partial class CommitmentsViewModel(
         _cardChargeDescriptions.Clear();
     }
 
-    private async Task SaveLoanAsync()
+    private Loan BuildLoan()
     {
         if (!int.TryParse(PaymentDay, out var day))
         {
@@ -539,7 +608,7 @@ public partial class CommitmentsViewModel(
             throw new InvalidOperationException("Kalan taksit sayısı geçerli olmalıdır.");
         }
 
-        await service.SaveLoanAsync(new Loan
+        return new Loan
         {
             Name = RequireName(),
             Bank = Bank.Trim(),
@@ -549,10 +618,10 @@ public partial class CommitmentsViewModel(
             RemainingInstallmentCount = count,
             RemainingDebt = ParseOptionalMoney(RemainingDebt),
             EarlyClosureAmount = ParseOptionalMoney(EarlyClosureAmount)
-        });
+        };
     }
 
-    private async Task SavePlanAsync()
+    private TemporaryPaymentPlan BuildPlan()
     {
         if (PlanInstallments.Count == 0)
         {
@@ -560,7 +629,7 @@ public partial class CommitmentsViewModel(
         }
 
         var id = Guid.NewGuid();
-        await service.SavePaymentPlanAsync(new TemporaryPaymentPlan
+        return new TemporaryPaymentPlan
         {
             Id = id,
             Name = RequireName(),
@@ -577,10 +646,10 @@ public partial class CommitmentsViewModel(
                     Amount = x.Amount
                 })
                 .ToArray()
-        });
+        };
     }
 
-    private async Task SaveCardAsync()
+    private CreditCard BuildCard()
     {
         if (!int.TryParse(ClosingDay, out var closeDay) ||
             !int.TryParse(DueDay, out var paymentDueDay))
@@ -642,7 +711,7 @@ public partial class CommitmentsViewModel(
                 })
                 .ToArray()
         };
-        await service.SaveCreditCardAsync(card);
+        return card;
     }
 
     private void RefreshRecordTypes()

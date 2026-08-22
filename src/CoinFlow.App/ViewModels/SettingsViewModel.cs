@@ -9,10 +9,15 @@ using CoinFlow.Domain.Models;
 namespace CoinFlow.App.ViewModels;
 
 public partial class SettingsViewModel(
-    CoinFlowService service) : ViewModelBase
+    CoinFlowService service,
+    IUserFeedbackService feedback) : ViewModelBase
 {
     private DateOnly _projectionAnchorDate;
     private PaymentAssignmentStrategy? _pendingStrategy;
+    private bool _settingsLoaded;
+    private bool _isUpdatingSettingsForm;
+    private SettingsFormSnapshot _savedSettingsSnapshot =
+        SettingsFormSnapshot.Empty;
 
     public ObservableCollection<StrategyHistoryLine> StrategyHistory { get; } = [];
     public IReadOnlyList<SelectionOption<PaymentAssignmentMode>> StrategyModes { get; } =
@@ -39,34 +44,39 @@ public partial class SettingsViewModel(
     [ObservableProperty] private string strategyNote = string.Empty;
     [ObservableProperty] private string previewText = string.Empty;
     [ObservableProperty] private bool hasPreview;
+    [ObservableProperty] private bool isSettingsDirty;
 
     public bool IsDevelopment => BuildInfo.IsDevelopment;
     public string BuildChannel => BuildInfo.Channel;
     public string VersionText => $"Sürüm {BuildInfo.Version}";
     public string CommitText => $"Commit {BuildInfo.Commit}";
     public string BuildText => $"Build #{BuildInfo.BuildNumber}";
+    public bool CanSaveSettings => IsSettingsDirty && !IsBusy;
+
+    partial void OnSalaryDayChanged(string value) =>
+        RefreshSettingsDirtyState();
+
+    partial void OnMonthlyLivingBudgetChanged(string value) =>
+        RefreshSettingsDirtyState();
+
+    partial void OnProjectionStartingSavingsChanged(string value) =>
+        RefreshSettingsDirtyState();
+
+    partial void OnCreditCardCarryInterestRateChanged(string value) =>
+        RefreshSettingsDirtyState();
+
+    partial void OnDeficitFinancingInterestRateChanged(string value) =>
+        RefreshSettingsDirtyState();
+
+    partial void OnIsSettingsDirtyChanged(bool value) =>
+        SaveCommand.NotifyCanExecuteChanged();
 
     public async Task LoadAsync()
     {
         var plan = await service.GetFinancialPlanAsync();
         var settings = plan.Settings;
         var overview = await service.GetPaymentAssignmentStrategyOverviewAsync();
-        _projectionAnchorDate = settings.ProjectionAnchorDate;
-        SalaryDay = settings.SalaryDay.ToString(TurkishCulture);
-        MonthlyLivingBudget = settings.MonthlyLivingBudget
-            .ToString("N2", TurkishCulture);
-        ProjectionStartingSavings = settings.ProjectionStartingSavings
-            .ToString("N2", TurkishCulture);
-        CreditCardCarryInterestRate =
-            (settings.CreditCardCarryInterestRate * 100m)
-            .ToString("N2", TurkishCulture);
-        DeficitFinancingInterestRate =
-            (settings.DeficitFinancingInterestRate * 100m)
-            .ToString("N2", TurkishCulture);
-        ProjectionAnchorText = settings.ProjectionAnchorDate == default
-            ? "İlk maaş kaydıyla oluşturulacak"
-            : settings.ProjectionAnchorDate.ToString(
-                "dd MMMM yyyy", TurkishCulture);
+        ApplySettingsToForm(settings);
 
         CanManageStrategy = overview.Current is not null;
         HasNoStrategy = !CanManageStrategy;
@@ -170,7 +180,7 @@ public partial class SettingsViewModel(
         catch (Exception exception)
         {
             HasPreview = false;
-            SetStatus(exception.Message);
+            SetStatus(UserFacingMessages.FromException(exception));
         }
     }
 
@@ -191,14 +201,18 @@ public partial class SettingsViewModel(
                     Mode = mode,
                     EffectiveFromSalaryDate = date,
                     Note = StrategyNote.Trim()
-                });
+            });
             await LoadAsync();
-            SetStatus("Maaş kullanım düzeni planlandı; geçmiş kayıtlar korundu.");
+            SetStatus(string.Empty);
+            await feedback.ShowSuccessAsync(
+                "Maaş kullanım düzeni planlandı.");
             return true;
         }
         catch (Exception exception)
         {
-            SetStatus(exception.Message);
+            var message = UserFacingMessages.FromException(exception);
+            SetStatus(message);
+            await feedback.ShowErrorAsync(message);
             return false;
         }
     }
@@ -215,49 +229,51 @@ public partial class SettingsViewModel(
             await service.DeletePaymentAssignmentStrategyAsync(
                 _pendingStrategy.Id);
             await LoadAsync();
-            SetStatus("Planlanan düzen değişikliği iptal edildi.");
+            SetStatus(string.Empty);
             return true;
         }
         catch (Exception exception)
         {
-            SetStatus(exception.Message);
+            var message = UserFacingMessages.FromException(exception);
+            SetStatus(message);
+            await feedback.ShowErrorAsync(message);
             return false;
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanSaveSettings))]
     private async Task SaveAsync()
     {
+        UserSettings settings;
         try
         {
-            if (!int.TryParse(SalaryDay, out var day) || day is < 1 or > 31)
-            {
-                throw new InvalidOperationException(
-                    "Maaş günü 1 ile 31 arasında olmalıdır.");
-            }
-
-            await service.SaveSettingsAsync(new UserSettings
-            {
-                SalaryDay = day,
-                MonthlyLivingBudget = ParseMoney(
-                    MonthlyLivingBudget,
-                    "Aylık tahmini yaşam bütçesi"),
-                ProjectionStartingSavings = ParseMoney(
-                    ProjectionStartingSavings,
-                    "Planlama başlangıç durumu"),
-                ProjectionAnchorDate = _projectionAnchorDate,
-                CreditCardCarryInterestRate = ParseRate(
-                    CreditCardCarryInterestRate,
-                    "Kredi kartı devreden borç faizi"),
-                DeficitFinancingInterestRate = ParseRate(
-                    DeficitFinancingInterestRate,
-                    "Finansman açığı faizi")
-            });
-            SetStatus("Ayarlar kaydedildi.");
+            settings = BuildSettingsFromForm();
         }
         catch (Exception exception)
         {
-            SetStatus(exception.Message);
+            SetStatus(UserFacingMessages.FromException(exception));
+            return;
+        }
+
+        try
+        {
+            IsBusy = true;
+            SaveCommand.NotifyCanExecuteChanged();
+            await service.SaveSettingsAsync(settings);
+            ApplySettingsToForm(settings);
+            SetStatus(string.Empty);
+            await feedback.ShowSuccessAsync("Ayarların kaydedildi.");
+        }
+        catch (Exception exception)
+        {
+            var message = UserFacingMessages.FromException(exception);
+            SetStatus(message);
+            await feedback.ShowErrorAsync(message);
+        }
+        finally
+        {
+            IsBusy = false;
+            SaveCommand.NotifyCanExecuteChanged();
         }
     }
 
@@ -273,12 +289,17 @@ public partial class SettingsViewModel(
         {
             await service.ClearDevelopmentDataAsync();
             await LoadAsync();
-            SetStatus("Tüm veriler silindi.");
+            SetStatus(string.Empty);
+            await feedback.ShowSuccessAsync(
+                "Tüm veriler silindi.",
+                title: "Tamamlandı");
             return true;
         }
         catch (Exception exception)
         {
-            SetStatus(exception.Message);
+            var message = UserFacingMessages.FromException(exception);
+            SetStatus(message);
+            await feedback.ShowErrorAsync(message);
             return false;
         }
     }
@@ -295,14 +316,85 @@ public partial class SettingsViewModel(
         {
             await service.LoadCanonicalDevelopmentDataAsync();
             await LoadAsync();
-            SetStatus("Test verisi yüklendi.");
+            SetStatus(string.Empty);
+            await feedback.ShowSuccessAsync(
+                "Test verisi yüklendi.",
+                title: "Tamamlandı");
             return true;
         }
         catch (Exception exception)
         {
-            SetStatus(exception.Message);
+            var message = UserFacingMessages.FromException(exception);
+            SetStatus(message);
+            await feedback.ShowErrorAsync(message);
             return false;
         }
+    }
+
+    private UserSettings BuildSettingsFromForm()
+    {
+        if (!int.TryParse(SalaryDay, out var day) || day is < 1 or > 31)
+        {
+            throw new InvalidOperationException(
+                "Maaş günü 1 ile 31 arasında olmalıdır.");
+        }
+
+        return new UserSettings
+        {
+            SalaryDay = day,
+            MonthlyLivingBudget = ParseMoney(
+                MonthlyLivingBudget,
+                "Aylık tahmini yaşam bütçesi"),
+            ProjectionStartingSavings = ParseMoney(
+                ProjectionStartingSavings,
+                "Planlama başlangıç durumu"),
+            ProjectionAnchorDate = _projectionAnchorDate,
+            CreditCardCarryInterestRate = ParseRate(
+                CreditCardCarryInterestRate,
+                "Kredi kartı devreden borç faizi"),
+            DeficitFinancingInterestRate = ParseRate(
+                DeficitFinancingInterestRate,
+                "Finansman açığı faizi")
+        };
+    }
+
+    private void ApplySettingsToForm(UserSettings settings)
+    {
+        _isUpdatingSettingsForm = true;
+        _projectionAnchorDate = settings.ProjectionAnchorDate;
+        SalaryDay = settings.SalaryDay.ToString(TurkishCulture);
+        MonthlyLivingBudget = settings.MonthlyLivingBudget
+            .ToString("N2", TurkishCulture);
+        ProjectionStartingSavings = settings.ProjectionStartingSavings
+            .ToString("N2", TurkishCulture);
+        CreditCardCarryInterestRate =
+            (settings.CreditCardCarryInterestRate * 100m)
+            .ToString("N2", TurkishCulture);
+        DeficitFinancingInterestRate =
+            (settings.DeficitFinancingInterestRate * 100m)
+            .ToString("N2", TurkishCulture);
+        ProjectionAnchorText = settings.ProjectionAnchorDate == default
+            ? "İlk maaş kaydıyla oluşturulacak"
+            : settings.ProjectionAnchorDate.ToString(
+                "dd MMMM yyyy", TurkishCulture);
+        _isUpdatingSettingsForm = false;
+
+        _savedSettingsSnapshot = CaptureSettingsSnapshot();
+        _settingsLoaded = true;
+        IsSettingsDirty = false;
+        SaveCommand.NotifyCanExecuteChanged();
+    }
+
+    private void RefreshSettingsDirtyState()
+    {
+        if (_isUpdatingSettingsForm || !_settingsLoaded)
+        {
+            return;
+        }
+
+        IsSettingsDirty =
+            CaptureSettingsSnapshot() != _savedSettingsSnapshot;
+        SaveCommand.NotifyCanExecuteChanged();
     }
 
     private static PaymentAssignmentMode Opposite(PaymentAssignmentMode mode) =>
@@ -326,4 +418,23 @@ public partial class SettingsViewModel(
 
         return percentage / 100m;
     }
+
+    private sealed record SettingsFormSnapshot(
+        string SalaryDay,
+        string MonthlyLivingBudget,
+        string ProjectionStartingSavings,
+        string CreditCardCarryInterestRate,
+        string DeficitFinancingInterestRate)
+    {
+        public static SettingsFormSnapshot Empty { get; } =
+            new(string.Empty, string.Empty, string.Empty, string.Empty, string.Empty);
+    }
+
+    private SettingsFormSnapshot CaptureSettingsSnapshot() =>
+        new(
+            SalaryDay.Trim(),
+            MonthlyLivingBudget.Trim(),
+            ProjectionStartingSavings.Trim(),
+            CreditCardCarryInterestRate.Trim(),
+            DeficitFinancingInterestRate.Trim());
 }

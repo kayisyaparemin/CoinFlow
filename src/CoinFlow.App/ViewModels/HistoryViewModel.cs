@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CoinFlow.App.Services;
 using CoinFlow.App.Models;
 using CoinFlow.Application.Services;
 
@@ -55,7 +56,7 @@ public partial class HistoryViewModel(CoinFlowService service) : ViewModelBase
         }
         catch (Exception exception)
         {
-            SetStatus(exception.Message);
+            SetStatus(UserFacingMessages.FromException(exception));
         }
         finally
         {

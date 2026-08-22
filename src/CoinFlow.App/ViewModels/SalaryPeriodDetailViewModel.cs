@@ -39,7 +39,7 @@ public partial class SalaryPeriodDetailViewModel(
         {
             Detail = null;
             HasDetail = false;
-            SetStatus(exception.Message);
+            SetStatus(UserFacingMessages.FromException(exception));
         }
     }
 }

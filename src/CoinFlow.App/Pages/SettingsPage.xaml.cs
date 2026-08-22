@@ -1,3 +1,4 @@
+using CoinFlow.App.Services;
 using CoinFlow.App.ViewModels;
 
 namespace CoinFlow.App.Pages;
@@ -5,11 +6,15 @@ namespace CoinFlow.App.Pages;
 public partial class SettingsPage : ContentPage
 {
     private readonly SettingsViewModel _viewModel;
+    private readonly IUserFeedbackService _feedback;
 
-    public SettingsPage(SettingsViewModel viewModel)
+    public SettingsPage(
+        SettingsViewModel viewModel,
+        IUserFeedbackService feedback)
     {
         InitializeComponent();
         BindingContext = _viewModel = viewModel;
+        _feedback = feedback;
     }
 
     protected override async void OnAppearing()
@@ -22,7 +27,7 @@ public partial class SettingsPage : ContentPage
         object? sender,
         EventArgs eventArgs)
     {
-        var confirmed = await DisplayAlert(
+        var confirmed = await _feedback.ConfirmAsync(
             "Verileri Sil",
             "Tüm finans verileri silinecek. Devam etmek istiyor musun?",
             "Verileri Sil",
@@ -32,26 +37,14 @@ public partial class SettingsPage : ContentPage
             return;
         }
 
-        if (await _viewModel.ClearDevelopmentDataAsync())
-        {
-            await DisplayAlert(
-                "Tamamlandı",
-                "Tüm veriler silindi.",
-                "Tamam");
-        }
+        await _viewModel.ClearDevelopmentDataAsync();
     }
 
     private async void OnLoadCanonicalSeedClicked(
         object? sender,
         EventArgs eventArgs)
     {
-        if (await _viewModel.LoadCanonicalSeedAsync())
-        {
-            await DisplayAlert(
-                "Tamamlandı",
-                "Test verisi yüklendi.",
-                "Tamam");
-        }
+        await _viewModel.LoadCanonicalSeedAsync();
     }
 
     private async void OnChangeStrategyClicked(
@@ -60,14 +53,14 @@ public partial class SettingsPage : ContentPage
     {
         _viewModel.PrepareStrategyEditor();
         await Navigation.PushModalAsync(
-            new StrategyChangePage(_viewModel));
+            new StrategyChangePage(_viewModel, _feedback));
     }
 
     private async void OnDeletePendingStrategyClicked(
         object? sender,
         EventArgs eventArgs)
     {
-        var confirmed = await DisplayAlert(
+        var confirmed = await _feedback.ConfirmAsync(
             "Planlanan değişikliği sil",
             "Henüz başlamamış düzen değişikliği silinsin mi?",
             "Sil",

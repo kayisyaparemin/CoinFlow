@@ -1,3 +1,4 @@
+using CoinFlow.App.Services;
 using CoinFlow.App.ViewModels;
 using CoinFlow.Application.Models;
 
@@ -6,11 +7,15 @@ namespace CoinFlow.App.Pages;
 public partial class SimulationPage : ContentPage
 {
     private readonly SimulationViewModel _viewModel;
+    private readonly IUserFeedbackService _feedback;
 
-    public SimulationPage(SimulationViewModel viewModel)
+    public SimulationPage(
+        SimulationViewModel viewModel,
+        IUserFeedbackService feedback)
     {
         InitializeComponent();
         BindingContext = _viewModel = viewModel;
+        _feedback = feedback;
     }
 
     protected override async void OnAppearing()
@@ -24,7 +29,7 @@ public partial class SimulationPage : ContentPage
 
     private async void OnApplyPlanClicked(object? sender, EventArgs eventArgs)
     {
-        var confirmed = await DisplayAlert(
+        var confirmed = await _feedback.ConfirmAsync(
             "Planı Uygula",
             _viewModel.ApplyConfirmationText,
             "Planı Uygula",
@@ -37,8 +42,8 @@ public partial class SimulationPage : ContentPage
         var result = await _viewModel.ApplyLastPlanAsync();
         if (result is not null)
         {
-            var showRecord = await DisplayAlert(
-                "Plan Uygulandı",
+            var showRecord = await _feedback.ConfirmAsync(
+                "Plan uygulandı",
                 result.Message,
                 result.Destination == SimulationApplyDestination.Settings
                     ? "Ayarlarda Gör"

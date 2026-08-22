@@ -3,6 +3,7 @@ using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CoinFlow.App.Models;
+using CoinFlow.App.Services;
 using CoinFlow.Application.Models;
 using CoinFlow.Application.Services;
 using CoinFlow.Domain.Models;
@@ -10,7 +11,8 @@ using CoinFlow.Domain.Models;
 namespace CoinFlow.App.ViewModels;
 
 public partial class PeriodReviewWizardViewModel(
-    CoinFlowService service) : ViewModelBase
+    CoinFlowService service,
+    IUserFeedbackService feedback) : ViewModelBase
 {
     private PeriodReviewContext? _context;
     private decimal _lastSuggestedSavings;
@@ -151,7 +153,7 @@ public partial class PeriodReviewWizardViewModel(
         }
         catch (Exception exception)
         {
-            SetStatus(exception.Message);
+            SetStatus(UserFacingMessages.FromException(exception));
         }
         finally
         {
@@ -179,7 +181,7 @@ public partial class PeriodReviewWizardViewModel(
         }
         catch (Exception exception)
         {
-            SetStatus(exception.Message);
+            SetStatus(UserFacingMessages.FromException(exception));
         }
     }
 
@@ -202,7 +204,7 @@ public partial class PeriodReviewWizardViewModel(
         }
         catch (Exception exception)
         {
-            SetStatus(exception.Message);
+            SetStatus(UserFacingMessages.FromException(exception));
         }
     }
 
@@ -247,20 +249,33 @@ public partial class PeriodReviewWizardViewModel(
             return;
         }
 
+        PeriodReviewDraft draft;
+        try
+        {
+            SetStatus(string.Empty);
+            draft = BuildDraft(true);
+        }
+        catch (Exception exception)
+        {
+            SetStatus(UserFacingMessages.FromException(exception));
+            return;
+        }
+
         try
         {
             IsBusy = true;
-            SetStatus(string.Empty);
-            var result = await service.FinalizePeriodReviewAsync(
-                BuildDraft(true));
+            var result = await service.FinalizePeriodReviewAsync(draft);
             ComparisonSummary = result.Comparison.Summary;
             SuccessText =
                 $"{result.NewSnapshot.SnapshotDate:dd MMMM yyyy} itibarıyla yeni 12 aylık planın güncellendi.";
+            await feedback.ShowSuccessAsync("Dönem bilgileri kaydedildi.");
             IsSuccess = true;
         }
         catch (Exception exception)
         {
-            SetStatus(exception.Message);
+            var message = UserFacingMessages.FromException(exception);
+            SetStatus(message);
+            await feedback.ShowErrorAsync(message);
         }
         finally
         {
@@ -401,7 +416,7 @@ public partial class PeriodReviewWizardViewModel(
         }
         catch (Exception exception)
         {
-            SetStatus(exception.Message);
+            SetStatus(UserFacingMessages.FromException(exception));
         }
     }
 

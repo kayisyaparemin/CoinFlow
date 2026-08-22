@@ -1,9 +1,9 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CoinFlow.App.Services;
 using CoinFlow.App.Models;
 using CoinFlow.App.Pages;
-using CoinFlow.App.Services;
 using CoinFlow.Application.Services;
 using CoinFlow.Domain.Calculations;
 
@@ -209,7 +209,7 @@ public partial class DashboardViewModel(
         }
         catch (Exception exception)
         {
-            SetStatus(exception.Message);
+            SetStatus(UserFacingMessages.FromException(exception));
         }
         finally
         {

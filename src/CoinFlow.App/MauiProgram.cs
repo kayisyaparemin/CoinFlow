@@ -1,4 +1,5 @@
 using CoinFlow.App.Pages;
+using CoinFlow.App.Services;
 using CoinFlow.App.ViewModels;
 using CoinFlow.Application.Abstractions;
 using CoinFlow.Application.Services;
@@ -61,6 +62,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<SimulationCalculator>();
         builder.Services.AddSingleton<TargetAmountCalculator>();
         builder.Services.AddSingleton<CoinFlowService>();
+        builder.Services.AddSingleton<IUserFeedbackService, UserFeedbackService>();
 
         builder.Services.AddTransient<DashboardViewModel>();
         builder.Services.AddTransient<CommitmentsViewModel>();

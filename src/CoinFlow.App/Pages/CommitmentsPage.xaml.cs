@@ -1,4 +1,5 @@
 using CoinFlow.App.Models;
+using CoinFlow.App.Services;
 using CoinFlow.App.ViewModels;
 
 namespace CoinFlow.App.Pages;
@@ -9,11 +10,15 @@ public partial class CommitmentsPage : ContentPage, IQueryAttributable
     private bool _isShowingInitialStrategySetup;
     private string? _requestedSection;
     private Guid? _requestedCardId;
+    private readonly IUserFeedbackService _feedback;
 
-    public CommitmentsPage(CommitmentsViewModel viewModel)
+    public CommitmentsPage(
+        CommitmentsViewModel viewModel,
+        IUserFeedbackService feedback)
     {
         InitializeComponent();
         BindingContext = _viewModel = viewModel;
+        _feedback = feedback;
         _viewModel.InitialStrategySetupRequested +=
             OnInitialStrategySetupRequested;
     }
@@ -138,7 +143,7 @@ public partial class CommitmentsPage : ContentPage, IQueryAttributable
             return;
         }
 
-        var confirmed = await DisplayAlert(
+        var confirmed = await _feedback.ConfirmAsync(
             "Kaydı sil",
             $"{item.Title} kalıcı olarak silinsin mi?",
             "Sil",

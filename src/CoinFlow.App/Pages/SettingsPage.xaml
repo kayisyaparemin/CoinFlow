@@ -3,136 +3,149 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="CoinFlow.App.Pages.SettingsPage"
              Title="Ayarlar">
-    <ScrollView>
-        <VerticalStackLayout Padding="20,18,20,36" Spacing="16">
-            <Label Text="PLANLAMA AYARLARI" Style="{StaticResource Eyebrow}" />
-            <Label Text="Ayarlar" Style="{StaticResource PageTitle}" />
+    <Grid RowDefinitions="*,Auto">
+        <ScrollView Grid.Row="0">
+            <VerticalStackLayout Padding="20,18,20,116" Spacing="16">
+                <Label Text="PLANLAMA AYARLARI" Style="{StaticResource Eyebrow}" />
+                <Label Text="Ayarlar" Style="{StaticResource PageTitle}" />
 
-            <Border>
-                <VerticalStackLayout Spacing="9">
-                    <Label Text="Maaş Dönemi" Style="{StaticResource SectionTitle}" />
-                    <Label Text="Maaş günü" Style="{StaticResource FieldLabel}" />
-                    <Entry Text="{Binding SalaryDay}" Keyboard="Numeric" />
-                    <Label Text="Seçilen gün ayda yoksa ayın son günü kullanılır." Style="{StaticResource MutedText}" />
-                </VerticalStackLayout>
-            </Border>
+                <Border>
+                    <VerticalStackLayout Spacing="12">
+                        <Label Text="Genel Planlama Ayarları" Style="{StaticResource SectionTitle}" />
 
-            <Border>
-                <VerticalStackLayout Spacing="10">
-                    <Label Text="Maaş Kullanım Düzeni" Style="{StaticResource SectionTitle}" />
-                    <Label Text="Mevcut düzen" Style="{StaticResource MutedText}" />
-                    <Label Text="{Binding CurrentStrategyText}" FontFamily="OpenSansSemibold" FontSize="17" />
-                    <Label Text="{Binding CurrentStrategySinceText}" Style="{StaticResource MutedText}" />
-                    <VerticalStackLayout IsVisible="{Binding HasPendingStrategy}" Spacing="3">
-                        <Label Text="Planlanan değişiklik" Style="{StaticResource MutedText}" />
-                        <Label Text="{Binding PendingStrategyText}" FontFamily="OpenSansSemibold" />
-                        <Button Text="Planlanan değişikliği sil"
-                                Clicked="OnDeletePendingStrategyClicked" />
-                    </VerticalStackLayout>
-                    <Button Text="Düzeni Değiştir"
-                            IsVisible="{Binding CanManageStrategy}"
-                            Clicked="OnChangeStrategyClicked" />
-                    <Button Text="Maaş Ekle ve Düzeni Seç"
-                            IsVisible="{Binding HasNoStrategy}"
-                            Command="{Binding OpenCommitmentsCommand}" />
-                    <Label Text="Ödeme tarihleri değişmez; seçtiğin düzen yalnızca hangi maaşın hangi ödemeleri karşılayacağını belirler."
-                           Style="{StaticResource MutedText}" />
-                </VerticalStackLayout>
-            </Border>
-
-            <Border>
-                <VerticalStackLayout Spacing="9">
-                    <Label Text="Düzen Geçmişi" Style="{StaticResource SectionTitle}" />
-                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding StrategyHistory}" Spacing="8">
-                        <BindableLayout.ItemTemplate>
-                            <DataTemplate>
-                                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
-                                    <Label Text="{Binding EffectiveDate}" FontFamily="OpenSansSemibold" />
-                                    <Label Grid.Column="1" Text="Planlandı" IsVisible="{Binding IsFuture}" Style="{StaticResource MutedText}" />
-                                    <Label Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding Mode}" />
-                                    <Label Grid.Row="2" Grid.ColumnSpan="2" Text="{Binding Note}" Style="{StaticResource MutedText}" />
-                                </Grid>
-                            </DataTemplate>
-                        </BindableLayout.ItemTemplate>
-                    </VerticalStackLayout>
-                    <Label Text="Bu geçmiş bilgilendirme amaçlıdır. Her yeni karar seçilen maaş tarihinde yeni bir kayıt oluşturur; önceki kararlar değiştirilmez."
-                           Style="{StaticResource MutedText}" />
-                </VerticalStackLayout>
-            </Border>
-
-            <Border>
-                <VerticalStackLayout Spacing="9">
-                    <Label Text="Aylık Tahmini Yaşam Bütçesi" Style="{StaticResource SectionTitle}" />
-                    <Label Text="Aylık tutar" Style="{StaticResource FieldLabel}" />
-                    <Entry Text="{Binding MonthlyLivingBudget}" Keyboard="Numeric" />
-                    <Label Text="Yemek, market, yakıt ve tek tek takip edilmeyen günlük yaşam giderlerinin yaklaşık toplamı." Style="{StaticResource MutedText}" />
-                </VerticalStackLayout>
-            </Border>
-
-            <Border>
-                <VerticalStackLayout Spacing="9">
-                    <Label Text="Planlama Başlangıç Durumu" Style="{StaticResource SectionTitle}" />
-                    <Label Text="Başlangıç tutarı" Style="{StaticResource FieldLabel}" />
-                    <Entry Text="{Binding ProjectionStartingSavings}" Keyboard="Numeric" />
-                    <Label Text="Gelecek hesaplamaları bu tutardan devam eder." Style="{StaticResource MutedText}" />
-                    <Label Text="Planlama Başlangıç Tarihi" Style="{StaticResource FieldLabel}" />
-                    <Label Text="{Binding ProjectionAnchorText}" FontFamily="OpenSansSemibold" />
-                    <Label Text="Bu tarihten önceki hareketler gelecek planına dahil edilmez." Style="{StaticResource MutedText}" />
-                    <Button Text="Değişiklikleri Kaydet" Command="{Binding SaveCommand}" />
-                </VerticalStackLayout>
-            </Border>
-
-            <Border>
-                <VerticalStackLayout Spacing="9">
-                    <Label Text="Faiz Varsayımları" Style="{StaticResource SectionTitle}" />
-                    <Label Text="Kredi kartı devreden borç faizi (%)" Style="{StaticResource FieldLabel}" />
-                    <Entry Text="{Binding CreditCardCarryInterestRate}" Keyboard="Numeric" />
-                    <Label Text="Finansman açığı faizi (%)" Style="{StaticResource FieldLabel}" />
-                    <Entry Text="{Binding DeficitFinancingInterestRate}" Keyboard="Numeric" />
-                    <Label Text="Bu oranlar gelecek tahminleri için kullanılan yaklaşık aylık faiz varsayımlarıdır. Banka faiz, vergi ve ücretlerini birebir temsil etmeyebilir."
-                           Style="{StaticResource MutedText}" />
-                    <Button Text="Değişiklikleri Kaydet" Command="{Binding SaveCommand}" />
-                </VerticalStackLayout>
-            </Border>
-
-            <Label Text="{Binding StatusMessage}" IsVisible="{Binding HasStatus}" TextColor="{StaticResource Error}" />
-
-            <Border>
-                <VerticalStackLayout Spacing="6">
-                    <Label Text="Hakkında" Style="{StaticResource SectionTitle}" />
-                    <Label Text="Mizan" FontFamily="OpenSansSemibold" FontSize="20" />
-                    <Label Text="{Binding BuildChannel}" Style="{StaticResource MutedText}" />
-                    <Label Text="{Binding VersionText}" />
-                    <Label Text="{Binding CommitText}" IsVisible="{Binding IsDevelopment}" />
-                    <Label Text="{Binding BuildText}" IsVisible="{Binding IsDevelopment}" />
-                    <Label Text="Veriler yalnızca bu cihazda saklanır." Style="{StaticResource MutedText}" />
-                </VerticalStackLayout>
-            </Border>
-
-            <Border IsVisible="{Binding IsDevelopment}">
-                <VerticalStackLayout Spacing="8">
-                    <Label Text="Geliştirme Sürümü" Style="{StaticResource SectionTitle}" />
-                    <Border BackgroundColor="{StaticResource SoftPink}" Padding="12">
                         <VerticalStackLayout Spacing="7">
-                            <Label Text="Verileri Sil" FontFamily="OpenSansSemibold" />
-                            <Label Text="Tüm kullanıcı finans verilerini siler ve uygulamayı boş başlangıç durumuna döndürür."
-                                   Style="{StaticResource MutedText}" />
-                            <Button Text="Verileri Sil"
-                                    Clicked="OnClearDevelopmentDataClicked"
-                                    BackgroundColor="{StaticResource SoftPink}" />
+                            <Label Text="Maaş günü" Style="{StaticResource FieldLabel}" />
+                            <Entry Text="{Binding SalaryDay}" Keyboard="Numeric" />
+                            <Label Text="Seçilen gün ayda yoksa ayın son günü kullanılır." Style="{StaticResource MutedText}" />
                         </VerticalStackLayout>
-                    </Border>
-                    <Border BackgroundColor="{StaticResource SoftSky}" Padding="12">
+
+                        <BoxView HeightRequest="1" Color="{StaticResource Line}" />
+
                         <VerticalStackLayout Spacing="7">
-                            <Label Text="Test Verisini Yükle" FontFamily="OpenSansSemibold" />
-                            <Label Text="Örnek finans kayıtlarını yükler. Aynı kayıtları yeniden oluşturmaz."
-                                   Style="{StaticResource MutedText}" />
-                            <Button Text="Test Verisini Yükle"
-                                    Clicked="OnLoadCanonicalSeedClicked" />
+                            <Label Text="Aylık tahmini yaşam bütçesi" Style="{StaticResource FieldLabel}" />
+                            <Entry Text="{Binding MonthlyLivingBudget}" Keyboard="Numeric" />
+                            <Label Text="Yemek, market, yakıt ve tek tek takip edilmeyen günlük yaşam giderlerinin yaklaşık toplamı." Style="{StaticResource MutedText}" />
                         </VerticalStackLayout>
-                    </Border>
-                </VerticalStackLayout>
-            </Border>
-        </VerticalStackLayout>
-    </ScrollView>
+
+                        <BoxView HeightRequest="1" Color="{StaticResource Line}" />
+
+                        <VerticalStackLayout Spacing="7">
+                            <Label Text="Planlama başlangıç durumu" Style="{StaticResource FieldLabel}" />
+                            <Entry Text="{Binding ProjectionStartingSavings}" Keyboard="Numeric" />
+                            <Label Text="Gelecek hesaplamaları bu tutardan devam eder." Style="{StaticResource MutedText}" />
+                            <Label Text="Planlama başlangıç tarihi" Style="{StaticResource FieldLabel}" />
+                            <Label Text="{Binding ProjectionAnchorText}" FontFamily="OpenSansSemibold" />
+                            <Label Text="Bu tarihten önceki hareketler gelecek planına dahil edilmez." Style="{StaticResource MutedText}" />
+                        </VerticalStackLayout>
+
+                        <BoxView HeightRequest="1" Color="{StaticResource Line}" />
+
+                        <VerticalStackLayout Spacing="7">
+                            <Label Text="Faiz varsayımları" Style="{StaticResource FieldLabel}" />
+                            <Label Text="Kredi kartı devreden borç faizi (%)" Style="{StaticResource MutedText}" />
+                            <Entry Text="{Binding CreditCardCarryInterestRate}" Keyboard="Numeric" />
+                            <Label Text="Finansman açığı faizi (%)" Style="{StaticResource MutedText}" />
+                            <Entry Text="{Binding DeficitFinancingInterestRate}" Keyboard="Numeric" />
+                            <Label Text="Bu oranlar gelecek tahminleri için kullanılan yaklaşık aylık faiz varsayımlarıdır. Banka faiz, vergi ve ücretlerini birebir temsil etmeyebilir."
+                                   Style="{StaticResource MutedText}" />
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border>
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="Maaş Kullanım Düzeni" Style="{StaticResource SectionTitle}" />
+                        <Label Text="Mevcut düzen" Style="{StaticResource MutedText}" />
+                        <Label Text="{Binding CurrentStrategyText}" FontFamily="OpenSansSemibold" FontSize="17" />
+                        <Label Text="{Binding CurrentStrategySinceText}" Style="{StaticResource MutedText}" />
+                        <VerticalStackLayout IsVisible="{Binding HasPendingStrategy}" Spacing="3">
+                            <Label Text="Planlanan değişiklik" Style="{StaticResource MutedText}" />
+                            <Label Text="{Binding PendingStrategyText}" FontFamily="OpenSansSemibold" />
+                            <Button Text="Planlanan değişikliği sil"
+                                    Clicked="OnDeletePendingStrategyClicked" />
+                        </VerticalStackLayout>
+                        <Button Text="Düzeni Değiştir"
+                                IsVisible="{Binding CanManageStrategy}"
+                                Clicked="OnChangeStrategyClicked" />
+                        <Button Text="Maaş Ekle ve Düzeni Seç"
+                                IsVisible="{Binding HasNoStrategy}"
+                                Command="{Binding OpenCommitmentsCommand}" />
+                        <Label Text="Ödeme tarihleri değişmez; seçtiğin düzen yalnızca hangi maaşın hangi ödemeleri karşılayacağını belirler."
+                               Style="{StaticResource MutedText}" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border>
+                    <VerticalStackLayout Spacing="9">
+                        <Label Text="Düzen Geçmişi" Style="{StaticResource SectionTitle}" />
+                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding StrategyHistory}" Spacing="8">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
+                                        <Label Text="{Binding EffectiveDate}" FontFamily="OpenSansSemibold" />
+                                        <Label Grid.Column="1" Text="Planlandı" IsVisible="{Binding IsFuture}" Style="{StaticResource MutedText}" />
+                                        <Label Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding Mode}" />
+                                        <Label Grid.Row="2" Grid.ColumnSpan="2" Text="{Binding Note}" Style="{StaticResource MutedText}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </VerticalStackLayout>
+                        <Label Text="Bu geçmiş bilgilendirme amaçlıdır. Her yeni karar seçilen maaş tarihinde yeni bir kayıt oluşturur; önceki kararlar değiştirilmez."
+                               Style="{StaticResource MutedText}" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border>
+                    <VerticalStackLayout Spacing="6">
+                        <Label Text="Hakkında" Style="{StaticResource SectionTitle}" />
+                        <Label Text="Mizan" FontFamily="OpenSansSemibold" FontSize="20" />
+                        <Label Text="{Binding BuildChannel}" Style="{StaticResource MutedText}" />
+                        <Label Text="{Binding VersionText}" />
+                        <Label Text="{Binding CommitText}" IsVisible="{Binding IsDevelopment}" />
+                        <Label Text="{Binding BuildText}" IsVisible="{Binding IsDevelopment}" />
+                        <Label Text="Veriler yalnızca bu cihazda saklanır." Style="{StaticResource MutedText}" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border IsVisible="{Binding IsDevelopment}">
+                    <VerticalStackLayout Spacing="8">
+                        <Label Text="Geliştirme Sürümü" Style="{StaticResource SectionTitle}" />
+                        <Border BackgroundColor="{StaticResource SoftPink}" Padding="12">
+                            <VerticalStackLayout Spacing="7">
+                                <Label Text="Verileri Sil" FontFamily="OpenSansSemibold" />
+                                <Label Text="Tüm kullanıcı finans verilerini siler ve uygulamayı boş başlangıç durumuna döndürür."
+                                       Style="{StaticResource MutedText}" />
+                                <Button Text="Verileri Sil"
+                                        Clicked="OnClearDevelopmentDataClicked"
+                                        BackgroundColor="{StaticResource SoftPink}" />
+                            </VerticalStackLayout>
+                        </Border>
+                        <Border BackgroundColor="{StaticResource SoftSky}" Padding="12">
+                            <VerticalStackLayout Spacing="7">
+                                <Label Text="Test Verisini Yükle" FontFamily="OpenSansSemibold" />
+                                <Label Text="Örnek finans kayıtlarını yükler. Aynı kayıtları yeniden oluşturmaz."
+                                       Style="{StaticResource MutedText}" />
+                                <Button Text="Test Verisini Yükle"
+                                        Clicked="OnLoadCanonicalSeedClicked" />
+                            </VerticalStackLayout>
+                        </Border>
+                    </VerticalStackLayout>
+                </Border>
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <Border Grid.Row="1"
+                BackgroundColor="{StaticResource Canvas}"
+                Stroke="{StaticResource Line}"
+                StrokeThickness="1"
+                Padding="16,10">
+            <VerticalStackLayout Spacing="7">
+                <Label Text="{Binding StatusMessage}"
+                       IsVisible="{Binding HasStatus}"
+                       TextColor="{StaticResource Error}" />
+                <Button Text="Değişiklikleri Kaydet"
+                        Command="{Binding SaveCommand}" />
+            </VerticalStackLayout>
+        </Border>
+    </Grid>
 </ContentPage>
