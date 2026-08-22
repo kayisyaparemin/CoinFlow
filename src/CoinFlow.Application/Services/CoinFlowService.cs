@@ -175,6 +175,23 @@ public sealed class CoinFlowService(
         return targetAmountCalculator.FindFirstReached(periods, targetAmount);
     }
 
+    public async Task<TargetReachabilityResult> FindTargetReachabilityAsync(
+        decimal targetAmount,
+        DateOnly? asOf = null,
+        CancellationToken cancellationToken = default)
+    {
+        var periods = await GetFuturePeriodsAsync(
+            asOf,
+            12,
+            cancellationToken);
+        return FindTargetReachability(periods, targetAmount);
+    }
+
+    public TargetReachabilityResult FindTargetReachability(
+        IReadOnlyList<SalaryPeriodProjection> periods,
+        decimal targetAmount) =>
+        targetAmountCalculator.FindFirstReachable(periods, targetAmount);
+
     public async Task<SimulationApplyResult> ApplySimulationAsync(
         SimulationRequest request,
         bool confirmed,

@@ -43,6 +43,7 @@ public partial class SimulationViewModel(
     ];
 
     private IReadOnlyList<SimulationRequest> _lastRequests = [];
+    private IReadOnlyList<SalaryPeriodProjection> _lastScenarioProjection = [];
     private Guid? _editingConditionId;
     private readonly SemaphoreSlim _applyLock = new(1, 1);
     private bool _preserveOnNextAppearance;
@@ -119,6 +120,9 @@ public partial class SimulationViewModel(
     [ObservableProperty] private string applyButtonText = "Planı Uygula";
     [ObservableProperty] private string applyConfirmationText =
         "Bu plan gerçek finans planına eklenecek.";
+    [ObservableProperty] private string targetAmount = string.Empty;
+    [ObservableProperty] private string targetResult = string.Empty;
+    [ObservableProperty] private bool hasTargetResult;
 
     public bool HasDraftConditions => DraftConditions.Count > 0;
     public bool HasNoDraftConditions => IsPlanAvailable && !HasDraftConditions;
@@ -167,6 +171,8 @@ public partial class SimulationViewModel(
                 DraftConditions.Clear();
                 NotifyDraftChanged();
                 Results.Clear();
+                ClearTargetResult();
+                _lastScenarioProjection = [];
                 return;
             }
 
@@ -203,6 +209,8 @@ public partial class SimulationViewModel(
             IsPlanUnavailable = true;
             HasResults = false;
             IsResultStale = false;
+            _lastScenarioProjection = [];
+            ClearTargetResult();
             SetStatus(exception.Message);
         }
     }
@@ -395,6 +403,8 @@ public partial class SimulationViewModel(
         HasResults = false;
         IsResultStale = false;
         ResetApplyState(clearRequest: true);
+        _lastScenarioProjection = [];
+        ClearTargetResult();
         NotifyDraftChanged();
         OnPropertyChanged(nameof(IsEditingCondition));
         OnPropertyChanged(nameof(AddConditionButtonText));
@@ -426,9 +436,11 @@ public partial class SimulationViewModel(
             ApplyButtonText = "Planı Uygula";
             LastApplyResult = null;
             ApplyConfirmationText = BuildApplyConfirmation(requests);
+            _lastScenarioProjection = result.Scenario;
             Populate(result);
             HasResults = true;
             IsResultStale = false;
+            RefreshTargetResultAfterSimulation();
         }
         catch (Exception exception)
         {
@@ -441,6 +453,22 @@ public partial class SimulationViewModel(
         finally
         {
             IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private void FindTarget()
+    {
+        try
+        {
+            var target = ParsePositiveMoney(TargetAmount, "Hedef tutar");
+            UpdateTargetResult(target);
+            SetStatus(string.Empty);
+        }
+        catch (Exception exception)
+        {
+            ClearTargetResult();
+            SetStatus(exception.Message);
         }
     }
 
@@ -485,6 +513,8 @@ public partial class SimulationViewModel(
             HasResults = false;
             IsResultStale = false;
             _lastRequests = [];
+            _lastScenarioProjection = [];
+            ClearTargetResult();
             NotifyDraftChanged();
             SetStatus(result.Message);
             return result;
@@ -577,6 +607,56 @@ public partial class SimulationViewModel(
             _ => $"Tarih: {request.StartDate:dd MMMM yyyy}"
         };
         return $"Bu plan gerçek finans planına eklenecek.\n\n{summary}\n{detail}";
+    }
+
+    private void RefreshTargetResultAfterSimulation()
+    {
+        if (string.IsNullOrWhiteSpace(TargetAmount))
+        {
+            ClearTargetResult();
+            return;
+        }
+
+        try
+        {
+            var target = ParsePositiveMoney(TargetAmount, "Hedef tutar");
+            UpdateTargetResult(target);
+            SetStatus(string.Empty);
+        }
+        catch (Exception exception)
+        {
+            ClearTargetResult();
+            SetStatus(exception.Message);
+        }
+    }
+
+    private void UpdateTargetResult(decimal target)
+    {
+        if (!HasCurrentResults || _lastScenarioProjection.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Önce simülasyonu hesaplamalısın.");
+        }
+
+        var result = service.FindTargetReachability(
+            _lastScenarioProjection,
+            target);
+        TargetResult = result switch
+        {
+            { IsAlreadyReached: true } =>
+                "Bu seviyenin zaten üzerindesin.",
+            { FirstReachedPeriod: { } reached } =>
+                $"Bu planla {Money(target)} seviyesine ilk kez {TargetPeriodText(reached.Period)} döneminde ulaşıyorsun.",
+            _ =>
+                $"Bu planla {Money(target)} seviyesine 12 aylık görünüm içinde ulaşılamıyor."
+        };
+        HasTargetResult = true;
+    }
+
+    private void ClearTargetResult()
+    {
+        TargetResult = string.Empty;
+        HasTargetResult = false;
     }
 
     private SimulationDraftConditionView CreateConditionView(
@@ -695,6 +775,7 @@ public partial class SimulationViewModel(
         if (clearRequest)
         {
             _lastRequests = [];
+            _lastScenarioProjection = [];
         }
 
         LastApplyResult = null;
@@ -710,6 +791,7 @@ public partial class SimulationViewModel(
             IsResultStale = true;
         }
 
+        ClearTargetResult();
         ResetApplyState(clearRequest: true);
     }
 
@@ -807,6 +889,9 @@ public partial class SimulationViewModel(
 
     private static string SalaryText(DateOnly salaryDate) =>
         $"{salaryDate.ToString("dd MMMM yyyy", TurkishCulture)} Maaşı";
+
+    private static string TargetPeriodText(SalaryPeriod period) =>
+        period.Start.ToString("MMMM yyyy", TurkishCulture);
 
     private static string AssignmentModeLabel(PaymentAssignmentMode mode) =>
         mode == PaymentAssignmentMode.PreviousPeriod

@@ -30,6 +30,18 @@ public abstract partial class ViewModelBase : ObservableObject
         throw new InvalidOperationException($"{fieldName} geçerli bir tutar olmalıdır.");
     }
 
+    protected static decimal ParsePositiveMoney(string? value, string fieldName)
+    {
+        var result = ParseMoney(value, fieldName);
+        if (result <= 0m)
+        {
+            throw new InvalidOperationException(
+                $"{fieldName} 0'dan büyük olmalıdır.");
+        }
+
+        return result;
+    }
+
     protected void SetStatus(string message)
     {
         StatusMessage = message;

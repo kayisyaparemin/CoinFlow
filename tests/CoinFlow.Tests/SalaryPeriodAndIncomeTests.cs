@@ -177,6 +177,38 @@ public sealed class SalaryPeriodAndIncomeTests
         Assert.Equal(new DateOnly(2027, 4, 10), reached!.PeriodStart);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void TargetAmount_RequiresPositiveAmount(decimal targetAmount)
+    {
+        var rows = new[] { 100_000m }
+            .Select((ending, index) => Projection(index, ending))
+            .ToArray();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new TargetAmountCalculator()
+                .FindFirstReachable(rows, targetAmount));
+    }
+
+    [Fact]
+    public void TargetAmount_AlreadyReachedUsesOpeningSituation()
+    {
+        var rows = new[]
+        {
+            Projection(0, 280_000m) with
+            {
+                OpeningProjectedSavings = 320_000m
+            }
+        };
+
+        var reached = new TargetAmountCalculator()
+            .FindFirstReachable(rows, 300_000m);
+
+        Assert.True(reached.IsAlreadyReached);
+        Assert.Null(reached.FirstReachedPeriod);
+    }
+
     private static SalaryScheduleEntry Salary(
         decimal amount,
         DateOnly effectiveDate) => new()

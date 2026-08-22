@@ -570,6 +570,200 @@ public sealed class SimulationTests
     }
 
     [Fact]
+    public void SimulationTarget_SingleCondition_UsesScenarioProjectionAndSharedCalculator()
+    {
+        var plan = TestFactory.CanonicalPlan();
+        var request = new SimulationRequest(
+            SimulationScenarioType.FutureIncome,
+            "Ek gelir",
+            80_000m,
+            new DateOnly(2027, 2, 15),
+            ScenarioId: Guid.NewGuid());
+        var result = new SimulationCalculator(_projection, _installments)
+            .Calculate(
+                plan,
+                new DateOnly(2026, 8, 20),
+                request);
+        var target = ReachableTarget(result.Scenario);
+        var expected = result.Scenario
+            .OrderBy(x => x.PeriodStart)
+            .First(x => x.EndingProjectedSavings >= target);
+        var shared = new TargetAmountCalculator()
+            .FindFirstReachable(result.Scenario, target);
+
+        Assert.False(shared.IsAlreadyReached);
+        Assert.Equal(expected.PeriodStart, shared.FirstReachedPeriod?.PeriodStart);
+    }
+
+    [Fact]
+    public void SimulationTarget_MultiCondition_UsesCombinedScenario()
+    {
+        var plan = TestFactory.CanonicalPlan();
+        var requests = CompositeRequests(plan).Take(5).ToArray();
+        var calculator = new SimulationCalculator(_projection, _installments);
+        var combined = calculator.Calculate(
+            plan,
+            new DateOnly(2026, 8, 20),
+            requests);
+        var latestOnly = calculator.Calculate(
+            plan,
+            new DateOnly(2026, 8, 20),
+            requests[^1]);
+        var (target, combinedPeriod, latestOnlyPeriod) =
+            FindDifferingTarget(combined.Scenario, latestOnly.Scenario);
+
+        var serviceResult = new TargetAmountCalculator()
+            .FindFirstReachable(combined.Scenario, target);
+
+        Assert.Equal(combinedPeriod, serviceResult.FirstReachedPeriod?.PeriodStart);
+        Assert.NotEqual(
+            latestOnlyPeriod,
+            serviceResult.FirstReachedPeriod?.PeriodStart);
+    }
+
+    [Fact]
+    public void SimulationTarget_RemoveCondition_RecalculatesFromFreshScenario()
+    {
+        var plan = TestFactory.CanonicalPlan();
+        var requests = CompositeRequests(plan).Take(4).ToArray();
+        var withoutRemoved = requests
+            .Where(x => x.ScenarioId != requests[2].ScenarioId)
+            .ToArray();
+        var calculator = new SimulationCalculator(_projection, _installments);
+        var before = calculator.Calculate(
+            plan,
+            new DateOnly(2026, 8, 20),
+            requests);
+        var after = calculator.Calculate(
+            plan,
+            new DateOnly(2026, 8, 20),
+            withoutRemoved);
+        var (target, beforePeriod, afterPeriod) =
+            FindDifferingTarget(before.Scenario, after.Scenario);
+
+        var refreshed = new TargetAmountCalculator()
+            .FindFirstReachable(after.Scenario, target);
+
+        Assert.NotEqual(beforePeriod, afterPeriod);
+        Assert.Equal(afterPeriod, refreshed.FirstReachedPeriod?.PeriodStart);
+    }
+
+    [Fact]
+    public void SimulationTarget_OrderIndependence_MatchesProjectionOrder()
+    {
+        var plan = TestFactory.CanonicalPlan();
+        var requests = CompositeRequests(plan).Take(3).ToArray();
+        var calculator = new SimulationCalculator(_projection, _installments);
+        var forward = calculator.Calculate(
+            plan,
+            new DateOnly(2026, 8, 20),
+            requests);
+        var reversed = calculator.Calculate(
+            plan,
+            new DateOnly(2026, 8, 20),
+            requests.Reverse().ToArray());
+        var target = ReachableTarget(forward.Scenario);
+        var targetCalculator = new TargetAmountCalculator();
+
+        var forwardReach = targetCalculator.FindFirstReachable(
+            forward.Scenario,
+            target);
+        var reversedReach = targetCalculator.FindFirstReachable(
+            reversed.Scenario,
+            target);
+
+        Assert.Equal(
+            forward.Scenario.Select(x => x.EndingProjectedSavings),
+            reversed.Scenario.Select(x => x.EndingProjectedSavings));
+        Assert.Equal(
+            forwardReach.FirstReachedPeriod?.PeriodStart,
+            reversedReach.FirstReachedPeriod?.PeriodStart);
+    }
+
+    [Fact]
+    public void SimulationTarget_NotReachedWithinTwelvePeriods()
+    {
+        var plan = TestFactory.CanonicalPlan();
+        var result = new SimulationCalculator(_projection, _installments)
+            .Calculate(
+                plan,
+                new DateOnly(2026, 8, 20),
+                CompositeRequests(plan).Take(3).ToArray());
+        var target = result.Scenario.Max(x => x.EndingProjectedSavings) + 1m;
+
+        var reached = new TargetAmountCalculator()
+            .FindFirstReachable(result.Scenario, target);
+
+        Assert.False(reached.IsReached);
+        Assert.Null(reached.FirstReachedPeriod);
+    }
+
+    [Fact]
+    public void SimulationTarget_AlreadyReachedUsesOpeningSituation()
+    {
+        var plan = CarryOverPlan() with
+        {
+            Settings = CarryOverPlan().Settings with
+            {
+                ProjectionStartingSavings = 350_000m
+            }
+        };
+        var projection = _projection.Calculate(
+            plan,
+            new DateOnly(2026, 8, 20),
+            12);
+
+        var reached = new TargetAmountCalculator()
+            .FindFirstReachable(projection, 300_000m);
+
+        Assert.True(reached.IsAlreadyReached);
+        Assert.Null(reached.FirstReachedPeriod);
+    }
+
+    [Fact]
+    public async Task SimulationTarget_AfterApply_MatchesCanonicalTarget()
+    {
+        var path = Path.Combine(
+            Path.GetTempPath(),
+            $"coinflow-target-apply-{Guid.NewGuid():N}.db");
+        SqliteCoinFlowStore? store = new(
+            path,
+            developmentFeaturesEnabled: false,
+            new DateOnly(2026, 8, 20));
+        try
+        {
+            await PrepareCanonicalPlanAsync(store);
+            var service = TestFactory.Service(store);
+            var plan = await service.GetFinancialPlanAsync();
+            var requests = CompositeRequests(plan).Take(3).ToArray();
+            var simulation = await service.SimulateAsync(requests);
+            var target = 300_000m;
+            var simulatorTarget = service.FindTargetReachability(
+                simulation.Scenario,
+                target);
+
+            await service.ApplySimulationAsync(requests, confirmed: true);
+            var canonicalTarget = await service.FindTargetReachabilityAsync(target);
+
+            Assert.Equal(
+                simulatorTarget.IsAlreadyReached,
+                canonicalTarget.IsAlreadyReached);
+            Assert.Equal(
+                simulatorTarget.FirstReachedPeriod?.PeriodStart,
+                canonicalTarget.FirstReachedPeriod?.PeriodStart);
+        }
+        finally
+        {
+            if (store is not null)
+            {
+                await store.DisposeAsync();
+            }
+
+            DeleteDatabase(path);
+        }
+    }
+
+    [Fact]
     public async Task ApplyPlan_RequiresConfirmationThenPersists()
     {
         await WithStore(async store =>
@@ -1033,6 +1227,47 @@ public sealed class SimulationTests
             ScenarioId: Guid.NewGuid());
 
         Assert.ThrowsAny<Exception>(() => SimulationCalculator.Validate(request));
+    }
+
+    private static decimal ReachableTarget(
+        IReadOnlyList<SalaryPeriodProjection> projections) =>
+        projections
+            .OrderBy(x => x.PeriodStart)
+            .First(x => x.EndingProjectedSavings > 0m)
+            .EndingProjectedSavings;
+
+    private static (decimal Target, DateOnly? PrimaryPeriod, DateOnly? ComparisonPeriod)
+        FindDifferingTarget(
+            IReadOnlyList<SalaryPeriodProjection> primary,
+            IReadOnlyList<SalaryPeriodProjection> comparison)
+    {
+        var calculator = new TargetAmountCalculator();
+        var candidates = primary
+            .Concat(comparison)
+            .Select(x => x.EndingProjectedSavings)
+            .Where(x => x > 0m)
+            .Distinct()
+            .OrderBy(x => x)
+            .ToArray();
+
+        foreach (var target in candidates)
+        {
+            var primaryPeriod = calculator
+                .FindFirstReachable(primary, target)
+                .FirstReachedPeriod
+                ?.PeriodStart;
+            var comparisonPeriod = calculator
+                .FindFirstReachable(comparison, target)
+                .FirstReachedPeriod
+                ?.PeriodStart;
+            if (primaryPeriod != comparisonPeriod)
+            {
+                return (target, primaryPeriod, comparisonPeriod);
+            }
+        }
+
+        throw new InvalidOperationException(
+            "Test verisinde hedef dönemi ayrıştıran tutar bulunamadı.");
     }
 
     private static SimulationRequest[] CompositeRequests(FinancialPlan plan)

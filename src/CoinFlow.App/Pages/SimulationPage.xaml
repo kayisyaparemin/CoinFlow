@@ -169,6 +169,23 @@
                 </Border>
 
                 <Border>
+                    <VerticalStackLayout Spacing="8">
+                        <Label Text="Ne zaman karşılayabilirim?"
+                               Style="{StaticResource SectionTitle}" />
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <Entry Text="{Binding TargetAmount}"
+                                   Placeholder="Hedef tutar"
+                                   Keyboard="Numeric" />
+                            <Button Grid.Column="1"
+                                    Text="Hesapla"
+                                    Command="{Binding FindTargetCommand}" />
+                        </Grid>
+                        <Label Text="{Binding TargetResult}"
+                               IsVisible="{Binding HasTargetResult}" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border>
                     <VerticalStackLayout Spacing="11">
                         <Label Text="Öne Çıkanlar" Style="{StaticResource SectionTitle}" />
                         <VerticalStackLayout BindableLayout.ItemsSource="{Binding SummaryMetrics}"
