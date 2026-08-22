@@ -12,7 +12,8 @@ public sealed class SalaryPeriodDetailPresenter
 
     public SalaryPeriodDetailData Build(
         SalaryPeriodProjection scenario,
-        SalaryPeriodProjection? baseline = null)
+        SalaryPeriodProjection? baseline = null,
+        bool isSimulationScenario = false)
     {
         if (baseline is not null && baseline.Period != scenario.Period)
         {
@@ -32,9 +33,11 @@ public sealed class SalaryPeriodDetailPresenter
             .ToArray();
         var transition = BuildTransitionRows(scenario);
         var payments = BuildPayments(scenario);
-        var comparison = baseline is null
+        var comparison = baseline is null || isSimulationScenario
             ? []
             : BuildComparisonRows(baseline, scenario);
+        var periodNeed = SimulatorProjectionMath.PeriodNeed(scenario);
+        var incomeCoverage = scenario.TotalIncome - periodNeed;
 
         return new SalaryPeriodDetailData(
             scenario.PeriodStart,
@@ -44,8 +47,29 @@ public sealed class SalaryPeriodDetailPresenter
                 ? "Geçmiş dönemi kapatır"
                 : "Gelecek dönemi karşılar",
             scenario.IsStrategyTransition,
+            isSimulationScenario,
             Summary(
-                "GELİR",
+                "DÖNEM BAŞI",
+                scenario.OpeningProjectedSavings,
+                scenario.OpeningProjectedSavings < 0m
+                    ? DetailSemanticType.Deficit
+                    : DetailSemanticType.Projection),
+            Summary(
+                "BU DÖNEM GEREKEN",
+                periodNeed,
+                DetailSemanticType.Mandatory),
+            Summary(
+                incomeCoverage >= 0m
+                    ? "GELİRLERDEN KALAN"
+                    : "GELİRLERİN KARŞILAMADIĞI",
+                Math.Abs(incomeCoverage),
+                incomeCoverage >= 0m
+                    ? DetailSemanticType.Savings
+                    : DetailSemanticType.Deficit),
+            IncomeCoverageMessage(scenario, incomeCoverage),
+            SimulatorProjectionMath.BuildNeedBreakdown(scenario),
+            Summary(
+                isSimulationScenario ? "DÖNEM GELİRLERİ" : "GELİR",
                 scenario.TotalIncome,
                 DetailSemanticType.Income),
             Summary(
@@ -79,6 +103,25 @@ public sealed class SalaryPeriodDetailPresenter
             payments,
             comparison,
             BuildDebugRows(scenario));
+    }
+
+    private static string IncomeCoverageMessage(
+        SalaryPeriodProjection row,
+        decimal incomeCoverage)
+    {
+        if (incomeCoverage < 0m && row.EndingProjectedSavings >= 0m)
+        {
+            return $"Bu ay dönem gelirlerin ihtiyacın {Money(Math.Abs(incomeCoverage))} altında kalıyor. Fark dönem başındaki finansal durumundan karşılanıyor.";
+        }
+
+        if (row.EndingProjectedSavings < 0m)
+        {
+            return $"Bu dönem sonunda yaklaşık {Money(Math.Abs(row.EndingProjectedSavings))} finansman açığı oluşuyor.";
+        }
+
+        return incomeCoverage > 0m
+            ? $"Dönem gelirlerinden {Money(incomeCoverage)} kalıyor."
+            : "Dönem gelirleri bu ayki toplam ihtiyacı tam karşılıyor.";
     }
 
     private static DetailMetric Summary(
@@ -461,4 +504,7 @@ public sealed class SalaryPeriodDetailPresenter
         return $"{row.PaymentWindowStart.ToString("dd MMMM", TurkishCulture)} – " +
                $"{row.PaymentWindowEnd.ToString("dd MMMM", TurkishCulture)} {action}";
     }
+
+    private static string Money(decimal value) =>
+        $"{value.ToString("N2", TurkishCulture)} TL";
 }

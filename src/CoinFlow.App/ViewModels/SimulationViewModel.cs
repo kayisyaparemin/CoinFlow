@@ -10,7 +10,8 @@ using CoinFlow.Domain.Models;
 namespace CoinFlow.App.ViewModels;
 
 public partial class SimulationViewModel(
-    CoinFlowService service) : ViewModelBase
+    CoinFlowService service,
+    SimulatorInsightService simulatorInsightService) : ViewModelBase
 {
     public ObservableCollection<SelectionOption<SimulationScenarioType>>
         ScenarioTypes { get; } =
@@ -29,7 +30,9 @@ public partial class SimulationViewModel(
     ];
 
     public ObservableCollection<SelectionOption<Guid>> CreditCards { get; } = [];
-    public ObservableCollection<SimulationLine> Results { get; } = [];
+    public ObservableCollection<SimulatorPeriodView> Results { get; } = [];
+    public ObservableCollection<string> NarrativeInsights { get; } = [];
+    public ObservableCollection<SimulatorSummaryMetric> SummaryMetrics { get; } = [];
     public ObservableCollection<SelectionOption<DateOnly>> StrategySalaryDates { get; } = [];
     public IReadOnlyList<SelectionOption<PaymentAssignmentMode>> StrategyModes { get; } =
     [
@@ -173,7 +176,7 @@ public partial class SimulationViewModel(
         Shell.Current.GoToAsync("//commitments/commitments-content");
 
     [RelayCommand]
-    private async Task OpenPeriodDetailAsync(SimulationLine? line)
+    private async Task OpenPeriodDetailAsync(SimulatorPeriodView? line)
     {
         if (line is null)
         {
@@ -186,8 +189,8 @@ public partial class SimulationViewModel(
             {
                 [SalaryPeriodDetailViewModel.DetailQueryKey] =
                     new SalaryPeriodDetailRequest(
-                        line.Impact.Scenario,
-                        line.Impact.Baseline)
+                        line.Projection,
+                        IsSimulationScenario: true)
             });
         _preserveOnNextAppearance = true;
     }
@@ -251,7 +254,7 @@ public partial class SimulationViewModel(
             SimulationScenarioType.PaymentStrategyChange =>
                 "Yeni düzen yalnızca seçtiğin maaştan itibaren hesaplanır; Simülasyon Yap finans kayıtlarını değiştirmez.",
             SimulationScenarioType.CreditCardFullPayment =>
-                "Seçilen tarihte ekstrenin tamamı ödenir; sonraki kart faizi ve faiz tasarrufu Mevcut Plan ile karşılaştırılır.",
+                "Seçilen tarihte ekstrenin tamamı ödenir; sonraki dönemlerde kart faizi ve nakit akışı yeniden projekte edilir.",
             _ => string.Empty
         };
         HasResults = false;
@@ -441,6 +444,7 @@ public partial class SimulationViewModel(
 
     private void Populate(SimulationResult result)
     {
+        var projectionSummary = simulatorInsightService.Build(result.Scenario);
         var baselineEnding = result.Baseline[^1].EndingProjectedSavings;
         var scenarioEnding = result.Risk.EndingProjectedSavings;
         BaselineEnding = Money(baselineEnding);
@@ -484,7 +488,8 @@ public partial class SimulationViewModel(
             result.AdditionalInterestCost < 0m
                 ? result.InterestSaving
                 : result.AdditionalInterestCost);
-        FriendlySummary = result.FriendlySummary;
+        FriendlySummary = string.Join(Environment.NewLine,
+            projectionSummary.NarrativeInsights);
         var transition = result.Scenario.FirstOrDefault(x =>
             x.IsStrategyTransition);
         HasStrategyTransitionSummary = transition is not null;
@@ -499,19 +504,22 @@ public partial class SimulationViewModel(
                 $"Dönem neti: {Money(transition.EstimatedSavingsCapacity)}",
                 $"Dönem sonu durumu: {Money(transition.EndingProjectedSavings)}");
 
-        Results.Clear();
-        foreach (var row in result.Rows)
+        NarrativeInsights.Clear();
+        foreach (var insight in projectionSummary.NarrativeInsights)
         {
-            Results.Add(new SimulationLine(
-                row,
-                SalaryText(row.Scenario.PeriodStart),
-                AssignmentText(row.Scenario),
-                Money(row.Baseline.EndingProjectedSavings),
-                Money(row.Scenario.EndingProjectedSavings),
-                SignedMoney(row.ProjectedSavingsDifference),
-                row.ProjectedSavingsDifference < 0m,
-                SignedMoney(row.InterestDifference),
-                row.InterestDifference != 0m));
+            NarrativeInsights.Add(insight);
+        }
+
+        SummaryMetrics.Clear();
+        foreach (var metric in projectionSummary.KeyMetrics)
+        {
+            SummaryMetrics.Add(metric);
+        }
+
+        Results.Clear();
+        foreach (var row in projectionSummary.Periods)
+        {
+            Results.Add(row);
         }
     }
 

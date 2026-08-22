@@ -48,11 +48,34 @@ jobs:
       - name: Unit tests
         run: dotnet test tests/CoinFlow.Tests/CoinFlow.Tests.csproj -c Release --no-restore --logger "console;verbosity=minimal"
 
+      - name: Validate development signing secrets and create temporary keystore
+        shell: bash
+        env:
+          MIZAN_DEV_KEYSTORE_BASE64: ${{ secrets.MIZAN_DEV_KEYSTORE_BASE64 }}
+          MIZAN_DEV_KEYSTORE_PASSWORD: ${{ secrets.MIZAN_DEV_KEYSTORE_PASSWORD }}
+          MIZAN_DEV_KEY_ALIAS: ${{ secrets.MIZAN_DEV_KEY_ALIAS }}
+          MIZAN_DEV_KEY_PASSWORD: ${{ secrets.MIZAN_DEV_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for variable in MIZAN_DEV_KEYSTORE_BASE64 MIZAN_DEV_KEYSTORE_PASSWORD MIZAN_DEV_KEY_ALIAS MIZAN_DEV_KEY_PASSWORD; do
+            [[ -n "${!variable:-}" ]] || { echo "Required development signing secret is missing: $variable" >&2; exit 1; }
+          done
+          keystore="$RUNNER_TEMP/mizan-dev.keystore"
+          printf '%s' "$MIZAN_DEV_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          [[ -s "$keystore" ]] || { echo "Decoded development keystore is empty." >&2; exit 1; }
+          chmod 600 "$keystore"
+          echo "MIZAN_DEV_KEYSTORE=$keystore" >> "$GITHUB_ENV"
+
       - name: Build development APK
         shell: bash
+        env:
+          MIZAN_DEV_KEYSTORE_PASSWORD: ${{ secrets.MIZAN_DEV_KEYSTORE_PASSWORD }}
+          MIZAN_DEV_KEY_ALIAS: ${{ secrets.MIZAN_DEV_KEY_ALIAS }}
+          MIZAN_DEV_KEY_PASSWORD: ${{ secrets.MIZAN_DEV_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           short_sha="${GITHUB_SHA::7}"
+          version_name="1.0.0-dev.${GITHUB_RUN_NUMBER}"
           dotnet publish "$PROJECT" \
             -f net8.0-android \
             -c Release \
@@ -60,9 +83,14 @@ jobs:
             -p:AndroidPackageFormat=apk \
             -p:RunAOTCompilation=false \
             -p:CoinFlowDevBuild=true \
-            -p:CoinFlowVersion=0.0.0-dev \
+            -p:CoinFlowVersion="$version_name" \
             -p:CoinFlowBuildNumber="${GITHUB_RUN_NUMBER}" \
-            -p:CoinFlowCommit="$short_sha"
+            -p:CoinFlowCommit="$short_sha" \
+            -p:AndroidKeyStore=true \
+            -p:AndroidSigningKeyStore="$MIZAN_DEV_KEYSTORE" \
+            -p:AndroidSigningKeyAlias="$MIZAN_DEV_KEY_ALIAS" \
+            -p:AndroidSigningKeyPass=env:MIZAN_DEV_KEY_PASSWORD \
+            -p:AndroidSigningStorePass=env:MIZAN_DEV_KEYSTORE_PASSWORD
 
       - name: Locate, verify, and normalize APK
         id: apk
@@ -80,8 +108,23 @@ jobs:
           aapt="$(find "$ANDROID_HOME/build-tools" -type f -name aapt -print | sort -V | tail -n 1)"
           [[ -x "$apksigner" && -x "$aapt" ]] || { echo "Android verification tools not found." >&2; exit 1; }
           "$apksigner" verify --verbose "$apk"
-          package_id="$($aapt dump badging "$apk" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")"
+          certs="$("$apksigner" verify --print-certs "$apk")"
+          echo "$certs"
+          if grep -q "CN=Android Debug" <<< "$certs"; then
+            echo "Debug signing certificate detected; refusing development artifact." >&2
+            exit 1
+          fi
+          signing_sha256="$(sed -n "s/.*certificate SHA-256 digest: //p" <<< "$certs" | head -n 1)"
+          [[ -n "$signing_sha256" ]] || { echo "Development signing certificate SHA-256 was not found." >&2; exit 1; }
+          badging="$("$aapt" dump badging "$apk")"
+          package_id="$(sed -n "s/^package: name='\([^']*\)'.*/\1/p" <<< "$badging")"
+          version_code="$(sed -n "s/^package:.* versionCode='\([^']*\)'.*/\1/p" <<< "$badging")"
+          version_name="$(sed -n "s/^package:.* versionName='\([^']*\)'.*/\1/p" <<< "$badging")"
+          application_label="$(sed -n "s/^application-label:'\([^']*\)'.*/\1/p" <<< "$badging" | head -n 1)"
           [[ "$package_id" == "com.coinflow.mobile" ]] || { echo "Unexpected package id: $package_id" >&2; exit 1; }
+          [[ "$version_code" == "$GITHUB_RUN_NUMBER" ]] || { echo "Unexpected version code: $version_code" >&2; exit 1; }
+          [[ "$version_name" == "1.0.0-dev.${GITHUB_RUN_NUMBER}" ]] || { echo "Unexpected version name: $version_name" >&2; exit 1; }
+          [[ "$application_label" == "Mizan" ]] || { echo "Unexpected application label: $application_label" >&2; exit 1; }
           mkdir -p artifacts
           short_sha="${GITHUB_SHA::7}"
           cp "$apk" "artifacts/Mizan-dev-${short_sha}.apk"
@@ -89,6 +132,9 @@ jobs:
           unzip -t artifacts/Mizan-dev-latest.apk >/dev/null
           echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
           echo "artifact_path=artifacts/Mizan-dev-${short_sha}.apk" >> "$GITHUB_OUTPUT"
+          echo "version_code=$version_code" >> "$GITHUB_OUTPUT"
+          echo "version_name=$version_name" >> "$GITHUB_OUTPUT"
+          echo "signing_sha256=$signing_sha256" >> "$GITHUB_OUTPUT"
 
       - name: Upload development artifact
         uses: actions/upload-artifact@v4
@@ -111,7 +157,18 @@ jobs:
             --title "Mizan - Pre-V1 Development Candidate" \
             --notes "Commit: $GITHUB_SHA
           Build: #$GITHUB_RUN_NUMBER
+          Version: ${{ steps.apk.outputs.version_name }}
+          VersionCode: ${{ steps.apk.outputs.version_code }}
+          Dev signing SHA-256: ${{ steps.apk.outputs.signing_sha256 }}
           Date: $build_date
 
           This is a test build and may be unstable." \
             --prerelease
+
+      - name: Remove temporary development keystore
+        if: always()
+        shell: bash
+        run: |
+          if [[ -n "${MIZAN_DEV_KEYSTORE:-}" && -f "$MIZAN_DEV_KEYSTORE" ]]; then
+            rm -f -- "$MIZAN_DEV_KEYSTORE"
+          fi

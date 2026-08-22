@@ -57,6 +57,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<PeriodReviewService>();
         builder.Services.AddSingleton<HistoryQueryService>();
         builder.Services.AddSingleton<SalaryPeriodDetailPresenter>();
+        builder.Services.AddSingleton<SimulatorInsightService>();
         builder.Services.AddSingleton<SimulationCalculator>();
         builder.Services.AddSingleton<TargetAmountCalculator>();
         builder.Services.AddSingleton<CoinFlowService>();

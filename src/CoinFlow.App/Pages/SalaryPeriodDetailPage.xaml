@@ -130,10 +130,100 @@
                     </FlexLayout>
                 </VerticalStackLayout>
 
+                <Border IsVisible="{Binding Detail.IsSimulationScenario}"
+                        BackgroundColor="{StaticResource SoftSky}">
+                    <VerticalStackLayout Spacing="13">
+                        <Label Text="Bu dönemde ne olacak?"
+                               Style="{StaticResource SectionTitle}" />
+                        <Grid ColumnDefinitions="*,Auto"
+                              RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+                              RowSpacing="8">
+                            <Label Text="Dönem başı durumu" Style="{StaticResource MutedText}" />
+                            <Label Grid.Column="1"
+                                   Text="{Binding Detail.OpeningSummary.AmountText}"
+                                   FontFamily="OpenSansSemibold" />
+                            <Label Grid.Row="1" Text="Dönem gelirleri" Style="{StaticResource MutedText}" />
+                            <Label Grid.Row="1"
+                                   Grid.Column="1"
+                                   Text="{Binding Detail.IncomeSummary.AmountText}"
+                                   FontFamily="OpenSansSemibold"
+                                   TextColor="{StaticResource PositiveText}" />
+                            <Label Grid.Row="2" Text="Bu dönem gereken" Style="{StaticResource MutedText}" />
+                            <Label Grid.Row="2"
+                                   Grid.Column="1"
+                                   Text="{Binding Detail.PeriodNeedSummary.AmountText}"
+                                   FontFamily="OpenSansSemibold"
+                                   TextColor="{StaticResource DebtText}" />
+                            <Label Grid.Row="3" Text="{Binding Detail.IncomeCoverageSummary.Label}" Style="{StaticResource MutedText}" />
+                            <Label Grid.Row="3"
+                                   Grid.Column="1"
+                                   Text="{Binding Detail.IncomeCoverageSummary.AmountText}"
+                                   FontFamily="OpenSansSemibold"
+                                   TextColor="{StaticResource PositiveText}">
+                                <Label.Triggers>
+                                    <DataTrigger TargetType="Label"
+                                                 Binding="{Binding Detail.IncomeCoverageSummary.IsDeficit}"
+                                                 Value="True">
+                                        <Setter Property="TextColor" Value="{StaticResource DeficitText}" />
+                                    </DataTrigger>
+                                </Label.Triggers>
+                            </Label>
+                            <BoxView Grid.Row="4"
+                                     Grid.ColumnSpan="2"
+                                     HeightRequest="1"
+                                     Color="{StaticResource Line}" />
+                        </Grid>
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Label Text="Dönem sonu tahmini durum"
+                                   FontFamily="OpenSansSemibold" />
+                            <Label Grid.Column="1"
+                                   Text="{Binding Detail.EndingSummary.AmountText}"
+                                   FontFamily="OpenSansSemibold"
+                                   TextColor="{StaticResource ProjectionText}">
+                                <Label.Triggers>
+                                    <DataTrigger TargetType="Label"
+                                                 Binding="{Binding Detail.EndingSummary.IsDeficit}"
+                                                 Value="True">
+                                        <Setter Property="TextColor" Value="{StaticResource DeficitText}" />
+                                    </DataTrigger>
+                                </Label.Triggers>
+                            </Label>
+                        </Grid>
+                        <Label Text="{Binding Detail.IncomeCoverageMessage}"
+                               IsVisible="{Binding Detail.HasIncomeCoverageMessage}"
+                               Style="{StaticResource MutedText}" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border IsVisible="{Binding Detail.IsSimulationScenario}">
+                    <VerticalStackLayout Spacing="13">
+                        <Label Text="Bu Dönem Gereken"
+                               Style="{StaticResource SectionTitle}" />
+                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding Detail.NeedBreakdownRows}"
+                                             Spacing="10">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate>
+                                    <VerticalStackLayout Spacing="7">
+                                        <BoxView HeightRequest="1"
+                                                 Color="{StaticResource Line}"
+                                                 IsVisible="{Binding IsTotal}" />
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                                            <Label Text="{Binding Label}" />
+                                            <Label Grid.Column="1"
+                                                   Text="{Binding AmountText}"
+                                                   Style="{StaticResource SemanticAmount}" />
+                                        </Grid>
+                                    </VerticalStackLayout>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
+
                 <Border IsVisible="{Binding Detail.HasComparison}"
                         BackgroundColor="{StaticResource ProjectionSurface}">
                     <VerticalStackLayout Spacing="12">
-                        <Label Text="Bu Plan Bu Ayı Nasıl Değiştiriyor?"
+                        <Label Text="Dönem Karşılaştırması"
                                Style="{StaticResource SectionTitle}" />
                         <VerticalStackLayout BindableLayout.ItemsSource="{Binding Detail.ComparisonRows}"
                                              Spacing="9">
@@ -154,10 +244,10 @@
                 <Border IsVisible="{Binding Detail.HasComparison}">
                     <VerticalStackLayout Spacing="13">
                         <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="14">
-                            <Label Text="Mevcut Plan / Yeni Plan"
+                            <Label Text="Karşılaştırma Özeti"
                                    Style="{StaticResource SectionTitle}" />
-                            <Label Grid.Column="1" Text="MEVCUT" Style="{StaticResource Eyebrow}" />
-                            <Label Grid.Column="2" Text="YENİ PLAN" Style="{StaticResource Eyebrow}" />
+                            <Label Grid.Column="1" Text="ÖNCE" Style="{StaticResource Eyebrow}" />
+                            <Label Grid.Column="2" Text="SONRA" Style="{StaticResource Eyebrow}" />
                         </Grid>
                         <VerticalStackLayout BindableLayout.ItemsSource="{Binding Detail.ComparisonRows}"
                                              Spacing="12">
@@ -167,11 +257,11 @@
                                         <Label Text="{Binding Label}" FontFamily="OpenSansSemibold" />
                                         <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
                                             <VerticalStackLayout>
-                                                <Label Text="Mevcut Plan" Style="{StaticResource MutedText}" />
+                                                <Label Text="Önce" Style="{StaticResource MutedText}" />
                                                 <Label Text="{Binding BaselineText}" />
                                             </VerticalStackLayout>
                                             <VerticalStackLayout Grid.Column="1">
-                                                <Label Text="Yeni Plan" Style="{StaticResource MutedText}" />
+                                                <Label Text="Sonra" Style="{StaticResource MutedText}" />
                                                 <Label Text="{Binding ScenarioText}" FontFamily="OpenSansSemibold" />
                                             </VerticalStackLayout>
                                             <VerticalStackLayout Grid.Column="2">
@@ -190,7 +280,8 @@
                 <Grid ColumnDefinitions="*,*"
                       RowDefinitions="Auto,Auto"
                       ColumnSpacing="10"
-                      RowSpacing="10">
+                      RowSpacing="10"
+                      IsVisible="{Binding Detail.IsStandardProjection}">
                     <Border Grid.Row="0"
                             Grid.Column="0"
                             BindingContext="{Binding Detail.IncomeSummary}"
@@ -229,7 +320,7 @@
                     </Border>
                 </Grid>
 
-                <Border>
+                <Border IsVisible="{Binding Detail.IsStandardProjection}">
                     <VerticalStackLayout Spacing="14">
                         <Label Text="Dönem Akışı" Style="{StaticResource SectionTitle}" />
                         <VerticalStackLayout BindableLayout.ItemsSource="{Binding Detail.FlowRows}"
@@ -360,7 +451,7 @@
                 </VerticalStackLayout>
 
                 <VerticalStackLayout IsVisible="{Binding Detail.HasPayments}" Spacing="10">
-                    <Label Text="Bu Dönemin Ödemeleri" Style="{StaticResource SectionTitle}" />
+                    <Label Text="Ödeme ayrıntıları" Style="{StaticResource SectionTitle}" />
                     <VerticalStackLayout BindableLayout.ItemsSource="{Binding Detail.PaymentRows}"
                                          Spacing="9">
                         <BindableLayout.ItemTemplate>

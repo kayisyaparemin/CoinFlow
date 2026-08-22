@@ -137,6 +137,12 @@ public sealed record SalaryPeriodDetailData(
     string PaymentWindowText,
     string AssignmentBadge,
     bool IsStrategyTransition,
+    bool IsSimulationScenario,
+    DetailMetric OpeningSummary,
+    DetailMetric PeriodNeedSummary,
+    DetailMetric IncomeCoverageSummary,
+    string IncomeCoverageMessage,
+    IReadOnlyList<DetailMetric> NeedBreakdownRows,
     DetailMetric IncomeSummary,
     DetailMetric MandatorySummary,
     DetailMetric SavingsSummary,
@@ -151,6 +157,10 @@ public sealed record SalaryPeriodDetailData(
     IReadOnlyList<DetailComparisonRow> ComparisonRows,
     IReadOnlyList<DetailMetric> DebugRows)
 {
+    public bool IsStandardProjection => !IsSimulationScenario;
+    public bool HasIncomeCoverageMessage =>
+        !string.IsNullOrWhiteSpace(IncomeCoverageMessage);
+    public bool HasNeedBreakdownRows => NeedBreakdownRows.Count > 0;
     public bool HasDeficit => Deficit is not null;
     public bool HasMandatoryRows => MandatoryRows.Count > 0;
     public bool HasInterestRows => InterestRows.Count > 0;
@@ -166,4 +176,5 @@ public sealed record SalaryPeriodDetailData(
 
 public sealed record SalaryPeriodDetailRequest(
     SalaryPeriodProjection Scenario,
-    SalaryPeriodProjection? Baseline = null);
+    SalaryPeriodProjection? Baseline = null,
+    bool IsSimulationScenario = false);

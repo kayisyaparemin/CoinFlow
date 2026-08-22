@@ -28,7 +28,10 @@ public partial class SalaryPeriodDetailViewModel(
                     "Dönem detayı bulunamadı.");
             }
 
-            Detail = presenter.Build(request.Scenario, request.Baseline);
+            Detail = presenter.Build(
+                request.Scenario,
+                request.Baseline,
+                request.IsSimulationScenario);
             HasDetail = true;
             SetStatus(string.Empty);
         }

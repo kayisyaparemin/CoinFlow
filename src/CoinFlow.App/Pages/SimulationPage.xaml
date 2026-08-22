@@ -8,7 +8,7 @@
         <VerticalStackLayout Padding="20,18,20,36" Spacing="16">
             <Label Text="PLANLAMADAN ÖNCE DENE" Style="{StaticResource Eyebrow}" />
             <Label Text="Simülatör" Style="{StaticResource PageTitle}" />
-            <Label Text="Mevcut Plan ve Yeni Plan aynı 12 maaş dönemi üzerinden karşılaştırılır. Simülasyon Yap, finans kayıtlarını değiştirmez." Style="{StaticResource MutedText}" />
+            <Label Text="Simülasyon Yap, finans kayıtlarını değiştirmeden seçtiğin planla oluşan 12 aylık görünümü hesaplar." Style="{StaticResource MutedText}" />
             <Label Text="{Binding AssignmentModeText}"
                    IsVisible="{Binding IsPlanAvailable}"
                    FontFamily="OpenSansSemibold" />
@@ -27,7 +27,7 @@
 
             <Border IsVisible="{Binding IsPlanAvailable}">
                 <VerticalStackLayout Spacing="9">
-                    <Label Text="Yeni Plan" Style="{StaticResource SectionTitle}" />
+                    <Label Text="Planı Dene" Style="{StaticResource SectionTitle}" />
                     <Label Text="Plan türü" Style="{StaticResource FieldLabel}" />
                     <Picker ItemsSource="{Binding ScenarioTypes}" SelectedItem="{Binding SelectedScenarioType}" />
                     <Label Text="{Binding ScenarioDescription}" Style="{StaticResource MutedText}" />
@@ -80,65 +80,56 @@
 
             <VerticalStackLayout IsVisible="{Binding HasResults}" Spacing="14">
                 <Border BackgroundColor="{StaticResource SoftSky}">
-                    <VerticalStackLayout Spacing="8">
-                        <Label Text="BU PLANIN ETKİSİ" Style="{StaticResource Eyebrow}" />
-                        <Label Text="Bu Planın Etkisi" Style="{StaticResource SectionTitle}" />
-                        <Label Text="{Binding FriendlySummary}" Style="{StaticResource MutedText}" />
-                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="7">
-                            <Label Text="Mevcut Plan" Style="{StaticResource MutedText}" />
-                            <Label Grid.Column="1" Text="{Binding BaselineEnding}" />
-                            <Label Grid.Row="1" Text="Yeni Plan" Style="{StaticResource MutedText}" />
-                            <Label Grid.Row="1" Grid.Column="1" Text="{Binding ScenarioEnding}" FontFamily="OpenSansSemibold" />
-                            <Label Grid.Row="2" Text="Finansal Etki" Style="{StaticResource MutedText}" />
-                            <Label Grid.Row="2" Grid.Column="1" Text="{Binding EndingDifference}" FontFamily="OpenSansSemibold" />
-                            <Label Grid.Row="3" Text="Yeni planın toplam yükü" Style="{StaticResource MutedText}" />
-                            <Label Grid.Row="3" Grid.Column="1" Text="{Binding TotalScenarioCost}" />
-                        </Grid>
-                        <Grid IsVisible="{Binding HasFinancingCost}" ColumnDefinitions="*,Auto">
-                            <Label Text="Finansman maliyeti" Style="{StaticResource MutedText}" />
-                            <Label Grid.Column="1" Text="{Binding FinancingCost}" />
-                        </Grid>
-                        <Grid ColumnDefinitions="*,Auto"
-                              RowDefinitions="Auto,Auto,Auto"
-                              RowSpacing="5">
-                            <Label Text="Mevcut Plan faiz yükü" Style="{StaticResource MutedText}" />
-                            <Label Grid.Column="1" Text="{Binding BaselineInterest}" />
-                            <Label Grid.Row="1" Text="Yeni Plan faiz yükü" Style="{StaticResource MutedText}" />
-                            <Label Grid.Row="1" Grid.Column="1" Text="{Binding ScenarioInterest}" />
-                            <Label Grid.Row="2" Text="{Binding InterestDifferenceTitle}" FontFamily="OpenSansSemibold" />
-                            <Label Grid.Row="2" Grid.Column="1" Text="{Binding InterestDifference}" FontFamily="OpenSansSemibold" />
-                        </Grid>
-                    </VerticalStackLayout>
-                </Border>
-
-                <Border IsVisible="{Binding HasStrategyTransitionSummary}" BackgroundColor="{StaticResource SoftPink}">
-                    <VerticalStackLayout Spacing="8">
-                        <Label Text="Düzen Değişikliği Geçiş Yükü" Style="{StaticResource SectionTitle}" />
-                        <Label Text="{Binding StrategyTransitionSummary}" />
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="BU PLANLA ÖNÜNDE NE VAR?" Style="{StaticResource Eyebrow}" />
+                        <Label Text="Bu planla önünde ne var?" Style="{StaticResource SectionTitle}" />
+                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding NarrativeInsights}"
+                                             Spacing="7">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate>
+                                    <Label Text="{Binding .}" Style="{StaticResource MutedText}" />
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </VerticalStackLayout>
                     </VerticalStackLayout>
                 </Border>
 
                 <Border>
-                    <VerticalStackLayout Spacing="8">
-                        <Label Text="12 Aylık Etki" Style="{StaticResource SectionTitle}" />
-                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="7">
-                            <Label Text="En sıkışık dönem" Style="{StaticResource MutedText}" />
-                            <Label Grid.Column="1" Text="{Binding TightestPeriod}" />
-                            <Label Grid.Row="1" Text="En düşük zorunlular sonrası" Style="{StaticResource MutedText}" />
-                            <Label Grid.Row="1" Grid.Column="1" Text="{Binding LowestAvailable}" />
-                            <Label Grid.Row="2" Text="En düşük dönem neti" Style="{StaticResource MutedText}" />
-                            <Label Grid.Row="2" Grid.Column="1" Text="{Binding LowestSavingsCapacity}" />
-                            <Label Grid.Row="3" Text="En Düşük Tahmini Durum" Style="{StaticResource MutedText}" />
-                            <Label Grid.Row="3" Grid.Column="1" Text="{Binding LowestProjectedSavings}" />
-                            <Label Grid.Row="4" Text="Aylık Ek Yük" Style="{StaticResource MutedText}" IsVisible="{Binding HasMonthlyBurden}" />
-                            <Label Grid.Row="4" Grid.Column="1" Text="{Binding MonthlyBurden}" IsVisible="{Binding HasMonthlyBurden}" />
-                            <Label Grid.Row="5" Text="İlk Açık Verilen Dönem" Style="{StaticResource MutedText}" />
-                            <Label Grid.Row="5" Grid.Column="1" Text="{Binding FirstNegativePeriod}" />
-                            <Label Grid.Row="6" Text="Maksimum devreden açık" Style="{StaticResource MutedText}" />
-                            <Label Grid.Row="6" Grid.Column="1" Text="{Binding MaximumCarryOverDeficit}" />
-                            <Label Grid.Row="7" Text="Açığın Kapandığı Dönem" Style="{StaticResource MutedText}" />
-                            <Label Grid.Row="7" Grid.Column="1" Text="{Binding RecoveryPeriod}" />
-                        </Grid>
+                    <VerticalStackLayout Spacing="11">
+                        <Label Text="Öne Çıkanlar" Style="{StaticResource SectionTitle}" />
+                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding SummaryMetrics}"
+                                             Spacing="10">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate>
+                                    <VerticalStackLayout Spacing="5">
+                                        <BoxView HeightRequest="1" Color="{StaticResource Line}" />
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                                            <Label Text="{Binding Label}" Style="{StaticResource MutedText}" />
+                                            <Label Grid.Column="1"
+                                                   Text="{Binding Value}"
+                                                   FontFamily="OpenSansSemibold"
+                                                   TextColor="{StaticResource ProjectionText}">
+                                                <Label.Triggers>
+                                                    <DataTrigger TargetType="Label" Binding="{Binding IsDeficit}" Value="True">
+                                                        <Setter Property="TextColor" Value="{StaticResource DeficitText}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger TargetType="Label" Binding="{Binding IsSavings}" Value="True">
+                                                        <Setter Property="TextColor" Value="{StaticResource PositiveText}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger TargetType="Label" Binding="{Binding IsMandatory}" Value="True">
+                                                        <Setter Property="TextColor" Value="{StaticResource DebtText}" />
+                                                    </DataTrigger>
+                                                </Label.Triggers>
+                                            </Label>
+                                        </Grid>
+                                        <Label Text="{Binding Detail}"
+                                               IsVisible="{Binding HasDetail}"
+                                               Style="{StaticResource MutedText}"
+                                               FontSize="12" />
+                                    </VerticalStackLayout>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </VerticalStackLayout>
                         <Button Text="{Binding ApplyButtonText}"
                                 IsEnabled="{Binding CanApplyPlan}"
                                 Clicked="OnApplyPlanClicked"
@@ -146,7 +137,7 @@
                     </VerticalStackLayout>
                 </Border>
 
-                <Label Text="Dönem Etkisi" Style="{StaticResource SectionTitle}" />
+                <Label Text="12 Aylık Finansal Görünüm" Style="{StaticResource SectionTitle}" />
                 <VerticalStackLayout BindableLayout.ItemsSource="{Binding Results}" Spacing="8">
                     <BindableLayout.ItemTemplate>
                         <DataTemplate>
@@ -163,40 +154,63 @@
                                     <Label Text="{Binding Assignment}"
                                            Style="{StaticResource MutedText}" />
                                     <Grid ColumnDefinitions="*,Auto"
-                                          RowDefinitions="Auto,Auto,Auto"
+                                          RowDefinitions="Auto,Auto,Auto,Auto"
                                           RowSpacing="6">
-                                        <Label Text="Mevcut Plan dönem sonu durumu" Style="{StaticResource MutedText}" />
-                                        <Label Grid.Column="1" Text="{Binding BaselineSavings}" />
-                                        <Label Grid.Row="1" Text="Yeni Plan dönem sonu durumu" Style="{StaticResource MutedText}" />
+                                        <Label Text="Dönem gelirleri" Style="{StaticResource MutedText}" />
+                                        <Label Grid.Column="1" Text="{Binding IncomeText}" />
+                                        <Label Grid.Row="1" Text="Bu dönem gereken" Style="{StaticResource MutedText}" />
                                         <Label Grid.Row="1"
                                                Grid.Column="1"
-                                               Text="{Binding ScenarioSavings}"
+                                               Text="{Binding NeedText}"
                                                FontFamily="OpenSansSemibold" />
-                                        <Label Grid.Row="2" Text="Finansal Etki" Style="{StaticResource MutedText}" />
+                                        <Label Grid.Row="2" Text="{Binding CoverageLabel}" Style="{StaticResource MutedText}" />
                                         <Label Grid.Row="2"
                                                Grid.Column="1"
-                                               Text="{Binding Difference}"
+                                               Text="{Binding CoverageAmountText}"
+                                               FontFamily="OpenSansSemibold" />
+                                        <Label Grid.Row="3" Text="Dönem sonu durumu" Style="{StaticResource MutedText}" />
+                                        <Label Grid.Row="3"
+                                               Grid.Column="1"
+                                               Text="{Binding EndingText}"
                                                FontFamily="OpenSansSemibold"
                                                TextColor="{StaticResource PositiveText}">
                                             <Label.Triggers>
                                                 <DataTrigger TargetType="Label"
-                                                             Binding="{Binding DifferenceIsNegative}"
+                                                             Binding="{Binding EndingIsNegative}"
                                                              Value="True">
                                                     <Setter Property="TextColor" Value="{StaticResource Error}" />
                                                 </DataTrigger>
                                             </Label.Triggers>
                                         </Label>
                                     </Grid>
+                                    <FlexLayout Wrap="Wrap" Direction="Row">
+                                        <Border Padding="9,4"
+                                                Margin="0,0,6,3"
+                                                IsVisible="{Binding HasPrimaryInsight}"
+                                                BackgroundColor="{StaticResource WarningSurface}">
+                                            <Label Text="{Binding PrimaryInsight}"
+                                                   FontSize="11"
+                                                   TextColor="{StaticResource WarningText}" />
+                                        </Border>
+                                        <Border Padding="9,4"
+                                                Margin="0,0,6,3"
+                                                IsVisible="{Binding HasSecondaryInsight}"
+                                                BackgroundColor="{StaticResource ProjectionSurface}">
+                                            <Label Text="{Binding SecondaryInsight}"
+                                                   FontSize="11"
+                                                   TextColor="{StaticResource ProjectionText}" />
+                                        </Border>
+                                    </FlexLayout>
                                     <Border Padding="9,4"
                                             HorizontalOptions="Start"
-                                            IsVisible="{Binding HasInterestDifference}"
+                                            IsVisible="{Binding Projection.HasUndeterminedCardPayment}"
                                             BackgroundColor="{StaticResource InterestSurface}">
-                                        <Label Text="{Binding InterestDifference, StringFormat='Faiz etkisi: {0}'}"
+                                        <Label Text="Kart ödeme planı bekliyor"
                                                FontSize="11"
                                                TextColor="{StaticResource InterestText}" />
                                     </Border>
                                     <Grid ColumnDefinitions="*,Auto">
-                                        <Label Text="Mevcut Plan / Yeni Plan karşılaştırması"
+                                        <Label Text="Bu dönemde ne olacak?"
                                                Style="{StaticResource MutedText}" />
                                         <HorizontalStackLayout Grid.Column="1" Spacing="7">
                                             <Label Text="Detayı Gör"

@@ -155,6 +155,43 @@ public sealed class SalaryPeriodDetailPresenterTests
     }
 
     [Fact]
+    public void Build_SimulatorScenarioModeHidesComparisonAndShowsNeedBreakdown()
+    {
+        var result = new SimulationCalculator(
+                _projection,
+                new InstallmentScheduleCalculator())
+            .Calculate(
+                TestFactory.CanonicalPlan(),
+                new DateOnly(2026, 8, 20),
+                new SimulationRequest(
+                    SimulationScenarioType.CashPurchase,
+                    "Tadilat",
+                    350_000m,
+                    new DateOnly(2027, 3, 15)));
+        var impact = result.Rows.Single(x =>
+            x.Scenario.Period.Contains(new DateOnly(2027, 3, 15)));
+
+        var detail = _presenter.Build(
+            impact.Scenario,
+            impact.Baseline,
+            isSimulationScenario: true);
+
+        Assert.True(detail.IsSimulationScenario);
+        Assert.False(detail.HasComparison);
+        Assert.Equal(
+            SimulatorProjectionMath.PeriodNeed(impact.Scenario),
+            detail.PeriodNeedSummary.Amount);
+        Assert.Equal(
+            Math.Abs(impact.Scenario.TotalIncome -
+                     SimulatorProjectionMath.PeriodNeed(impact.Scenario)),
+            detail.IncomeCoverageSummary.Amount);
+        Assert.Contains(
+            detail.NeedBreakdownRows,
+            row => row.Label == "Toplam" &&
+                   row.Amount == detail.PeriodNeedSummary.Amount);
+    }
+
+    [Fact]
     public void Build_ShowsInterestAndCarryDeficitOnlyWhenRelevant()
     {
         var result = new SimulationCalculator(
