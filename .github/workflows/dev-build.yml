@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: coinflow-dev-${{ github.ref }}
+  group: mizan-dev-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -84,16 +84,16 @@ jobs:
           [[ "$package_id" == "com.coinflow.mobile" ]] || { echo "Unexpected package id: $package_id" >&2; exit 1; }
           mkdir -p artifacts
           short_sha="${GITHUB_SHA::7}"
-          cp "$apk" "artifacts/CoinFlow-dev-${short_sha}.apk"
-          cp "$apk" artifacts/CoinFlow-dev-latest.apk
-          unzip -t artifacts/CoinFlow-dev-latest.apk >/dev/null
+          cp "$apk" "artifacts/Mizan-dev-${short_sha}.apk"
+          cp "$apk" artifacts/Mizan-dev-latest.apk
+          unzip -t artifacts/Mizan-dev-latest.apk >/dev/null
           echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
-          echo "artifact_path=artifacts/CoinFlow-dev-${short_sha}.apk" >> "$GITHUB_OUTPUT"
+          echo "artifact_path=artifacts/Mizan-dev-${short_sha}.apk" >> "$GITHUB_OUTPUT"
 
       - name: Upload development artifact
         uses: actions/upload-artifact@v4
         with:
-          name: coinflow-dev-apk
+          name: mizan-dev-apk
           path: ${{ steps.apk.outputs.artifact_path }}
           if-no-files-found: error
           retention-days: 14
@@ -106,9 +106,9 @@ jobs:
           set -euo pipefail
           gh release delete dev-latest --cleanup-tag --yes >/dev/null 2>&1 || true
           build_date="$(date -u +'%Y-%m-%d %H:%M UTC')"
-          gh release create dev-latest artifacts/CoinFlow-dev-latest.apk \
+          gh release create dev-latest artifacts/Mizan-dev-latest.apk \
             --target "$GITHUB_SHA" \
-            --title "CoinFlow Development Build" \
+            --title "Mizan - Pre-V1 Development Candidate" \
             --notes "Commit: $GITHUB_SHA
           Build: #$GITHUB_RUN_NUMBER
           Date: $build_date

@@ -1,10 +1,10 @@
-# CoinFlow
+# Mizan
 
-CoinFlow, maaş gününden bir sonraki maaş gününe kadar olan dönemi esas alan, zorunlu ödemelerden sonra kalan yaşam bütçesini ve tahmini birikimi gösteren Android öncelikli, çevrimdışı bir kişisel finans uygulamasıdır.
+Mizan, maaş gününden bir sonraki maaş gününe kadar olan dönemi esas alan, zorunlu ödemelerden sonra kalan yaşam bütçesini ve tahmini birikimi gösteren Android öncelikli, çevrimdışı bir kişisel finans uygulamasıdır.
 
 Uygulama mikro harcama takibi yapmaz. Ana kavramlar maaş dönemi, toplam gelir, zorunlu ödeme, yaşam bütçesi ve birikim kapasitesidir.
 
-CoinFlow ayrıca finansal durumu dönemsel doğruluk noktalarıyla yeniler. Kullanıcı her kahveyi veya market fişini girmez; dönem kapanınca planlanan ödemeleri doğrular, tek bir toplam yaşam gideri girer ve yeni planlama başlangıç birikimini onaylar.
+Mizan ayrıca finansal durumu dönemsel doğruluk noktalarıyla yeniler. Kullanıcı her kahveyi veya market fişini girmez; dönem kapanınca planlanan ödemeleri doğrular, tek bir toplam yaşam gideri girer ve yeni planlama başlangıç birikimini onaylar.
 
 ## Finans modeli
 
@@ -129,4 +129,4 @@ SQLite şema sürümü 8'dir. v8 additive migration snapshot, frozen plan, revis
 
 ## CI/CD
 
-Mevcut GitHub Actions development ve stable workflow'ları korunmuştur. Development hattı test edip imzalı APK artifact'i üretir. Stable hattı repository secret'larındaki release keystore ile sürümlü APK üretir; release anahtarı repoya yazılmaz.
+Mevcut GitHub Actions development ve stable workflow'ları korunmuştur. Development hattı test edip `Mizan-dev-latest.apk` prerelease asset'i üretir. Stable hattı repository secret'larındaki release keystore ile `Mizan-vX.Y.Z.apk` üretir; release anahtarı repoya yazılmaz.

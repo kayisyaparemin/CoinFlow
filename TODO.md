@@ -1,4 +1,4 @@
-# CoinFlow refactor teslim durumu
+# Mizan refactor teslim durumu
 
 - [x] Mikro harcama, Daily Coin, Current Cash, snapshot, acil fon ve oyunlaştırma akışlarını kaldır
 - [x] Maaş dönemi ve exact-date kurallarını tek merkezde topla

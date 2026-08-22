@@ -1,8 +1,8 @@
-# CoinFlow mimarisi
+# Mizan mimarisi
 
 ## Tek finansal kaynak
 
-CoinFlow'un merkezi çıktısı `SalaryPeriodProjection` modelidir. Dashboard, 12 aylık görünüm ve simülatör kendi formüllerini üretmez; aynı `FinancialProjectionCalculator` sonucunu kullanır.
+Mizan'ın merkezi çıktısı `SalaryPeriodProjection` modelidir. Dashboard, 12 aylık görünüm ve simülatör kendi formüllerini üretmez; aynı `FinancialProjectionCalculator` sonucunu kullanır.
 
 ```text
 FinancialPlan

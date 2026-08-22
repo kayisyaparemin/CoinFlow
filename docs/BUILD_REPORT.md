@@ -1,4 +1,4 @@
-# CoinFlow doğrulama raporu
+# Mizan doğrulama raporu
 
 Tarih: 21 Ağustos 2026
 
@@ -26,7 +26,7 @@ Ortam: Windows, .NET SDK 8.0.424, JDK 17.0.20, Android SDK/Build Tools 34
 - Shell Flyout Android XAML/C# derlemesi: başarılı; bottom TabBar kaldırıldı
 - 12 Aylık / Simulator compact kart → ortak full-screen Dönem Detayı route ve Android XAML binding derlemesi: başarılı
 - Git diff whitespace kontrolü: başarılı
-- GitHub Actions development/stable workflow dosyaları değiştirilmedi
+- GitHub Actions development/stable workflow'ları test, APK doğrulama ve release asset üretimi için korunuyor
 - İlk current snapshot, frozen plan ve history'siz first-install davranışı doğrulandı.
 - 20.08.2026 snapshot → 10.09.2026 review → 10.10.2026 review cadence entegrasyonu doğrulandı; ilk kısmi dönem artık atlanmıyor.
 - Review tarihi resolver'ı aynı gün strict-next davranışı ile 29/30/31 ve Şubat edge-case'lerinde doğrulandı.
@@ -48,4 +48,4 @@ Ortam: Windows, .NET SDK 8.0.424, JDK 17.0.20, Android SDK/Build Tools 34
 - `Previous → Upcoming → Previous` history çözümlemesi eski event'leri değiştirmeden doğrulandı.
 - Negatif `EndingProjectedSavings`, yeni obligation veya kart bakiyesi oluşturmadan sonraki dönemin opening değerine taşınıyor; double-count yok.
 
-Development APK, `main` push sonrasında `dev-build.yml` tarafından debug anahtarıyla imzalanıp `dev-latest` prerelease asset'i olarak yayımlanır. Production dağıtımı, `release.yml` içindeki repository secret tabanlı private release keystore ile yapılmalıdır.
+Development APK, `main` push sonrasında `dev-build.yml` tarafından debug anahtarıyla imzalanıp `Mizan-dev-latest.apk` prerelease asset'i olarak yayımlanır. Production dağıtımı, `release.yml` içindeki repository secret tabanlı private release keystore ile yapılmalıdır.

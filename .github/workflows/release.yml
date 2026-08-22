@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: coinflow-release-${{ github.ref }}
+  group: mizan-release-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -69,7 +69,7 @@ jobs:
           for variable in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
             [[ -n "${!variable:-}" ]] || { echo "Required signing secret is missing: $variable" >&2; exit 1; }
           done
-          keystore="$RUNNER_TEMP/coinflow-release.keystore"
+          keystore="$RUNNER_TEMP/mizan-release.keystore"
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore"
           [[ -s "$keystore" ]] || { echo "Decoded keystore is empty." >&2; exit 1; }
           chmod 600 "$keystore"
@@ -118,7 +118,7 @@ jobs:
           package_id="$($aapt dump badging "$apk" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")"
           [[ "$package_id" == "com.coinflow.mobile" ]] || { echo "Unexpected package id: $package_id" >&2; exit 1; }
           mkdir -p artifacts
-          output="artifacts/CoinFlow-${GITHUB_REF_NAME}.apk"
+          output="artifacts/Mizan-${GITHUB_REF_NAME}.apk"
           cp "$apk" "$output"
           unzip -t "$output" >/dev/null
           echo "artifact_path=$output" >> "$GITHUB_OUTPUT"
@@ -131,7 +131,7 @@ jobs:
           set -euo pipefail
           gh release create "$GITHUB_REF_NAME" "${{ steps.apk.outputs.artifact_path }}" \
             --verify-tag \
-            --title "CoinFlow $GITHUB_REF_NAME" \
+            --title "Mizan $GITHUB_REF_NAME" \
             --generate-notes
 
       - name: Remove temporary keystore
